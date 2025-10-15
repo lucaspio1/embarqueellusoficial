@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:embarqueellus/screens/barcode_screen.dart';
+
 import 'package:embarqueellus/screens/embarque_screen.dart';
 import 'package:embarqueellus/services/data_service.dart';
 import 'package:embarqueellus/screens/retorno_screen.dart';
 import 'package:embarqueellus/services/retorno_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+
+import 'package:embarqueellus/widgets/barcode_camera_view.dart';
+import 'dart:async';
 import 'package:embarqueellus/screens/main_menu_screen.dart';
 
 class ControleEmbarqueScreen extends StatefulWidget {
@@ -392,20 +394,10 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
 }
 
 // ============================================================================
-// TELA DE SCANNER ATUALIZADA
+// TELA DE SCANNER USANDO fast_barcode_scanner 1.1.4
 // ============================================================================
-
-class QRCodeScannerScreen extends StatefulWidget {
+class QRCodeScannerScreen extends StatelessWidget {
   const QRCodeScannerScreen({super.key});
-
-  @override
-  State<QRCodeScannerScreen> createState() => _QRCodeScannerScreenState();
-}
-
-class _QRCodeScannerScreenState extends State<QRCodeScannerScreen> {
-  final MobileScannerController cameraController = MobileScannerController();
-  bool _isTorchActive = false;
-  bool _isProcessing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -413,78 +405,20 @@ class _QRCodeScannerScreenState extends State<QRCodeScannerScreen> {
       appBar: AppBar(
         title: const Text('Escanear QR Code'),
         backgroundColor: const Color(0xFF4C643C),
-        actions: [
-          IconButton(
-            icon: Icon(_isTorchActive ? Icons.flash_on : Icons.flash_off,
-                color: _isTorchActive ? Colors.yellow : Colors.white),
-            onPressed: () {
-              cameraController.toggleTorch();
-              setState(() => _isTorchActive = !_isTorchActive);
-            },
-          ),
-        ],
       ),
-      body: Stack(
-        children: [
-          MobileScanner(
-            controller: cameraController,
-            onDetect: (capture) async {
-              if (_isProcessing) return;
-              _isProcessing = true;
-
-              final barcodes = capture.barcodes;
-              if (barcodes.isNotEmpty) {
-                final barcode = barcodes.first.rawValue;
-                if (barcode != null) {
-                  final partes = barcode.split(';');
-                  if (partes.length >= 4) {
-                    final nomeAba = partes[0].trim();
-                    final nomePasseio = partes[1].trim();
-                    final numeroOnibus = partes[2].trim();
-                    final pulseira = partes[3].trim();
-
-                    if (mounted) {
-                      Navigator.pop(context, {
-                        'nomeAba': nomeAba,
-                        'nomePasseio': nomePasseio,
-                        'numeroOnibus': numeroOnibus,
-                        'pulseira': pulseira,
-                      });
-                    }
-                  } else if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content:
-                        Text('Formato incorreto! Esperado: "Aba;Passeio;Ônibus;Pulseira"'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              }
-              _isProcessing = false;
-            },
-          ),
-          Center(
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                border:
-                Border.all(color: const Color(0xFF4C643C), width: 3),
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ],
+      body: BarcodeCameraView(
+        onScanned: (value) {
+          final partes = value.split(';');
+          if (partes.length >= 4) {
+            Navigator.pop(context, {
+              'nomeAba': partes[0].trim(),
+              'nomePasseio': partes[1].trim(),
+              'numeroOnibus': partes[2].trim(),
+              'pulseira': partes[3].trim(),
+            });
+          }
+        },
       ),
     );
-  }
-
-
-  @override
-  void dispose() {
-    cameraController.dispose();
-    super.dispose();
   }
 }

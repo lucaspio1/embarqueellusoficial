@@ -16,7 +16,7 @@ android {
     defaultConfig {
         applicationId = "com.example.embarqueellus"
         // ✅ mobile_scanner exige no mínimo API 23 (Android 6.0)
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = 36
 
         versionCode = 1
