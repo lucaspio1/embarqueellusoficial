@@ -84,17 +84,17 @@ class FaceRecognitionService {
   }
 
   /// ✅ PRÉ-PROCESSAMENTO ESPECÍFICO DO ArcFace
-  /// ArcFace usa formato NHWC [1, 112, 112, 3] e normalização [0, 1]
+  /// ArcFace usa formato NCHW [1, 3, 112, 112] com normalização [0, 1]
   List<List<List<List<double>>>> _preprocessMobileFaceNet(img.Image image) {
-    // Formato NHWC: [batch, height, width, channels]
+    // Formato NCHW: [batch, channels, height, width]
     final input = List.generate(
       1, (_) => List.generate(
-        INPUT_SIZE, (y) => List.generate(
-          INPUT_SIZE, (x) => List.generate(
-            3, (c) {
+        3, (c) => List.generate(
+          INPUT_SIZE, (y) => List.generate(
+            INPUT_SIZE, (x) {
               final pixel = image.getPixel(x, y);
 
-              // Normalização [0, 1] para ArcFace
+              // Normalização [0, 1] - simples divisão por 255
               switch (c) {
                 case 0: return pixel.r / 255.0; // R
                 case 1: return pixel.g / 255.0; // G

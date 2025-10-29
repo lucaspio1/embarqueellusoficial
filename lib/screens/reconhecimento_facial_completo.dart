@@ -874,17 +874,40 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   late CameraController controller;
   bool _tirandoFoto = false;
   bool _disposed = false;
+  List<CameraDescription> _cameras = [];
+  int _currentCameraIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
+    _loadCamerasAndInitialize();
+  }
+
+  Future<void> _loadCamerasAndInitialize() async {
+    try {
+      _cameras = await availableCameras();
+
+      // Encontrar o índice da câmera passada
+      _currentCameraIndex = _cameras.indexWhere(
+        (c) => c.lensDirection == widget.camera.lensDirection,
+      );
+      if (_currentCameraIndex == -1) _currentCameraIndex = 0;
+
+      await _initializeCamera();
+    } catch (e) {
+      print('❌ Erro ao carregar câmeras: $e');
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    }
   }
 
   Future<void> _initializeCamera() async {
     try {
+      if (_cameras.isEmpty) return;
+
       controller = CameraController(
-        widget.camera,
+        _cameras[_currentCameraIndex],
         ResolutionPreset.medium,
         enableAudio: false,
       );
@@ -899,6 +922,25 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       if (mounted) {
         Navigator.pop(context);
       }
+    }
+  }
+
+  Future<void> _trocarCamera() async {
+    if (_cameras.length < 2) return;
+
+    setState(() => _tirandoFoto = true);
+
+    try {
+      await controller.dispose();
+
+      _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
+
+      await _initializeCamera();
+
+      setState(() => _tirandoFoto = false);
+    } catch (e) {
+      print('❌ Erro ao trocar câmera: $e');
+      setState(() => _tirandoFoto = false);
     }
   }
 
@@ -960,6 +1002,14 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       appBar: AppBar(
         title: const Text('Capturar Rosto'),
         backgroundColor: const Color(0xFF4C643C),
+        actions: [
+          if (_cameras.length > 1)
+            IconButton(
+              icon: const Icon(Icons.flip_camera_ios),
+              onPressed: _tirandoFoto ? null : _trocarCamera,
+              tooltip: 'Trocar Câmera',
+            ),
+        ],
       ),
       body: Stack(
         children: [
@@ -979,7 +1029,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
             ),
           ),
 
-          const Positioned(
+          Positioned(
             top: 60,
             left: 0,
             right: 0,
@@ -987,14 +1037,31 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
               child: Card(
                 color: Colors.black54,
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(
-                    'Posicione o rosto dentro da moldura',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Posicione o rosto dentro da moldura',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (_cameras.length > 1)
+                        const SizedBox(height: 4),
+                      if (_cameras.length > 1)
+                        Text(
+                          _cameras[_currentCameraIndex].lensDirection == CameraLensDirection.front
+                              ? '📷 Câmera Frontal'
+                              : '📷 Câmera Traseira',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),

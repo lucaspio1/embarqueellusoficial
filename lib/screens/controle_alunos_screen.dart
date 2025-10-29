@@ -699,18 +699,72 @@ class CameraPreviewScreen extends StatefulWidget {
 class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   late CameraController controller;
   bool _tirandoFoto = false;
+  bool _disposed = false;
+  List<CameraDescription> _cameras = [];
+  int _currentCameraIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    controller = CameraController(widget.camera, ResolutionPreset.medium);
-    controller.initialize().then((_) {
-      if (mounted) setState(() {});
-    });
+    _loadCamerasAndInitialize();
+  }
+
+  Future<void> _loadCamerasAndInitialize() async {
+    try {
+      _cameras = await availableCameras();
+
+      _currentCameraIndex = _cameras.indexWhere(
+        (c) => c.lensDirection == widget.camera.lensDirection,
+      );
+      if (_currentCameraIndex == -1) _currentCameraIndex = 0;
+
+      await _initializeCamera();
+    } catch (e) {
+      print('❌ Erro ao carregar câmeras: $e');
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      if (_cameras.isEmpty) return;
+
+      controller = CameraController(
+        _cameras[_currentCameraIndex],
+        ResolutionPreset.medium,
+        enableAudio: false,
+      );
+
+      await controller.initialize();
+
+      if (mounted && !_disposed) {
+        setState(() {});
+      }
+    } catch (e) {
+      print('❌ Erro ao inicializar câmera: $e');
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  Future<void> _trocarCamera() async {
+    if (_cameras.length < 2) return;
+
+    setState(() => _tirandoFoto = true);
+
+    try {
+      await controller.dispose();
+      _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
+      await _initializeCamera();
+      setState(() => _tirandoFoto = false);
+    } catch (e) {
+      print('❌ Erro ao trocar câmera: $e');
+      setState(() => _tirandoFoto = false);
+    }
   }
 
   @override
   void dispose() {
+    _disposed = true;
     if (controller.value.isInitialized) {
       controller.dispose();
     }
@@ -720,8 +774,25 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   @override
   Widget build(BuildContext context) {
     if (!controller.value.isInitialized) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          title: const Text('Capturar Rosto'),
+          backgroundColor: const Color(0xFF4C643C),
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 20),
+              Text(
+                'Inicializando câmera...',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -729,6 +800,14 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       appBar: AppBar(
         title: const Text('Capturar rosto'),
         backgroundColor: const Color(0xFF4C643C),
+        actions: [
+          if (_cameras.length > 1)
+            IconButton(
+              icon: const Icon(Icons.flip_camera_ios),
+              onPressed: _tirandoFoto ? null : _trocarCamera,
+              tooltip: 'Trocar Câmera',
+            ),
+        ],
       ),
       body: Stack(
         children: [
@@ -748,7 +827,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
             ),
           ),
 
-          const Positioned(
+          Positioned(
             top: 60,
             left: 0,
             right: 0,
@@ -756,38 +835,69 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
               child: Card(
                 color: Colors.black54,
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(
-                    'Posicione o rosto dentro da moldura',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Posicione o rosto dentro da moldura',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (_cameras.length > 1)
+                        const SizedBox(height: 4),
+                      if (_cameras.length > 1)
+                        Text(
+                          _cameras[_currentCameraIndex].lensDirection == CameraLensDirection.front
+                              ? '📷 Câmera Frontal'
+                              : '📷 Câmera Traseira',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
 
-          if (_tirandoFoto) const Center(child: CircularProgressIndicator()),
+          if (_tirandoFoto)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 20),
+                    Text(
+                      'Processando...',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF4C643C),
-        onPressed: () async {
-          if (_tirandoFoto) return;
-
+        backgroundColor: _tirandoFoto ? Colors.grey : const Color(0xFF4C643C),
+        onPressed: _tirandoFoto ? null : () async {
           setState(() => _tirandoFoto = true);
           final image = await controller.takePicture();
 
-          Navigator.pop(context, image.path);
-
-          Future.delayed(const Duration(milliseconds: 300), () {
-            if (mounted) controller.dispose();
-          });
+          if (mounted && !_disposed) {
+            Navigator.pop(context, image.path);
+          }
         },
-        child: const Icon(Icons.camera_alt),
+        child: _tirandoFoto
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Icon(Icons.camera_alt),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
