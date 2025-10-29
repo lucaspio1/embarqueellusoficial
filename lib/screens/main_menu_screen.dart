@@ -199,7 +199,7 @@ class MainMenuScreen extends StatelessWidget {
     required Color color,
     required VoidCallback onPressed,
   }) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
       height: subtitle != null ? 110 : 90,
       child: ElevatedButton(
@@ -212,6 +212,7 @@ class MainMenuScreen extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20.0),
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -221,20 +222,24 @@ class MainMenuScreen extends StatelessWidget {
             Text(
               label,
               style: const TextStyle(
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
+                letterSpacing: 0.5,
               ),
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
               Text(
                 subtitle,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: Colors.white.withOpacity(0.8),
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ],

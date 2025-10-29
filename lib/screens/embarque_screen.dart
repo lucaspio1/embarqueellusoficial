@@ -40,9 +40,11 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
   void _filtrarPassageiros() => setState(() {});
 
   /// ============================================================
-  /// CONFIRMAR EMBARQUE (com pulseira)
+  /// CONFIRMAR EMBARQUE (com pulseira) - CÓDIGO COMENTADO - NÃO MAIS EM USO
   /// ============================================================
   Future<void> _confirmarEmbarque(Passageiro passageiro) async {
+    // CÓDIGO DE PULSEIRA COMENTADO - Mantido para referência futura
+    /*
     final prefs = await SharedPreferences.getInstance();
     final precisaPulseira =
         prefs.getString('pulseira')?.toUpperCase().trim() == 'SIM';
@@ -65,10 +67,12 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
         return;
       }
     }
+    */
 
+    // Embarque direto sem pulseira
     final passageiroAtualizado = passageiro.copyWith(
       embarque: 'SIM',
-      codigoPulseira: codigoPulseira ?? passageiro.codigoPulseira,
+      // codigoPulseira: codigoPulseira ?? passageiro.codigoPulseira, // COMENTADO
     );
 
     // Atualiza localmente e sincroniza
@@ -79,9 +83,7 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(codigoPulseira != null
-            ? '✔️ ${passageiro.nome} embarcado com pulseira $codigoPulseira!'
-            : '✔️ ${passageiro.nome} embarcado com sucesso!'),
+        content: Text('✔️ ${passageiro.nome} embarcado com sucesso!'),
         backgroundColor: Colors.green,
       ),
     );
@@ -90,8 +92,9 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
   }
 
   /// ============================================================
-  /// EDITAR PULSEIRA MANUALMENTE
+  /// EDITAR PULSEIRA MANUALMENTE - CÓDIGO COMENTADO - NÃO MAIS EM USO
   /// ============================================================
+  /*
   Future<void> _editarPulseira(Passageiro passageiro) async {
     final TextEditingController controller = TextEditingController(
       text: passageiro.codigoPulseira ?? '',
@@ -172,6 +175,7 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
       );
     }
   }
+  */
 
   /// ============================================================
   /// CONSTRUÇÃO DA TELA
@@ -229,6 +233,8 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
                               Text('Turma: ${passageiro.turma}'),
                               Text('Ônibus: ${passageiro.onibus}'),
 
+                              // CÓDIGO DE PULSEIRA COMENTADO - NÃO MAIS EM USO
+                              /*
                               // Exibe pulseira se cadastrada
                               if (passageiro.codigoPulseira != null &&
                                   passageiro.codigoPulseira!.isNotEmpty)
@@ -250,6 +256,7 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
                                     ),
                                   ],
                                 ),
+                              */
 
                               const SizedBox(height: 10),
                               Row(

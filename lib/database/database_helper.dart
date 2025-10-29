@@ -145,7 +145,8 @@ class DatabaseHelper {
 
   Future<List<Map<String, dynamic>>> getAlunosEmbarcadosParaCadastro() async {
     final db = await database;
-    return await db.query('alunos');
+    // Retorna apenas alunos que tem QR/pulseira cadastrada (embarcados)
+    return await db.query('alunos', where: 'tem_qr = ?', whereArgs: ['SIM']);
   }
 
   Future<Map<String, dynamic>?> getAlunoByCpf(String cpf) async {

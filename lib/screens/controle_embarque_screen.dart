@@ -5,6 +5,8 @@ import 'package:embarqueellus/services/data_service.dart';
 import 'package:embarqueellus/screens/retorno_screen.dart';
 import 'package:embarqueellus/services/retorno_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/screens/controle_alunos_screen.dart';
 
 import 'package:embarqueellus/widgets/barcode_camera_view.dart';
 import 'dart:async';
@@ -25,7 +27,9 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
   int _totalAlunos = 0;
   int _totalEmbarcados = 0;
   int _totalRetornados = 0;
+  int _totalFaciaisCadastradas = 0;
   bool _temDadosSalvos = false;
+  bool _temAlunosComQR = false;
 
   @override
   void initState() {
@@ -48,6 +52,11 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
 
       final passageiros = DataService().passageirosEmbarque.value;
 
+      // Verificar alunos com QR/pulseira e faciais cadastradas
+      final db = DatabaseHelper.instance;
+      final alunosComQR = await db.getAlunosEmbarcadosParaCadastro();
+      final alunosComFacial = await db.getTodosAlunosComFacial();
+
       setState(() {
         _nomeAba = nomeAba;
         _nomePasseio = nomePasseio ?? nomeAba;
@@ -56,6 +65,8 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
         _totalAlunos = passageiros.length;
         _totalEmbarcados = passageiros.where((p) => p.embarque == 'SIM').length;
         _totalRetornados = passageiros.where((p) => p.retorno == 'SIM').length;
+        _totalFaciaisCadastradas = alunosComFacial.length;
+        _temAlunosComQR = alunosComQR.isNotEmpty;
         _temDadosSalvos = true;
       });
     } else {
@@ -311,10 +322,11 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
                         ],
                         const SizedBox(height: 16),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             _buildInfoCard('Total', _totalAlunos, Colors.blue),
                             _buildInfoCard('Embarcados', _totalEmbarcados, Colors.green),
+                            _buildInfoCard('Faciais', _totalFaciaisCadastradas, Colors.purple),
                             _buildInfoCard('Retornados', _totalRetornados, Colors.orange),
                           ],
                         ),
@@ -351,6 +363,26 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 18)),
                 ),
                 const SizedBox(height: 16),
+                // Botão Gerenciar Alunos - Aparece apenas se houver alunos com QR/pulseira
+                if (_temAlunosComQR) ...[
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ControleAlunosScreen(),
+                        ),
+                      ).then((_) => _verificarDadosSalvos());
+                    },
+                    icon: const Icon(Icons.face),
+                    label: const Text('GERENCIAR ALUNOS'),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 18)),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 ElevatedButton.icon(
                   onPressed: _irParaRetorno,
                   icon: const Icon(Icons.logout),
