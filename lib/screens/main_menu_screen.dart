@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/screens/controle_embarque_screen.dart';
-import 'package:embarqueellus/screens/controle_alunos_screen.dart';
 import 'package:embarqueellus/screens/reconhecimento_facial_completo.dart';
 
 class MainMenuScreen extends StatelessWidget {
@@ -11,7 +10,7 @@ class MainMenuScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFD1D2D1),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: SingleChildScrollView( // ✅ Permite rolar o conteúdo
           child: Card(
             elevation: 8,
             shape: const RoundedRectangleBorder(
@@ -127,26 +126,6 @@ class MainMenuScreen extends StatelessWidget {
                         },
                       ),
 
-                      const SizedBox(height: 16),
-
-                      // Botão Gerenciar Alunos
-                      _buildMenuButton(
-                        context: context,
-                        label: 'GERENCIAR ALUNOS',
-                        subtitle: 'Cadastrar Faciais',
-                        icon: Icons.face,
-                        color: Colors.teal,
-                        onPressed: () {
-                          print('📍 [MainMenu] Navegando para Controle Alunos');
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ControleAlunosScreen(),
-                            ),
-                          );
-                        },
-                      ),
-
                       const SizedBox(height: 32),
 
                       // Footer info
@@ -199,47 +178,52 @@ class MainMenuScreen extends StatelessWidget {
     required Color color,
     required VoidCallback onPressed,
   }) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 90),
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          elevation: 8,
-          shadowColor: color.withOpacity(0.3),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.0),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 40),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
-              ),
-              textAlign: TextAlign.center,
+    return Center(
+      child: SizedBox(
+        width: 320,
+        height: subtitle != null ? 110 : 90,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+            elevation: 8,
+            shadowColor: color.withOpacity(0.3),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20.0),
             ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 40),
+              const SizedBox(height: 8),
               Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withOpacity(0.8),
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
                 ),
                 textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.visible,
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withOpacity(0.85),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
