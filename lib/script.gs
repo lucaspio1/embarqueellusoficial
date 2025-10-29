@@ -32,6 +32,9 @@ function doPost(e) {
       case 'login':
         return login(data);
 
+      case 'getAllUsers':
+        return getAllUsers();
+
       case 'getAllPeople':
         return getAllPeople();
 
@@ -114,6 +117,53 @@ function login(data) {
   } catch (error) {
     console.error('❌ Erro no login:', error);
     return createResponse(false, 'Erro ao fazer login: ' + error.message);
+  }
+}
+
+// ============================================================================
+// FUNÇÃO: GET ALL USERS (para sincronização offline)
+// ============================================================================
+function getAllUsers() {
+  try {
+    console.log('📥 [getAllUsers] Buscando todos os usuários da aba LOGIN...');
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const loginSheet = ss.getSheetByName('LOGIN');
+
+    if (!loginSheet) {
+      console.error('❌ Aba LOGIN não encontrada');
+      return createResponse(false, 'Aba LOGIN não encontrada na planilha');
+    }
+
+    const data_range = loginSheet.getDataRange();
+    const values = data_range.getValues();
+
+    const users = [];
+
+    // Primeira linha é cabeçalho: ID, NOME, CPF, SENHA, PERFIL
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+
+      // Pular linhas vazias
+      if (!row[2] || !row[3]) continue;
+
+      const user = {
+        id: row[0],
+        nome: row[1],
+        cpf: String(row[2]).trim(),
+        senha: String(row[3]).trim(), // Senha será hasheada no app
+        perfil: String(row[4] || 'USUARIO').trim().toUpperCase()
+      };
+
+      users.push(user);
+    }
+
+    console.log('✅ [getAllUsers] ' + users.length + ' usuários encontrados');
+    return createResponse(true, users.length + ' usuários encontrados', { users: users });
+
+  } catch (error) {
+    console.error('❌ Erro ao buscar usuários:', error);
+    return createResponse(false, 'Erro ao buscar usuários: ' + error.message);
   }
 }
 

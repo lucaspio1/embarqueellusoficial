@@ -1,66 +1,93 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/services/user_sync_service.dart';
 
 class AuthService {
   static final AuthService instance = AuthService._internal();
   AuthService._internal();
 
-  // URL do Google Apps Script (mesma da planilha)
-  final String _apiUrl = 'https://script.google.com/macros/s/AKfycbzLXa6c0HHv8Ff4uxvMNhvw8OB5gLzIhEv2uE4VPDGTCgZu6RsFIRPOv7I62VwZzBNk/exec';
+  final _db = DatabaseHelper.instance;
+  final _userSync = UserSyncService.instance;
 
   // Usuário logado em cache
   Map<String, dynamic>? _usuarioLogado;
 
+  /// Login offline usando banco de dados local
   Future<Map<String, dynamic>?> login(String cpf, String senha) async {
     try {
-      print('🔐 [Auth] Tentando login: CPF=$cpf');
+      print('🔐 [Auth] Tentando login offline: CPF=$cpf');
 
-      // Google Apps Script usa redirecionamento, precisamos seguir manualmente
-      final uri = Uri.parse(_apiUrl);
+      // Garantir que a tabela de usuários existe
+      await _db.ensureFacialSchema();
 
-      final response = await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'action': 'login',
-          'cpf': cpf,
-          'senha': senha,
-        }),
-      ).timeout(const Duration(seconds: 30));
+      // Buscar usuário no banco local
+      final usuario = await _db.getUsuarioByCpf(cpf);
 
-      print('📥 [Auth] Status Code: ${response.statusCode}');
-      print('📥 [Auth] Response Body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        if (data['success'] == true && data['user'] != null) {
-          final user = data['user'];
-          print('✅ [Auth] Login bem-sucedido: ${user['nome']} (${user['perfil']})');
-
-          // Salvar usuário no cache
-          _usuarioLogado = user;
-
-          // Salvar no SharedPreferences
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('usuario_logado', jsonEncode(user));
-
-          return user;
-        } else {
-          print('❌ [Auth] Credenciais inválidas: ${data['message']}');
-          return null;
-        }
-      } else {
-        print('❌ [Auth] Erro HTTP: ${response.statusCode}');
-        print('📥 [Auth] Response: ${response.body}');
+      if (usuario == null) {
+        print('❌ [Auth] Usuário não encontrado no banco local');
         return null;
       }
+
+      // Verificar senha
+      final senhaValida = _userSync.verificarSenha(senha, usuario['senha_hash']);
+
+      if (!senhaValida) {
+        print('❌ [Auth] Senha inválida');
+        return null;
+      }
+
+      // Preparar dados do usuário
+      final user = {
+        'id': usuario['user_id']?.toString() ?? usuario['id'].toString(),
+        'nome': usuario['nome'],
+        'cpf': usuario['cpf'],
+        'perfil': usuario['perfil'] ?? 'USUARIO',
+      };
+
+      print('✅ [Auth] Login bem-sucedido: ${user['nome']} (${user['perfil']})');
+
+      // Salvar usuário no cache
+      _usuarioLogado = user;
+
+      // Salvar no SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('usuario_logado', jsonEncode(user));
+
+      return user;
     } catch (e) {
       print('❌ [Auth] Erro ao fazer login: $e');
       return null;
+    }
+  }
+
+  /// Sincronizar usuários da planilha para o banco local
+  Future<bool> syncUsuarios() async {
+    try {
+      print('🔄 [Auth] Sincronizando usuários...');
+
+      final result = await _userSync.syncUsuariosFromSheets();
+
+      if (result.success) {
+        print('✅ [Auth] Sincronização concluída: ${result.message}');
+        return true;
+      } else {
+        print('❌ [Auth] Erro na sincronização: ${result.message}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ [Auth] Erro ao sincronizar usuários: $e');
+      return false;
+    }
+  }
+
+  /// Verifica se existem usuários no banco local
+  Future<bool> temUsuariosLocais() async {
+    try {
+      return await _userSync.temUsuariosLocais();
+    } catch (e) {
+      print('❌ [Auth] Erro ao verificar usuários locais: $e');
+      return false;
     }
   }
 
