@@ -7,7 +7,7 @@ class UserSyncService {
   static final UserSyncService instance = UserSyncService._internal();
   UserSyncService._internal();
 
-  final String _apiUrl = 'https://script.google.com/macros/s/AKfycbzLXa6c0HHv8Ff4uxvMNhvw8OB5gLzIhEv2uE4VPDGTCgZu6RsFIRPOv7I62VwZzBNk/exec';
+  final String _apiUrl = 'https://script.google.com/macros/s/AKfycbzI8u7j02KkgYeZQJN5JxWlUy0nZ5YP7rr_r8rur1BFw0U3HcEu80PDuvjM-WRJwvHZ/exec';
   final _db = DatabaseHelper.instance;
 
   /// Hash de senha usando SHA-256
