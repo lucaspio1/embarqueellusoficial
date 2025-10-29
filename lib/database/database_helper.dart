@@ -115,6 +115,16 @@ class DatabaseHelper {
     return maps.map((map) => Passageiro.fromMap(map)).toList();
   }
 
+  Future<List<Map<String, dynamic>>> getPassageirosEmbarcados() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'passageiros',
+      where: 'embarque = ?',
+      whereArgs: ['SIM'],
+    );
+    return maps;
+  }
+
   Future<void> updatePassageiro(Passageiro passageiro) async {
     final db = await database;
     await db.update(
