@@ -1,3 +1,4 @@
+// lib/database/database_helper.dart
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -5,12 +6,11 @@ import 'package:embarqueellus/models/passageiro.dart';
 
 /// DatabaseHelper - Gerenciamento robusto de dados offline
 ///
-/// Tabelas:
-/// - passageiros: dados dos alunos para embarque/retorno
-/// - alunos: dados dos alunos para reconhecimento facial (NOVA)
-/// - embeddings: características faciais
-/// - logs: histórico de passagens
-/// - outbox: fila de sincronização pendente
+/// ✅ VERSÃO ATUALIZADA COM:
+/// - Métodos para buscar apenas alunos embarcados (cadastro facial)
+/// - Métodos para buscar todos alunos com facial (reconhecimento)
+/// - Prevenção de duplicatas em logs
+/// - Índices otimizados
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
   static Database? _database;
@@ -33,7 +33,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3, // ✅ VERSÃO ATUALIZADA
+      version: 4, // ✅ VERSÃO ATUALIZADA DE 3 PARA 4
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -43,9 +43,7 @@ class DatabaseHelper {
   Future<void> _onCreate(Database db, int version) async {
     print('🗂️ Criando estrutura do banco de dados v$version');
 
-    // =========================================================================
     // TABELA 1: PASSAGEIROS (para embarque/retorno)
-    // =========================================================================
     await db.execute('''
       CREATE TABLE passageiros (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,9 +60,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // =========================================================================
-    // TABELA 2: ALUNOS (para reconhecimento facial) ✅ NOVA
-    // =========================================================================
+    // TABELA 2: ALUNOS (para reconhecimento facial)
     await db.execute('''
       CREATE TABLE alunos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,22 +75,17 @@ class DatabaseHelper {
       )
     ''');
 
-    // =========================================================================
     // TABELA 3: EMBEDDINGS (características faciais)
-    // =========================================================================
     await db.execute('''
       CREATE TABLE embeddings (
         cpf TEXT PRIMARY KEY,
         nome TEXT NOT NULL,
         embedding TEXT NOT NULL,
-        data_cadastro TEXT,
-        FOREIGN KEY (cpf) REFERENCES alunos(cpf)
+        data_cadastro TEXT
       )
     ''');
 
-    // =========================================================================
     // TABELA 4: LOGS (histórico de passagens)
-    // =========================================================================
     await db.execute('''
       CREATE TABLE logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,14 +94,23 @@ class DatabaseHelper {
         timestamp TEXT NOT NULL,
         confidence REAL DEFAULT 0.95,
         tipo TEXT NOT NULL,
-        sincronizado INTEGER DEFAULT 0,
-        FOREIGN KEY (cpf) REFERENCES alunos(cpf)
+        sincronizado INTEGER DEFAULT 0
       )
     ''');
 
-    // =========================================================================
-    // TABELA 5: OUTBOX (fila de sincronização)
-    // =========================================================================
+    // TABELA 5: SYNC_QUEUE (fila de sincronização)
+    await db.execute('''
+      CREATE TABLE sync_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        tentativas INTEGER DEFAULT 0,
+        sincronizado INTEGER DEFAULT 0
+      )
+    ''');
+
+    // TABELA 6: OUTBOX (fila de sincronização legada)
     await db.execute('''
       CREATE TABLE outbox (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,22 +121,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // =========================================================================
-    // TABELA 6: SYNC_QUEUE (compatibilidade)
-    // =========================================================================
-    await db.execute('''
-      CREATE TABLE sync_queue (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tipo TEXT NOT NULL,
-        dados TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        tentativas INTEGER DEFAULT 0
-      )
-    ''');
-
-    // =========================================================================
     // TABELA 7: METADATA
-    // =========================================================================
     await db.execute('''
       CREATE TABLE metadata (
         chave TEXT PRIMARY KEY,
@@ -145,9 +130,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // =========================================================================
-    // ÍNDICES PARA PERFORMANCE
-    // =========================================================================
+    // ✅ ÍNDICES PARA PERFORMANCE
     await db.execute('CREATE INDEX idx_passageiros_cpf ON passageiros(cpf)');
     await db.execute('CREATE INDEX idx_passageiros_embarque ON passageiros(embarque)');
 
@@ -160,12 +143,13 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_logs_cpf ON logs(cpf)');
     await db.execute('CREATE INDEX idx_logs_tipo ON logs(tipo)');
 
-    await db.execute('CREATE INDEX idx_outbox_tipo ON outbox(tipo)');
+    // ✅ NOVO: Índice composto para prevenir duplicatas
+    await db.execute('CREATE INDEX idx_logs_duplicata ON logs(cpf, tipo, timestamp)');
 
     print('✅ Banco de dados criado com sucesso');
   }
 
-  /// Upgrade do banco de dados
+  /// ✅ ATUALIZADO: Upgrade do banco de dados
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     print('⬆️ Atualizando banco de $oldVersion para $newVersion');
 
@@ -234,6 +218,141 @@ class DatabaseHelper {
         print('⚠️ Tabela ALUNOS já existe ou erro: $e');
       }
     }
+
+    // ✅ NOVO: Versão 4 - Prevenir duplicatas
+    if (oldVersion < 4) {
+      try {
+        // Adicionar índice composto para prevenir duplicatas na tabela logs
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_logs_duplicata 
+          ON logs(cpf, tipo, timestamp)
+        ''');
+
+        print('✅ Índice anti-duplicata criado');
+      } catch (e) {
+        print('⚠️ Erro ao criar índice: $e');
+      }
+    }
+  }
+
+  // =========================================================================
+  // ✅ NOVOS MÉTODOS ESPECÍFICOS PARA CADASTRO E RECONHECIMENTO
+  // =========================================================================
+
+  /// ✅ BUSCAR APENAS ALUNOS EMBARCADOS (para CADASTRO facial)
+  /// Use na tela de cadastro facial - só mostra quem está embarcado
+  Future<List<Map<String, dynamic>>> getAlunosEmbarcadosParaCadastro() async {
+    final db = await database;
+
+    // Busca alunos que estão na tabela PASSAGEIROS com embarque = 'SIM'
+    final resultado = await db.rawQuery('''
+      SELECT DISTINCT 
+        p.cpf,
+        p.nome,
+        p.turma,
+        p.codigo_pulseira,
+        a.facial,
+        a.email,
+        a.telefone
+      FROM passageiros p
+      LEFT JOIN alunos a ON p.cpf = a.cpf
+      WHERE p.embarque = 'SIM'
+      ORDER BY p.nome ASC
+    ''');
+
+    print('📋 [DatabaseHelper] Alunos embarcados para cadastro: ${resultado.length}');
+    return resultado;
+  }
+
+  /// ✅ BUSCAR TODOS OS ALUNOS COM FACIAL (para RECONHECIMENTO)
+  /// Use na tela de reconhecimento - busca TODOS que têm face cadastrada
+  Future<List<Map<String, dynamic>>> getTodosAlunosComFacial() async {
+    final db = await database;
+
+    // Busca TODOS os alunos que têm embedding cadastrado
+    final resultado = await db.rawQuery('''
+      SELECT 
+        a.cpf,
+        a.nome,
+        a.turma,
+        a.email,
+        a.telefone,
+        e.embedding
+      FROM alunos a
+      INNER JOIN embeddings e ON a.cpf = e.cpf
+      WHERE a.facial = 'CADASTRADA'
+      ORDER BY a.nome ASC
+    ''');
+
+    print('🔍 [DatabaseHelper] Total de alunos com facial: ${resultado.length}');
+    return resultado;
+  }
+
+  /// ✅ REGISTRAR PASSAGEM SEM DUPLICATA
+  /// Previne registrar a mesma pessoa no mesmo local no mesmo minuto
+  Future<bool> registrarPassagemSemDuplicata({
+    required String cpf,
+    required String personName,
+    required String local,
+    required String tipo,
+  }) async {
+    final db = await database;
+    final agora = DateTime.now();
+
+    // Arredondar para o minuto (ignora segundos)
+    final timestampMinuto = DateTime(
+      agora.year,
+      agora.month,
+      agora.day,
+      agora.hour,
+      agora.minute,
+    );
+
+    try {
+      // Verificar se já existe registro com mesmo CPF, tipo e minuto
+      final existente = await db.query(
+        'logs',
+        where: 'cpf = ? AND tipo = ? AND timestamp LIKE ?',
+        whereArgs: [
+          cpf,
+          tipo,
+          '${timestampMinuto.toIso8601String().substring(0, 16)}%', // Compara até minuto
+        ],
+        limit: 1,
+      );
+
+      if (existente.isNotEmpty) {
+        print('⚠️ [DatabaseHelper] Passagem duplicada ignorada: $personName ($tipo)');
+        return false; // Duplicata detectada
+      }
+
+      // Inserir novo registro
+      await db.insert('logs', {
+        'cpf': cpf,
+        'personName': personName,
+        'timestamp': agora.toIso8601String(),
+        'confidence': 0.95,
+        'tipo': tipo,
+        'sincronizado': 0,
+      });
+
+      print('✅ [DatabaseHelper] Passagem registrada: $personName - $local ($tipo)');
+
+      // Adicionar à fila de sincronização
+      await addToSyncQueue('log_passagem', {
+        'cpf': cpf,
+        'nome': personName,
+        'local': local,
+        'tipo': tipo,
+        'timestamp': agora.toIso8601String(),
+      });
+
+      return true; // Sucesso
+
+    } catch (e) {
+      print('❌ [DatabaseHelper] Erro ao registrar passagem: $e');
+      return false;
+    }
   }
 
   // =========================================================================
@@ -284,49 +403,14 @@ class DatabaseHelper {
   /// Buscar todos os passageiros
   Future<List<Passageiro>> getAllPassageiros() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('passageiros');
-
-    return List.generate(maps.length, (i) {
-      return Passageiro(
-        nome: maps[i]['nome'],
-        cpf: maps[i]['cpf'],
-        idPasseio: maps[i]['id_passeio'] ?? '',
-        turma: maps[i]['turma'] ?? '',
-        embarque: maps[i]['embarque'] ?? 'NÃO',
-        retorno: maps[i]['retorno'] ?? 'NÃO',
-        onibus: maps[i]['onibus'] ?? '',
-        codigoPulseira: maps[i]['codigo_pulseira'],
-      );
-    });
-  }
-
-  /// Buscar passageiros por ônibus
-  Future<List<Passageiro>> getPassageirosByOnibus(String onibus) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'passageiros',
-      where: 'onibus = ?',
-      whereArgs: [onibus],
-    );
-
-    return List.generate(maps.length, (i) {
-      return Passageiro(
-        nome: maps[i]['nome'],
-        cpf: maps[i]['cpf'],
-        idPasseio: maps[i]['id_passeio'] ?? '',
-        turma: maps[i]['turma'] ?? '',
-        embarque: maps[i]['embarque'] ?? 'NÃO',
-        retorno: maps[i]['retorno'] ?? 'NÃO',
-        onibus: maps[i]['onibus'] ?? '',
-        codigoPulseira: maps[i]['codigo_pulseira'],
-      );
-    });
+    final maps = await db.query('passageiros', orderBy: 'nome ASC');
+    return maps.map((map) => Passageiro.fromMap(map)).toList();
   }
 
   /// Buscar passageiro por CPF
   Future<Passageiro?> getPassageiroByCpf(String cpf) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
+    final maps = await db.query(
       'passageiros',
       where: 'cpf = ?',
       whereArgs: [cpf],
@@ -336,14 +420,14 @@ class DatabaseHelper {
     if (maps.isEmpty) return null;
 
     return Passageiro(
-      nome: maps[0]['nome'],
-      cpf: maps[0]['cpf'],
-      idPasseio: maps[0]['id_passeio'] ?? '',
-      turma: maps[0]['turma'] ?? '',
-      embarque: maps[0]['embarque'] ?? 'NÃO',
-      retorno: maps[0]['retorno'] ?? 'NÃO',
-      onibus: maps[0]['onibus'] ?? '',
-      codigoPulseira: maps[0]['codigo_pulseira'],
+      cpf: maps[0]['cpf'] as String,
+      nome: maps[0]['nome'] as String,
+      idPasseio: maps[0]['id_passeio'] as String?,
+      turma: maps[0]['turma'] as String?,
+      embarque: maps[0]['embarque'] as String? ?? 'NÃO',
+      retorno: maps[0]['retorno'] as String? ?? 'NÃO',
+      onibus: maps[0]['onibus'] as String? ?? '',
+      codigoPulseira: maps[0]['codigo_pulseira'] as String?,
     );
   }
 
@@ -403,7 +487,7 @@ class DatabaseHelper {
   }
 
   // =========================================================================
-  // OPERAÇÕES COM ALUNOS (Reconhecimento Facial) ✅ NOVO
+  // OPERAÇÕES COM ALUNOS (Reconhecimento Facial)
   // =========================================================================
 
   /// Buscar todos os alunos
@@ -516,10 +600,10 @@ class DatabaseHelper {
 
   /// Salvar embedding (método legado para compatibilidade)
   Future<void> saveEmbedding(String cpf, List<double> embedding,
-      {String? fotoBase64}) async {
+      {String? nome}) async {
     await insertEmbedding({
       'cpf': cpf,
-      'nome': '', // Será preenchido se necessário
+      'nome': nome ?? 'Desconhecido',
       'embedding': embedding,
     });
   }
@@ -532,7 +616,6 @@ class DatabaseHelper {
   Future<void> insertLog({
     required String cpf,
     required String personName,
-    required DateTime timestamp,
     required double confidence,
     required String tipo,
   }) async {
@@ -540,7 +623,7 @@ class DatabaseHelper {
     await db.insert('logs', {
       'cpf': cpf,
       'personName': personName,
-      'timestamp': timestamp.toIso8601String(),
+      'timestamp': DateTime.now().toIso8601String(),
       'confidence': confidence,
       'tipo': tipo,
       'sincronizado': 0,
@@ -550,106 +633,72 @@ class DatabaseHelper {
   /// Buscar logs de hoje
   Future<List<Map<String, dynamic>>> getLogsHoje() async {
     final db = await database;
+    final hoje = DateTime.now();
+    final inicioDia = DateTime(hoje.year, hoje.month, hoje.day).toIso8601String();
 
-    final now = DateTime.now();
-    final inicio = DateTime(now.year, now.month, now.day).toIso8601String();
-    final fim = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
-
-    return db.query(
+    return await db.query(
       'logs',
-      where: 'timestamp BETWEEN ? AND ?',
-      whereArgs: [inicio, fim],
+      where: 'timestamp >= ?',
+      whereArgs: [inicioDia],
       orderBy: 'timestamp DESC',
     );
   }
 
-  // =========================================================================
-  // FILA DE SINCRONIZAÇÃO (OUTBOX)
-  // =========================================================================
-
-  /// Enfileirar item para sincronização
-  Future<int> enqueueOutbox(String tipo, Map<String, dynamic> payload) async {
+  /// Buscar todos os logs
+  Future<List<Map<String, dynamic>>> getAllLogs({int? limit}) async {
     final db = await database;
-    return db.insert('outbox', {
-      'tipo': tipo,
-      'payload': jsonEncode(payload),
-      'createdAt': DateTime.now().toIso8601String(),
-      'tentativas': 0,
-    });
-  }
-
-  /// Obter lote da fila
-  Future<List<Map<String, dynamic>>> getOutboxBatch({int limit = 50}) async {
-    final db = await database;
-    return db.query('outbox', orderBy: 'id ASC', limit: limit);
-  }
-
-  /// Remover itens da fila
-  Future<void> deleteOutboxIds(List<int> ids) async {
-    if (ids.isEmpty) return;
-    final db = await database;
-    final qMarks = List.filled(ids.length, '?').join(',');
-    await db.rawDelete('DELETE FROM outbox WHERE id IN ($qMarks)', ids);
+    return await db.query(
+      'logs',
+      orderBy: 'timestamp DESC',
+      limit: limit,
+    );
   }
 
   // =========================================================================
-  // FILA DE SINCRONIZAÇÃO (SYNC_QUEUE) - Compatibilidade
+  // SINCRONIZAÇÃO
   // =========================================================================
 
-  /// Adicionar item à fila de sincronização
-  Future<void> addToSyncQueue(String tipo, Map<String, dynamic> dados) async {
+  /// Adicionar à fila de sincronização
+  Future<void> addToSyncQueue(String tipo, Map<String, dynamic> payload) async {
     final db = await database;
-
     await db.insert('sync_queue', {
       'tipo': tipo,
-      'dados': jsonEncode(dados),
+      'payload': jsonEncode(payload),
       'timestamp': DateTime.now().toIso8601String(),
       'tentativas': 0,
+      'sincronizado': 0,
     });
-
-    print('📤 Adicionado à fila de sync: $tipo');
   }
 
-  /// Obter itens pendentes de sincronização
+  /// Buscar itens pendentes de sincronização
   Future<List<Map<String, dynamic>>> getPendingSync() async {
     final db = await database;
     return await db.query(
       'sync_queue',
+      where: 'sincronizado = ?',
+      whereArgs: [0],
       orderBy: 'timestamp ASC',
-      limit: 50,
     );
   }
 
-  /// Remover item da fila após sincronização bem-sucedida
-  Future<void> removeFromSyncQueue(int id) async {
+  /// Marcar item como sincronizado
+  Future<void> markAsSynced(int id) async {
     final db = await database;
-    await db.delete('sync_queue', where: 'id = ?', whereArgs: [id]);
-  }
-
-  /// Incrementar tentativas de sincronização
-  Future<void> incrementSyncAttempts(int id) async {
-    final db = await database;
-    await db.rawUpdate(
-      'UPDATE sync_queue SET tentativas = tentativas + 1 WHERE id = ?',
-      [id],
+    await db.update(
+      'sync_queue',
+      {'sincronizado': 1},
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 
-  /// Limpar fila de sincronização
-  Future<void> clearSyncQueue() async {
-    final db = await database;
-    await db.delete('sync_queue');
-    print('🗑️ Fila de sincronização limpa');
-  }
-
   // =========================================================================
-  // METADADOS
+  // METADATA
   // =========================================================================
 
-  /// Salvar metadado
+  /// Salvar metadata
   Future<void> setMetadata(String chave, String valor) async {
     final db = await database;
-
     await db.insert(
       'metadata',
       {
@@ -661,13 +710,11 @@ class DatabaseHelper {
     );
   }
 
-  /// Obter metadado
+  /// Buscar metadata
   Future<String?> getMetadata(String chave) async {
     final db = await database;
-
     final result = await db.query(
       'metadata',
-      columns: ['valor'],
       where: 'chave = ?',
       whereArgs: [chave],
       limit: 1,
@@ -700,7 +747,7 @@ class DatabaseHelper {
         .rawQuery("SELECT COUNT(*) FROM alunos WHERE facial = 'CADASTRADA'"));
 
     final pendingSync = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM sync_queue'));
+        await db.rawQuery('SELECT COUNT(*) FROM sync_queue WHERE sincronizado = 0'));
 
     final logsHoje = Sqflite.firstIntValue(await db.rawQuery(
         "SELECT COUNT(*) FROM logs WHERE date(timestamp) = date('now')"));

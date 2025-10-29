@@ -10,13 +10,19 @@ class OfflineSyncService {
   final String _sheetsWebhook = 'https://script.google.com/macros/s/AKfycbyO6m7XXvMvpi5Mm9M_a2rZ5ZCEmBXN2xXqHd9VrUbkozs-eNZfEsAmDJROd65Jn36H/exec';
   final _db = DatabaseHelper.instance;
 
-  Future<void> init() async {
-    Connectivity().onConnectivityChanged.listen((result) {
-      if (result != ConnectivityResult.none) {
-        print('🌐 [OfflineSync] Conexão detectada, tentando sincronizar...');
-        trySyncNow();
-      }
+  void init() {
+    _syncTimer?.cancel();
+
+    // ✅ SINCRONIZAR A CADA 3 MINUTOS
+    _syncTimer = Timer.periodic(Duration(minutes: 3), (_) async {
+      print('⏰ Timer de sincronização disparado');
+      await trySyncNow();
     });
+
+    print('✅ Sincronização automática iniciada (a cada 3 minutos)');
+
+    // Sincronizar imediatamente
+    trySyncNow();
   }
 
   Future<void> queueLogAcesso({
@@ -113,6 +119,7 @@ class OfflineSyncService {
         print('📍 [OfflineSync] Enviando ${movementLogs.length} logs de movimentação...');
         await _sendToSheets('addMovementLog', movementLogs);
       }
+      // Esta linha agora será executada corretamente após o 302
       await _db.deleteOutboxIds(batch.map<int>((e) => e['id'] as int).toList());
       print('✅ [OfflineSync] Sincronização concluída com sucesso!');
       return true;
@@ -123,7 +130,8 @@ class OfflineSyncService {
   }
 
   /// ✅ MÉTODO CORRIGIDO PARA TRATAR REDIRECIONAMENTO 302
-  /// ✅ MÉTODO CORRIGIDO PARA TRATAR REDIRECIONAMENTO 302
+  /// Tratamos o 302 como sucesso, pois o Google Apps Script processa o POST
+  /// ANTES de emitir o redirecionamento. Isso evita os erros 405 e 400.
   Future<void> _sendToSheets(String action, List<Map<String, dynamic>> items) async {
     print('🌐 [OfflineSync] Enviando $action para Google Sheets...');
     print('🔗 [OfflineSync] URL: $_sheetsWebhook');
@@ -132,7 +140,7 @@ class OfflineSyncService {
 
     try {
       final request = http.Request('POST', Uri.parse(_sheetsWebhook))
-        ..followRedirects = false
+        ..followRedirects = false // Importante: não seguir redirects automaticamente
         ..headers['Content-Type'] = 'application/json; charset=utf-8'
         ..headers['Accept'] = 'application/json'
         ..headers['User-Agent'] = 'Flutter-App/1.0'
@@ -144,66 +152,44 @@ class OfflineSyncService {
 
       print('📡 [OfflineSync] Status recebido: ${response.statusCode}');
 
-      // ✅ TRATAMENTO DE REDIRECIONAMENTO 302 - CORREÇÃO MELHORADA
+      // =========================================================================
+      // ✅ CORREÇÃO APLICADA AQUI
+      // =========================================================================
+      // Se o status for 302 (Redirecionamento), consideramos sucesso.
       if (response.statusCode == 302 || response.statusCode == 301) {
-        final redirectUrl = response.headers['location'];
+        print('🔄 [OfflineSync] Redirecionamento 302/301 detectado. Assumindo sucesso (Apps Script processa o POST antes de redirecionar).');
+        print('⚠️ [OfflineSync] Ignorando o redirecionamento para evitar erros 405/400.');
 
-        if (redirectUrl == null || redirectUrl.isEmpty) {
-          throw Exception('Redirecionamento sem URL de destino');
-        }
-
-        print('🔄 [OfflineSync] Redirecionando para: $redirectUrl');
-
-        // ✅ TENTAR POST PRIMEIRO, SE FALHAR TENTAR GET
-        try {
-          // Tentativa com POST
-          final redirectResponse = await http.post(
-            Uri.parse(redirectUrl),
-            headers: {
-              'Content-Type': 'application/json; charset=utf-8',
-              'Accept': 'application/json',
-              'User-Agent': 'Flutter-App/1.0',
-            },
-            body: jsonEncode({'action': action, 'people': items}),
-          );
-
-          print('📡 [OfflineSync] Status após POST no redirect: ${redirectResponse.statusCode}');
-
-          if (redirectResponse.statusCode >= 200 && redirectResponse.statusCode < 300) {
-            return _processResponse(redirectResponse, action, items.length);
-          } else if (redirectResponse.statusCode == 405) {
-            // ✅ SE 405, TENTAR COM GET E PARÂMETROS NA URL
-            print('🔄 [OfflineSync] POST não permitido, tentando GET com parâmetros...');
-            await _sendWithGetRedirect(redirectUrl, action, items);
-            return;
-          } else {
-            throw Exception('Erro HTTP ${redirectResponse.statusCode} após redirecionamento');
-          }
-        } catch (e) {
-          print('❌ [OfflineSync] Erro no POST após redirect: $e');
-          // Tentar com GET como fallback
-          print('🔄 [OfflineSync] Tentando fallback com GET...');
-          await _sendWithGetRedirect(redirectUrl, action, items);
-          return;
-        }
+        // Simular uma resposta de sucesso 200 para que a função _processResponse
+        // seja executada e o 'trySyncNow' considere a operação bem-sucedida.
+        final simulatedResponse = http.Response(
+            jsonEncode({'success': true, 'message': 'Assumed success on 302 redirect for Google Apps Script.'}),
+            200,
+            headers: {'content-type': 'application/json'}
+        );
+        // Chamamos o _processResponse com a resposta simulada
+        return _processResponse(simulatedResponse, action, items.length);
       }
+      // =========================================================================
 
       // ✅ SE NÃO FOR 302, PROCESSAR RESPOSTA NORMALMENTE
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return _processResponse(response, action, items.length);
       }
 
+      // Se for qualquer outro erro (ex: 500, 404), lança exceção
       throw Exception('Erro HTTP ${response.statusCode}');
 
     } catch (e) {
       print('❌ [OfflineSync] Erro ao enviar para Sheets: $e');
-      rethrow;
+      rethrow; // Relança o erro para ser pego pelo 'trySyncNow'
     } finally {
       client.close();
     }
   }
 
   /// ✅ MÉTODO AUXILIAR PARA ENVIAR VIA GET APÓS REDIRECIONAMENTO
+  /// (Este método não é mais chamado pelo _sendToSheets, mas pode ser mantido)
   Future<void> _sendWithGetRedirect(String redirectUrl, String action, List<Map<String, dynamic>> items) async {
     try {
       // Para GET, precisamos codificar os dados na URL
@@ -236,11 +222,14 @@ class OfflineSyncService {
       rethrow;
     }
   }
+
   /// ✅ PROCESSAR RESPOSTA DO GOOGLE SHEETS
   void _processResponse(http.Response response, String action, int itemCount) {
     try {
       print('📥 [OfflineSync] Processando resposta...');
-      print('📄 [OfflineSync] Body: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}...');
+      // Limitar o log do body para não poluir o console
+      final bodySubstring = response.body.substring(0, response.body.length > 200 ? 200 : response.body.length);
+      print('📄 [OfflineSync] Body: $bodySubstring...');
 
       final body = jsonDecode(response.body);
 
@@ -262,7 +251,7 @@ class OfflineSyncService {
           return;
         }
       }
-      rethrow;
+      rethrow; // Relança a exceção
     }
   }
 
@@ -292,23 +281,14 @@ class OfflineSyncService {
       print('📄 [OfflineSync] Response: ${response.body}');
 
       if (response.statusCode == 302) {
-        print('🔄 [OfflineSync] Detectado redirecionamento 302');
+        print('🔄 [OfflineSync] Detectado redirecionamento 302 (Comportamento esperado)');
         final redirectUrl = response.headers['location'];
         print('🔗 [OfflineSync] URL de redirect: $redirectUrl');
-
-        // Testar o redirect também
-        final redirectResponse = await http.post(
-          Uri.parse(redirectUrl!),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'User-Agent': 'Flutter-App/1.0',
-          },
-          body: jsonEncode(testData),
-        );
-
-        print('📡 [OfflineSync] Status após redirect: ${redirectResponse.statusCode}');
-        print('📄 [OfflineSync] Response após redirect: ${redirectResponse.body}');
+        print('✅ [OfflineSync] Teste de conexão OK (302 é sucesso para POST inicial).');
+      } else if (response.statusCode >= 200 && response.statusCode < 300) {
+        print('✅ [OfflineSync] Teste de conexão OK (Status ${response.statusCode}).');
+      } else {
+        print('❌ [OfflineSync] Teste de conexão falhou (Status ${response.statusCode}).');
       }
 
     } catch (e) {

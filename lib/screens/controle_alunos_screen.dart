@@ -60,14 +60,18 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
   Future<void> _carregarAlunos() async {
     setState(() => _carregando = true);
     try {
-      final alunos = await _db.getAllAlunos();
+      // ✅ BUSCAR APENAS EMBARCADOS para cadastro facial
+      final alunos = await _db.getAlunosEmbarcadosParaCadastro();
+
       setState(() {
-        _todosAlunos = alunos;
+        _alunos = alunos;
+        _alunosFiltrados = alunos;
         _carregando = false;
       });
-      print('✅ [ControleAlunos] ${alunos.length} alunos carregados');
+
+      print('📋 ${_alunos.length} alunos embarcados carregados');
     } catch (e) {
-      print("❌ [ControleAlunos] Erro ao carregar alunos: $e");
+      print('❌ Erro ao carregar alunos: $e');
       setState(() => _carregando = false);
     }
   }
