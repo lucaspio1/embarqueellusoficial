@@ -85,7 +85,7 @@ class FaceRecognitionService {
 
   /// ✅ PRÉ-PROCESSAMENTO ESPECÍFICO DO ArcFace
   /// ArcFace normalmente usa normalização [0, 1] ou ImageNet mean/std
-  List<List<List<List<float>>>> _preprocessMobileFaceNet(img.Image image) {
+  List<List<List<List<double>>>> _preprocessMobileFaceNet(img.Image image) {
     final input = List.generate(
       1, (_) => List.generate(
       3, (c) => List.generate(
@@ -247,6 +247,46 @@ class FaceRecognitionService {
       await saveEmbedding(cpf, nome, embedding);
     } catch (e) {
       print('❌ Erro ao salvar embedding da imagem: $e');
+      rethrow;
+    }
+  }
+
+  /// ✅ SALVAR EMBEDDING AVANÇADO (múltiplas imagens para melhor precisão)
+  Future<void> saveEmbeddingEnhanced(String cpf, String nome, List<img.Image> faces) async {
+    try {
+      if (faces.isEmpty) {
+        throw Exception('Nenhuma imagem fornecida');
+      }
+
+      print('📸 Processando ${faces.length} imagens para embedding avançado...');
+
+      // Extrair embeddings de todas as imagens
+      List<List<double>> embeddings = [];
+      for (int i = 0; i < faces.length; i++) {
+        print('   Processando imagem ${i + 1}/${faces.length}...');
+        final emb = await extractEmbedding(faces[i]);
+        embeddings.add(emb);
+      }
+
+      // Calcular embedding médio (mais robusto)
+      final avgEmbedding = List<double>.filled(EMBEDDING_SIZE, 0.0);
+      for (final emb in embeddings) {
+        for (int i = 0; i < EMBEDDING_SIZE; i++) {
+          avgEmbedding[i] += emb[i];
+        }
+      }
+      for (int i = 0; i < EMBEDDING_SIZE; i++) {
+        avgEmbedding[i] /= embeddings.length;
+      }
+
+      // Normalizar o embedding médio
+      final normalizedEmbedding = _normalizeEmbedding(avgEmbedding);
+
+      // Salvar no banco
+      await saveEmbedding(cpf, nome, normalizedEmbedding);
+      print('✅ Embedding avançado salvo (média de ${faces.length} imagens)');
+    } catch (e) {
+      print('❌ Erro ao salvar embedding avançado: $e');
       rethrow;
     }
   }

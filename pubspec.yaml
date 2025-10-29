@@ -5,12 +5,12 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.8.1
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  tflite_flutter: ^0.10.1
+  tflite_flutter: ^0.11.0
 
   # Câmera e Imagens
   image_picker: ^1.1.1
