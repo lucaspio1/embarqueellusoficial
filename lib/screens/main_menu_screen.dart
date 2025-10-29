@@ -11,7 +11,7 @@ class MainMenuScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFD1D2D1),
       body: SafeArea(
-        child: SingleChildScrollView( // ✅ Permite rolar o conteúdo
+        child: SingleChildScrollView(
           child: Card(
             elevation: 8,
             shape: const RoundedRectangleBorder(
@@ -199,9 +199,8 @@ class MainMenuScreen extends StatelessWidget {
     required Color color,
     required VoidCallback onPressed,
   }) {
-    return Container(
-      width: double.infinity,
-      height: subtitle != null ? 110 : 90,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 90),
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
@@ -212,8 +211,10 @@ class MainMenuScreen extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20.0),
           ),
+          padding: const EdgeInsets.symmetric(vertical: 16),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 40),
@@ -235,6 +236,7 @@ class MainMenuScreen extends StatelessWidget {
                   fontSize: 12,
                   color: Colors.white.withOpacity(0.8),
                 ),
+                textAlign: TextAlign.center,
               ),
             ],
           ],

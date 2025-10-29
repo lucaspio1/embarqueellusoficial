@@ -29,6 +29,8 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
   void initState() {
     super.initState();
     _carregarDados();
+    FaceRecognitionService.instance.init();
+
   }
 
   @override
@@ -973,14 +975,15 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
-    if (!controller.value.isInitialized) {
+    if (controller == null || !controller!.value.isInitialized) {
       return Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
           title: const Text('Capturar Rosto'),
-          backgroundColor: const Color(0xFF4C643C),
+          backgroundColor: Color(0xFF4C643C),
         ),
         body: const Center(
           child: Column(

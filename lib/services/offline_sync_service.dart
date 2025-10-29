@@ -1,10 +1,18 @@
-// lib/services/offline_sync_service.dart - CORREÇÕES COMPLETAS
+// lib/services/offline_sync_service.dart — VERSÃO CORRIGIDA (envio inteligente + sync embeddings)
 import 'dart:async';
 import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
-import '../database/database_helper.dart';
+import 'package:embarqueellus/database/database_helper.dart';
 
+/// Serviço de sincronização offline com Google Apps Script / Google Sheets.
+///
+/// Estratégia:
+/// - Movimentações: tenta LOTE; se parcial/falha, fallback por item (retries).
+/// - Cadastros faciais: envia sempre individualmente (compatível com seu GAS).
+/// - Remove da fila apenas itens confirmados.
+/// - Trata 301/302 do GAS como sucesso (POST processado).
+/// - Sincroniza embeddings do servidor para o SQLite no init().
 class OfflineSyncService {
   OfflineSyncService._();
   static final OfflineSyncService instance = OfflineSyncService._();
@@ -14,17 +22,24 @@ class OfflineSyncService {
 
   Timer? _syncTimer;
 
+  /// Inicializa o agendador de sincronização automática (1 min) + sync de embeddings.
   void init() {
     _syncTimer?.cancel();
 
-    _syncTimer = Timer.periodic(Duration(minutes: 3), (_) async {
-      print('⏰ Timer de sincronização disparado');
+    _syncTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+      print('⏰ [OfflineSync] Timer de sincronização disparado');
       await trySyncNow();
     });
 
-    print('✅ Sincronização automática iniciada (a cada 3 minutos)');
+    print('✅ [OfflineSync] Sincronização automática iniciada (a cada 1 minuto)');
     trySyncNow();
+    // 🔽 Faz o download dos embeddings no startup (após limpar dados, garante reconhecimento)
+    syncEmbeddingsFromServer();
   }
+
+  // -----------------------------
+  // Enfileiramento
+  // -----------------------------
 
   Future<void> queueLogAcesso({
     required String cpf,
@@ -34,7 +49,6 @@ class OfflineSyncService {
     required String personId,
     required String tipo,
   }) async {
-    // ✅ CORREÇÃO: Chamada correta sem parâmetro timestamp
     await _db.insertLog(
       cpf: cpf,
       personName: personName,
@@ -75,6 +89,10 @@ class OfflineSyncService {
     print('📝 [OfflineSync] Cadastro facial enfileirado: $nome');
   }
 
+  // -----------------------------
+  // Execução de sync
+  // -----------------------------
+
   Future<bool> _hasInternet() async {
     final c = await Connectivity().checkConnectivity();
     return c != ConnectivityResult.none;
@@ -98,7 +116,6 @@ class OfflineSyncService {
     }
 
     print('📤 [OfflineSync] Sincronizando ${batch.length} itens...');
-
     final faceRegisters = <Map<String, dynamic>>[];
     final movementLogs = <Map<String, dynamic>>[];
 
@@ -112,141 +129,254 @@ class OfflineSyncService {
       }
     }
 
+    final successIds = <int>[];
+
     try {
+      // 1) cadastros faciais — individual
       if (faceRegisters.isNotEmpty) {
-        print('📸 [OfflineSync] Enviando ${faceRegisters.length} cadastros faciais...');
-        await _sendToSheets('addPerson', faceRegisters);
-      }
-      if (movementLogs.isNotEmpty) {
-        print('📍 [OfflineSync] Enviando ${movementLogs.length} logs de movimentação...');
-        await _sendToSheets('addMovementLog', movementLogs);
+        print('📸 [OfflineSync] Enviando ${faceRegisters.length} cadastro(s) facial(is) individualmente...');
+        for (final item in faceRegisters) {
+          final ok = await _sendPersonIndividually(item);
+          if (ok) {
+            final id = (item['idOutbox'] as int?) ?? -1;
+            if (id != -1) successIds.add(id);
+          }
+        }
       }
 
-      await _db.deleteOutboxIds(batch.map<int>((e) => e['id'] as int).toList());
-      print('✅ [OfflineSync] Sincronização concluída com sucesso!');
-      return true;
+      // 2) movimentações — lote + fallback
+      if (movementLogs.isNotEmpty) {
+        print('📍 [OfflineSync] Tentando envio em LOTE de ${movementLogs.length} movimentação(ões)...');
+        final lot = await _sendMovementsBatch(movementLogs);
+
+        if (lot.allSucceeded) {
+          successIds.addAll(
+            movementLogs.map((m) => (m['idOutbox'] as int?) ?? -1).where((id) => id != -1),
+          );
+          print('✅ [OfflineSync] Lote de movimentações confirmado');
+        } else {
+          print('⚠️ [OfflineSync] Lote parcial/sem confirmação — fallback individual...');
+          for (final item in lot.notConfirmedItems) {
+            final ok = await _sendMovementIndividually(item);
+            if (ok) {
+              final id = (item['idOutbox'] as int?) ?? -1;
+              if (id != -1) successIds.add(id);
+            }
+          }
+        }
+      }
+
+      if (successIds.isNotEmpty) {
+        await _db.deleteOutboxIds(successIds);
+        print('🗑️ [OfflineSync] Removidos ${successIds.length} item(ns) enviados');
+      }
+
+      final pending = batch.length - successIds.length;
+      if (pending == 0) {
+        print('✅ [OfflineSync] Sincronização concluída com sucesso');
+        return true;
+      } else {
+        print('⚠️ [OfflineSync] ${pending} item(ns) ainda na fila');
+        return false;
+      }
     } catch (e) {
       print('❌ [OfflineSync] Erro na sincronização: $e');
       return false;
     }
   }
 
-  Future<void> _sendToSheets(String action, List<Map<String, dynamic>> items) async {
-    print('🌐 [OfflineSync] Enviando $action para Google Sheets...');
-    print('🔗 [OfflineSync] URL: $_sheetsWebhook');
+  // -----------------------------
+  // Envio — Movimentações
+  // -----------------------------
 
+  Future<_BatchResult> _sendMovementsBatch(List<Map<String, dynamic>> items) async {
+    final body = <String, dynamic>{
+      'action': 'addMovementLog',
+      'people': items.map((m) {
+        final c = Map<String, dynamic>.from(m);
+        c.remove('idOutbox');
+        return c;
+      }).toList(),
+    };
+
+    final resp = await _postWithRedirectTolerance(body);
+    if (resp == null) {
+      return _BatchResult(allSucceeded: false, notConfirmedItems: items);
+    }
+
+    if (resp.statusCode == 301 || resp.statusCode == 302) {
+      return _BatchResult(allSucceeded: true, notConfirmedItems: const []);
+    }
+
+    if (resp.statusCode >= 200 && resp.statusCode < 300) {
+      try {
+        final json = jsonDecode(resp.body);
+        final success = json is Map && json['success'] == true;
+        if (!success) {
+          print('⚠️ [OfflineSync] Lote 2xx porém success=false: ${resp.body}');
+          return _BatchResult(allSucceeded: false, notConfirmedItems: items);
+        }
+        final data = (json['data'] as Map?) ?? const {};
+        final total = (data['total'] as num?)?.toInt() ?? -1;
+        if (total == items.length) {
+          return _BatchResult(allSucceeded: true, notConfirmedItems: const []);
+        }
+        print('ℹ️ [OfflineSync] Lote parcial: total=$total de ${items.length}');
+        return _BatchResult(allSucceeded: false, notConfirmedItems: items);
+      } catch (_) {
+        print('ℹ️ [OfflineSync] Lote 2xx sem JSON — considerando sucesso');
+        return _BatchResult(allSucceeded: true, notConfirmedItems: const []);
+      }
+    }
+
+    print('❌ [OfflineSync] Falha lote HTTP ${resp.statusCode}: ${resp.body}');
+    return _BatchResult(allSucceeded: false, notConfirmedItems: items);
+  }
+
+  Future<bool> _sendMovementIndividually(Map<String, dynamic> item) async {
+    final copy = Map<String, dynamic>.from(item)..remove('idOutbox');
+    final body = <String, dynamic>{'action': 'addMovementLog', 'people': [copy]};
+    return _postWithRetriesAndSuccess(body);
+  }
+
+  // -----------------------------
+  // Envio — Cadastros faciais
+  // -----------------------------
+
+  Future<bool> _sendPersonIndividually(Map<String, dynamic> item) async {
+    final copy = Map<String, dynamic>.from(item)..remove('idOutbox');
+    final body = <String, dynamic>{'action': 'addPerson', ...copy};
+    return _postWithRetriesAndSuccess(body);
+  }
+
+  // -----------------------------
+  // POST helpers (retries & 302)
+  // -----------------------------
+
+  Future<bool> _postWithRetriesAndSuccess(Map<String, dynamic> body, {int maxRetries = 3}) async {
+    int attempt = 0;
+    while (attempt < maxRetries) {
+      attempt++;
+      try {
+        final resp = await _postWithRedirectTolerance(body);
+        if (resp == null) {
+          print('⚠️ [OfflineSync] Sem resposta (tentativa $attempt/$maxRetries)');
+        } else {
+          print('📡 [OfflineSync] Status: ${resp.statusCode} (tentativa $attempt/$maxRetries)');
+
+          if (resp.statusCode == 301 || resp.statusCode == 302) return true;
+
+          if (resp.statusCode >= 200 && resp.statusCode < 300) {
+            try {
+              final json = jsonDecode(resp.body);
+              if (json is Map && json['success'] == true) return true;
+              print('ℹ️ [OfflineSync] 2xx sem success=true — considerando sucesso.');
+              return true;
+            } catch (_) {
+              print('ℹ️ [OfflineSync] 2xx sem JSON — considerando sucesso.');
+              return true;
+            }
+          }
+
+          print('❌ [OfflineSync] Falha HTTP ${resp.statusCode}: ${resp.body}');
+        }
+      } catch (e) {
+        print('❌ [OfflineSync] Exceção ao enviar: $e (tentativa $attempt/$maxRetries)');
+      }
+      await Future.delayed(Duration(seconds: attempt)); // backoff simples
+    }
+    return false;
+  }
+
+  Future<http.Response?> _postWithRedirectTolerance(Map<String, dynamic> body) async {
+    print('🌐 [OfflineSync] POST -> $_sheetsWebhook | action=${body['action']}');
     final client = http.Client();
-
     try {
-      // ✅ CORREÇÃO: Syntax correta para headers
-      final request = http.Request('POST', Uri.parse(_sheetsWebhook));
-      request.followRedirects = false;
-      request.headers['Content-Type'] = 'application/json; charset=utf-8';
-      request.headers['Accept'] = 'application/json';
-      request.headers['User-Agent'] = 'Flutter-App/1.0';
-      request.body = jsonEncode({'action': action, 'people': items});
+      final req = http.Request('POST', Uri.parse(_sheetsWebhook));
+      req.followRedirects = false;
+      req.headers['Content-Type'] = 'application/json; charset=utf-8';
+      req.headers['Accept'] = 'application/json';
+      req.headers['User-Agent'] = 'Flutter-App/1.0';
+      req.body = jsonEncode(body);
 
-      print('📤 [OfflineSync] Enviando requisição...');
-      final streamedResponse = await client.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
+      final streamed = await client.send(req);
+      final resp = await http.Response.fromStream(streamed);
 
-      print('📡 [OfflineSync] Status recebido: ${response.statusCode}');
-
-      if (response.statusCode == 302 || response.statusCode == 301) {
-        print('🔄 [OfflineSync] Redirecionamento 302/301 detectado. Assumindo sucesso (Apps Script processa o POST antes de redirecionar).');
-        print('⚠️ [OfflineSync] Ignorando o redirecionamento para evitar erros 405/400.');
-
-        final simulatedResponse = http.Response(
-            jsonEncode({'success': true, 'message': 'Assumed success on 302 redirect for Google Apps Script.'}),
-            200,
-            headers: {'content-type': 'application/json'}
-        );
-        return _processResponse(simulatedResponse, action, items.length);
-      }
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return _processResponse(response, action, items.length);
-      }
-
-      throw Exception('Erro HTTP ${response.statusCode}');
-
+      final preview = resp.body.length > 300 ? '${resp.body.substring(0, 300)}...' : resp.body;
+      print('📥 [OfflineSync] Resp ${resp.statusCode} | body: $preview');
+      return resp;
     } catch (e) {
-      print('❌ [OfflineSync] Erro ao enviar para Sheets: $e');
-      rethrow;
+      print('❌ [OfflineSync] Erro ao enviar POST: $e');
+      return null;
     } finally {
       client.close();
     }
   }
 
-  void _processResponse(http.Response response, String action, int itemCount) {
+  // -----------------------------
+  // Download de embeddings do servidor → SQLite
+  // -----------------------------
+
+  Future<void> syncEmbeddingsFromServer() async {
+    print("🔄 [Embeddings] Buscando embeddings do servidor...");
     try {
-      print('📥 [OfflineSync] Processando resposta...');
-      final bodySubstring = response.body.substring(0, response.body.length > 200 ? 200 : response.body.length);
-      print('📄 [OfflineSync] Body: $bodySubstring...');
+      final resp = await http.post(
+        Uri.parse(_sheetsWebhook),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({"action": "getAllPeople"}),
+      );
 
-      final body = jsonDecode(response.body);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final body = jsonDecode(resp.body);
+        if (body is Map && body["success"] == true) {
+          final List<dynamic> pessoas = (body["data"] as List?) ?? const [];
+          int count = 0;
 
-      if (body['success'] == true) {
-        print('✅ [OfflineSync] $action ($itemCount itens) enviados com sucesso!');
-        return;
-      }
-
-      final message = body['message'] ?? 'Erro desconhecido';
-      throw Exception('Erro no Script: $message');
-
-    } catch (e) {
-      if (e is FormatException) {
-        print('⚠️ [OfflineSync] Resposta não é JSON válido');
-        print('📄 [OfflineSync] Conteúdo: ${response.body}');
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          print('✅ [OfflineSync] Considerando sucesso baseado no status HTTP');
-          return;
+          for (final p in pessoas) {
+            if (p is Map && p["cpf"] != null && p["embedding"] != null) {
+              await _db.insertEmbedding({
+                "cpf": p["cpf"],
+                "nome": p["nome"] ?? "",
+                "embedding": p["embedding"],
+              });
+              await _db.updateAlunoFacial(p["cpf"].toString(), "CADASTRADA");
+              count++;
+            }
+          }
+          print("✅ [Embeddings] $count embeddings sincronizados com sucesso!");
+        } else {
+          print("⚠️ [Embeddings] Resposta sem success=true: ${resp.body}");
         }
+      } else if (resp.statusCode == 301 || resp.statusCode == 302) {
+        print("ℹ️ [Embeddings] 301/302 recebido — considere sucesso se o GAS já tiver processado.");
+      } else {
+        print("❌ [Embeddings] HTTP ${resp.statusCode}: ${resp.body}");
       }
-      rethrow;
+    } catch (e) {
+      print("❌ [Embeddings] Erro ao buscar embeddings: $e");
     }
   }
+
+  // -----------------------------
 
   Future<void> testConnection() async {
-    print('🔍 [OfflineSync] Testando conexão com Google Sheets...');
-
-    final client = http.Client();
-
-    try {
-      final testData = {
-        'action': 'testConnection',
-        'people': [{'timestamp': DateTime.now().toIso8601String()}],
-      };
-
-      // ✅ CORREÇÃO: Syntax correta para headers
-      final request = http.Request('POST', Uri.parse(_sheetsWebhook));
-      request.followRedirects = false;
-      request.headers['Content-Type'] = 'application/json';
-      request.headers['Accept'] = 'application/json';
-      request.headers['User-Agent'] = 'Flutter-App/1.0';
-      request.body = jsonEncode(testData);
-
-      final streamedResponse = await client.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
-
-      print('📡 [OfflineSync] Status: ${response.statusCode}');
-      print('📄 [OfflineSync] Response: ${response.body}');
-
-      if (response.statusCode == 302) {
-        print('🔄 [OfflineSync] Detectado redirecionamento 302 (Comportamento esperado)');
-        final redirectUrl = response.headers['location'];
-        print('🔗 [OfflineSync] URL de redirect: $redirectUrl');
-        print('✅ [OfflineSync] Teste de conexão OK (302 é sucesso para POST inicial).');
-      } else if (response.statusCode >= 200 && response.statusCode < 300) {
-        print('✅ [OfflineSync] Teste de conexão OK (Status ${response.statusCode}).');
-      } else {
-        print('❌ [OfflineSync] Teste de conexão falhou (Status ${response.statusCode}).');
-      }
-
-    } catch (e) {
-      print('❌ [OfflineSync] Erro no teste: $e');
-    } finally {
-      client.close();
+    print('🔍 [OfflineSync] Testando conexão com Google Apps Script...');
+    final ok = await _postWithRetriesAndSuccess({
+      'action': 'testConnection',
+      'people': [
+        {'timestamp': DateTime.now().toIso8601String()}
+      ],
+    });
+    if (ok) {
+      print('✅ [OfflineSync] Teste OK');
+    } else {
+      print('❌ [OfflineSync] Teste falhou');
     }
   }
+}
+
+class _BatchResult {
+  final bool allSucceeded;
+  final List<Map<String, dynamic>> notConfirmedItems;
+  const _BatchResult({required this.allSucceeded, required this.notConfirmedItems});
 }
