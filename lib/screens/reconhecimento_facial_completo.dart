@@ -1,3 +1,4 @@
+// lib/screens/reconhecimento_facial_completo.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
@@ -6,11 +7,6 @@ import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
 
-/// Tela completa de reconhecimento facial com:
-/// - Reconhecimento por foto
-/// - Busca manual por nome (fallback)
-/// - Seleção de tipo de acesso
-/// - Histórico de movimentações
 class ReconhecimentoFacialScreen extends StatefulWidget {
   const ReconhecimentoFacialScreen({super.key});
 
@@ -58,12 +54,9 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     }
   }
 
-  // ================================================================
-  // RECONHECIMENTO FACIAL
-  // ================================================================
   Future<void> _iniciarReconhecimento() async {
     try {
-      final imagePath = await _abrirCameraTela(frontal: false); // ✅ AGORA É TRASEIRA
+      final imagePath = await _abrirCameraTela(frontal: false);
       if (imagePath == null) return;
 
       setState(() => _processando = true);
@@ -78,10 +71,8 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       setState(() => _processando = false);
 
       if (resultado != null) {
-        // ✅ Aluno reconhecido
         await _selecionarTipoAcesso(resultado);
       } else {
-        // ❌ Não reconhecido - mostrar opções
         _mostrarDialogNaoReconhecido();
       }
     } catch (e) {
@@ -95,9 +86,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     }
   }
 
-  // ================================================================
-  // BUSCA MANUAL POR NOME
-  // ================================================================
   Future<void> _abrirBuscaManual() async {
     final aluno = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -109,9 +97,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     }
   }
 
-  // ================================================================
-  // SELEÇÃO DE TIPO DE ACESSO
-  // ================================================================
   Future<void> _selecionarTipoAcesso(Map<String, dynamic> aluno) async {
     final tipo = await showDialog<String>(
       context: context,
@@ -123,16 +108,13 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     }
   }
 
-  // ================================================================
-  // REGISTRAR PASSAGEM
-  // ================================================================
   Future<void> _registrarPassagem(Map<String, dynamic> aluno, String tipo) async {
     try {
       _mostrarProgresso('Registrando passagem...');
 
       final timestamp = DateTime.now();
 
-      // Salvar no banco local
+      // ✅ CORREÇÃO: Chamada correta sem parâmetro timestamp
       await _db.insertLog(
         cpf: aluno['cpf'],
         personName: aluno['nome'],
@@ -141,7 +123,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         tipo: tipo,
       );
 
-      // Enfileirar para sincronização
       await OfflineSyncService.instance.queueLogAcesso(
         cpf: aluno['cpf'],
         personName: aluno['nome'],
@@ -153,7 +134,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
 
       if (Navigator.canPop(context)) Navigator.pop(context);
 
-      // Atualizar lista
       await _carregarDados();
 
       if (mounted) {
@@ -179,9 +159,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     }
   }
 
-  // ================================================================
-  // PROCESSAMENTO DE IMAGEM
-  // ================================================================
   Future<img.Image> _processarImagemParaModelo(File imageFile) async {
     final bytes = await imageFile.readAsBytes();
 
@@ -196,7 +173,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       throw Exception('Imagem inválida ou não suportada.');
     }
 
-    // Converter para RGB se necessário
     if (decoded.numChannels == 1) {
       final rgb = img.Image(
         width: decoded.width,
@@ -236,10 +212,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     return resized;
   }
 
-  // ================================================================
-  // CÂMERA
-  // ================================================================
-  Future<String?> _abrirCameraTela({bool frontal = false}) async { // ✅ PADRÃO AGORA É TRASEIRA
+  Future<String?> _abrirCameraTela({bool frontal = false}) async {
     try {
       final cameras = await availableCameras();
       final camera = cameras.firstWhere(
@@ -266,9 +239,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     }
   }
 
-  // ================================================================
-  // INTERFACE
-  // ================================================================
   @override
   Widget build(BuildContext context) {
     final alunosComFacial = _todosAlunos.where((a) => a['facial'] != null).length;
@@ -447,7 +417,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
 
   Widget _buildLogCard(Map<String, dynamic> log) {
     final tipo = log['tipo'] ?? 'desconhecido';
-    final nome = log['personName'] ?? 'Sem nome';
+    final nome = log['person_name'] ?? 'Sem nome';
     final timestamp = DateTime.parse(log['timestamp'] ?? DateTime.now().toIso8601String());
     final hora = '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
 
@@ -484,9 +454,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     );
   }
 
-  // ================================================================
-  // HELPERS
-  // ================================================================
   String _getTipoLabel(String tipo) {
     return _getTipoInfo(tipo)['label'];
   }
@@ -614,9 +581,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
   }
 }
 
-// ================================================================
-// DIALOG: BUSCA MANUAL POR NOME
-// ================================================================
 class _BuscaManualDialog extends StatefulWidget {
   final List<Map<String, dynamic>> alunos;
 
@@ -664,7 +628,6 @@ class _BuscaManualDialogState extends State<_BuscaManualDialog> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Header
             Row(
               children: [
                 const Icon(Icons.search, color: Color(0xFF4C643C), size: 28),
@@ -686,7 +649,6 @@ class _BuscaManualDialogState extends State<_BuscaManualDialog> {
             ),
             const SizedBox(height: 16),
 
-            // Campo de busca
             TextField(
               controller: _searchController,
               autofocus: true,
@@ -702,7 +664,6 @@ class _BuscaManualDialogState extends State<_BuscaManualDialog> {
             ),
             const SizedBox(height: 16),
 
-            // Lista de resultados
             Expanded(
               child: _alunosFiltrados.isEmpty
                   ? Center(
@@ -760,9 +721,6 @@ class _BuscaManualDialogState extends State<_BuscaManualDialog> {
   }
 }
 
-// ================================================================
-// DIALOG: SELECIONAR TIPO DE ACESSO
-// ================================================================
 class _SelecionarTipoAcessoDialog extends StatelessWidget {
   final Map<String, dynamic> aluno;
 
@@ -777,7 +735,6 @@ class _SelecionarTipoAcessoDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
             CircleAvatar(
               radius: 40,
               backgroundColor: Colors.green.shade100,
@@ -814,7 +771,6 @@ class _SelecionarTipoAcessoDialog extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Opções de local
             _buildTipoTile(
               context,
               'Voltou ao Quarto',
@@ -903,9 +859,6 @@ class _SelecionarTipoAcessoDialog extends StatelessWidget {
   }
 }
 
-// ================================================================
-// TELA DE PREVIEW DA CÂMERA - CORRIGIDA
-// ================================================================
 class CameraPreviewScreen extends StatefulWidget {
   final CameraDescription camera;
   const CameraPreviewScreen({required this.camera});
@@ -1009,7 +962,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
         children: [
           CameraPreview(controller),
 
-          // Moldura oval
           Center(
             child: Container(
               width: 280,
@@ -1024,7 +976,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
             ),
           ),
 
-          // Instruções
           const Positioned(
             top: 60,
             left: 0,

@@ -1,3 +1,4 @@
+// lib/screens/controle_alunos_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
@@ -6,9 +7,6 @@ import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
-
-/// ✅ CORREÇÃO IMPLEMENTADA:
-/// Agora o embedding é enviado corretamente para o Google Sheets via OfflineSyncService
 
 class ControleAlunosScreen extends StatefulWidget {
   const ControleAlunosScreen({super.key});
@@ -24,6 +22,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
   final TextEditingController _nomeController = TextEditingController();
 
   List<Map<String, dynamic>> _todosAlunos = [];
+  List<Map<String, dynamic>> _alunos = [];
+  List<Map<String, dynamic>> _alunosFiltrados = [];
   bool _carregando = true;
   bool _processando = false;
   bool _sincronizando = false;
@@ -60,12 +60,12 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
   Future<void> _carregarAlunos() async {
     setState(() => _carregando = true);
     try {
-      // ✅ BUSCAR APENAS EMBARCADOS para cadastro facial
       final alunos = await _db.getAlunosEmbarcadosParaCadastro();
 
       setState(() {
         _alunos = alunos;
         _alunosFiltrados = alunos;
+        _todosAlunos = alunos;
         _carregando = false;
       });
 
@@ -215,7 +215,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
     return resized;
   }
 
-  /// ✅ CADASTRO FACIAL SIMPLES - AGORA COM SINCRONIZAÇÃO CORRETA
   Future<void> _cadastrarFacial(Map<String, dynamic> aluno) async {
     try {
       final imagePath = await _abrirCameraTela(frontal: true);
@@ -228,14 +227,12 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       _atualizarProgresso('Extraindo características faciais...');
 
-      // Extrai o embedding
       await _faceService.saveEmbeddingFromImage(
         aluno['cpf'],
         aluno['nome'],
         processedImage,
       );
 
-      // ✅ BUSCAR O EMBEDDING QUE ACABOU DE SER SALVO
       final embeddings = await _db.getAllEmbeddings();
       final embeddingAluno = embeddings.firstWhere(
             (e) => e['cpf'] == aluno['cpf'],
@@ -246,7 +243,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
-      // ✅ ENVIAR PARA O GOOGLE SHEETS VIA OFFLINE SYNC SERVICE
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
         nome: aluno['nome'],
@@ -258,13 +254,11 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('✅ [CadastroFacial] Embedding enfileirado para sincronização');
 
-      // ✅ TENTAR SINCRONIZAR IMEDIATAMENTE
       _atualizarProgresso('Enviando para nuvem...');
       final syncResult = await OfflineSyncService.instance.trySyncNow();
 
       print('🔄 [CadastroFacial] Tentativa de sync: ${syncResult ? "SUCESSO" : "FALHOU (tentará novamente)"}');
 
-      // Atualizar status local
       await _db.updateAlunoFacial(aluno['cpf'], 'CADASTRADA');
 
       if (Navigator.canPop(context)) Navigator.pop(context);
@@ -299,12 +293,10 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
     }
   }
 
-  /// ✅ CADASTRO FACIAL AVANÇADO (3 FOTOS) - COM SINCRONIZAÇÃO CORRETA
   Future<void> _cadastrarFacialAvancado(Map<String, dynamic> aluno) async {
     try {
       List<img.Image> faces = [];
 
-      // Captura 3 imagens para treinamento robusto
       for (int i = 1; i <= 3; i++) {
         _mostrarProgresso('Captura $i/3: Posicione o rosto e olhe para a câmera');
 
@@ -325,14 +317,12 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       _atualizarProgresso('Processando ${faces.length} imagens...');
 
-      // Salva embedding melhorado
       await _faceService.saveEmbeddingEnhanced(
         aluno['cpf'],
         aluno['nome'],
         faces,
       );
 
-      // ✅ BUSCAR O EMBEDDING QUE ACABOU DE SER SALVO
       final embeddings = await _db.getAllEmbeddings();
       final embeddingAluno = embeddings.firstWhere(
             (e) => e['cpf'] == aluno['cpf'],
@@ -343,7 +333,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('📤 [CadastroFacialAvançado] Embedding extraído: ${embedding.length} dimensões');
 
-      // ✅ ENVIAR PARA O GOOGLE SHEETS
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
         nome: aluno['nome'],
@@ -355,7 +344,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('✅ [CadastroFacialAvançado] Embedding enfileirado para sincronização');
 
-      // ✅ TENTAR SINCRONIZAR IMEDIATAMENTE
       _atualizarProgresso('Enviando para nuvem...');
       final syncResult = await OfflineSyncService.instance.trySyncNow();
 
@@ -438,7 +426,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
             onPressed: _carregarAlunos,
             tooltip: 'Atualizar',
           ),
-          // ✅ Botão para forçar sincronização de embeddings
           IconButton(
             icon: const Icon(Icons.cloud_upload),
             onPressed: () async {
@@ -701,7 +688,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
   }
 }
 
-// Camera Preview Screen
 class CameraPreviewScreen extends StatefulWidget {
   final CameraDescription camera;
   const CameraPreviewScreen({required this.camera});

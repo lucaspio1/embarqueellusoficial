@@ -1,12 +1,13 @@
+// lib/models/passageiro.dart
 class Passageiro {
   final String nome;
-  final String idPasseio; // ✅ ID do passeio (ex: nome completo do evento)
+  final String idPasseio;
   final String turma;
   final String embarque;
   final String retorno;
-  final String onibus; // ✅ Ônibus do aluno
-  final String? cpf; // ✅ Novo campo — chave primária para sincronização
-  final String? codigoPulseira; // ✅ Código da pulseira (coluna K)
+  final String onibus;
+  final String? cpf;
+  final String? codigoPulseira;
   String? flowType;
 
   Passageiro({
@@ -21,6 +22,19 @@ class Passageiro {
     this.flowType,
   });
 
+  factory Passageiro.fromMap(Map<String, dynamic> map) {
+    return Passageiro(
+      nome: (map['nome'] ?? '').toString(),
+      idPasseio: (map['id_passeio'] ?? '').toString(),
+      turma: (map['turma'] ?? '').toString(),
+      embarque: (map['embarque'] ?? 'NÃO').toString(),
+      retorno: (map['retorno'] ?? 'NÃO').toString(),
+      onibus: (map['onibus'] ?? '').toString(),
+      cpf: map['cpf']?.toString(),
+      codigoPulseira: map['codigo_pulseira']?.toString(),
+    );
+  }
+
   factory Passageiro.fromJson(Map<String, dynamic> json) {
     return Passageiro(
       nome: (json['nome'] ?? '').toString(),
@@ -29,8 +43,8 @@ class Passageiro {
       embarque: (json['embarque'] ?? 'NÃO').toString(),
       retorno: (json['retorno'] ?? 'NÃO').toString(),
       onibus: (json['onibus'] ?? '').toString(),
-      cpf: (json['cpf'] ?? '').toString(), // ✅ Recebe do AppScript
-      codigoPulseira: (json['codigoPulseira'] ?? '').toString(), // ✅ Recebe da planilha (coluna K)
+      cpf: json['cpf']?.toString(),
+      codigoPulseira: json['codigoPulseira']?.toString(),
       flowType: json['flowType']?.toString(),
     );
   }
@@ -46,6 +60,19 @@ class Passageiro {
       'cpf': cpf,
       'codigoPulseira': codigoPulseira,
       'flowType': flowType,
+    };
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'nome': nome,
+      'id_passeio': idPasseio,
+      'turma': turma,
+      'embarque': embarque,
+      'retorno': retorno,
+      'onibus': onibus,
+      'cpf': cpf,
+      'codigo_pulseira': codigoPulseira,
     };
   }
 

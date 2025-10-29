@@ -1,27 +1,28 @@
+// lib/services/offline_sync_service.dart - CORREÇÕES COMPLETAS
+import 'dart:async';
 import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
-import '/database/database_helper.dart';
+import '../database/database_helper.dart';
 
 class OfflineSyncService {
   OfflineSyncService._();
   static final OfflineSyncService instance = OfflineSyncService._();
 
   final String _sheetsWebhook = 'https://script.google.com/macros/s/AKfycbyO6m7XXvMvpi5Mm9M_a2rZ5ZCEmBXN2xXqHd9VrUbkozs-eNZfEsAmDJROd65Jn36H/exec';
-  final _db = DatabaseHelper.instance;
+  final DatabaseHelper _db = DatabaseHelper.instance;
+
+  Timer? _syncTimer;
 
   void init() {
     _syncTimer?.cancel();
 
-    // ✅ SINCRONIZAR A CADA 3 MINUTOS
     _syncTimer = Timer.periodic(Duration(minutes: 3), (_) async {
       print('⏰ Timer de sincronização disparado');
       await trySyncNow();
     });
 
     print('✅ Sincronização automática iniciada (a cada 3 minutos)');
-
-    // Sincronizar imediatamente
     trySyncNow();
   }
 
@@ -33,6 +34,7 @@ class OfflineSyncService {
     required String personId,
     required String tipo,
   }) async {
+    // ✅ CORREÇÃO: Chamada correta sem parâmetro timestamp
     await _db.insertLog(
       cpf: cpf,
       personName: personName,
@@ -119,7 +121,7 @@ class OfflineSyncService {
         print('📍 [OfflineSync] Enviando ${movementLogs.length} logs de movimentação...');
         await _sendToSheets('addMovementLog', movementLogs);
       }
-      // Esta linha agora será executada corretamente após o 302
+
       await _db.deleteOutboxIds(batch.map<int>((e) => e['id'] as int).toList());
       print('✅ [OfflineSync] Sincronização concluída com sucesso!');
       return true;
@@ -129,9 +131,6 @@ class OfflineSyncService {
     }
   }
 
-  /// ✅ MÉTODO CORRIGIDO PARA TRATAR REDIRECIONAMENTO 302
-  /// Tratamos o 302 como sucesso, pois o Google Apps Script processa o POST
-  /// ANTES de emitir o redirecionamento. Isso evita os erros 405 e 400.
   Future<void> _sendToSheets(String action, List<Map<String, dynamic>> items) async {
     print('🌐 [OfflineSync] Enviando $action para Google Sheets...');
     print('🔗 [OfflineSync] URL: $_sheetsWebhook');
@@ -139,12 +138,13 @@ class OfflineSyncService {
     final client = http.Client();
 
     try {
-      final request = http.Request('POST', Uri.parse(_sheetsWebhook))
-        ..followRedirects = false // Importante: não seguir redirects automaticamente
-        ..headers['Content-Type'] = 'application/json; charset=utf-8'
-        ..headers['Accept'] = 'application/json'
-        ..headers['User-Agent'] = 'Flutter-App/1.0'
-        ..body = jsonEncode({'action': action, 'people': items});
+      // ✅ CORREÇÃO: Syntax correta para headers
+      final request = http.Request('POST', Uri.parse(_sheetsWebhook));
+      request.followRedirects = false;
+      request.headers['Content-Type'] = 'application/json; charset=utf-8';
+      request.headers['Accept'] = 'application/json';
+      request.headers['User-Agent'] = 'Flutter-App/1.0';
+      request.body = jsonEncode({'action': action, 'people': items});
 
       print('📤 [OfflineSync] Enviando requisição...');
       final streamedResponse = await client.send(request);
@@ -152,82 +152,35 @@ class OfflineSyncService {
 
       print('📡 [OfflineSync] Status recebido: ${response.statusCode}');
 
-      // =========================================================================
-      // ✅ CORREÇÃO APLICADA AQUI
-      // =========================================================================
-      // Se o status for 302 (Redirecionamento), consideramos sucesso.
       if (response.statusCode == 302 || response.statusCode == 301) {
         print('🔄 [OfflineSync] Redirecionamento 302/301 detectado. Assumindo sucesso (Apps Script processa o POST antes de redirecionar).');
         print('⚠️ [OfflineSync] Ignorando o redirecionamento para evitar erros 405/400.');
 
-        // Simular uma resposta de sucesso 200 para que a função _processResponse
-        // seja executada e o 'trySyncNow' considere a operação bem-sucedida.
         final simulatedResponse = http.Response(
             jsonEncode({'success': true, 'message': 'Assumed success on 302 redirect for Google Apps Script.'}),
             200,
             headers: {'content-type': 'application/json'}
         );
-        // Chamamos o _processResponse com a resposta simulada
         return _processResponse(simulatedResponse, action, items.length);
       }
-      // =========================================================================
 
-      // ✅ SE NÃO FOR 302, PROCESSAR RESPOSTA NORMALMENTE
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return _processResponse(response, action, items.length);
       }
 
-      // Se for qualquer outro erro (ex: 500, 404), lança exceção
       throw Exception('Erro HTTP ${response.statusCode}');
 
     } catch (e) {
       print('❌ [OfflineSync] Erro ao enviar para Sheets: $e');
-      rethrow; // Relança o erro para ser pego pelo 'trySyncNow'
+      rethrow;
     } finally {
       client.close();
     }
   }
 
-  /// ✅ MÉTODO AUXILIAR PARA ENVIAR VIA GET APÓS REDIRECIONAMENTO
-  /// (Este método não é mais chamado pelo _sendToSheets, mas pode ser mantido)
-  Future<void> _sendWithGetRedirect(String redirectUrl, String action, List<Map<String, dynamic>> items) async {
-    try {
-      // Para GET, precisamos codificar os dados na URL
-      final encodedData = base64Url.encode(utf8.encode(jsonEncode({
-        'action': action,
-        'people': items,
-      })));
-
-      final getUrl = '$redirectUrl?data=$encodedData';
-
-      print('🔗 [OfflineSync] Enviando via GET para: ${getUrl.substring(0, 100)}...');
-
-      final getResponse = await http.get(
-        Uri.parse(getUrl),
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Flutter-App/1.0',
-        },
-      );
-
-      print('📡 [OfflineSync] Status após GET: ${getResponse.statusCode}');
-
-      if (getResponse.statusCode >= 200 && getResponse.statusCode < 300) {
-        return _processResponse(getResponse, action, items.length);
-      } else {
-        throw Exception('Erro HTTP ${getResponse.statusCode} no GET após redirecionamento');
-      }
-    } catch (e) {
-      print('❌ [OfflineSync] Erro no GET após redirect: $e');
-      rethrow;
-    }
-  }
-
-  /// ✅ PROCESSAR RESPOSTA DO GOOGLE SHEETS
   void _processResponse(http.Response response, String action, int itemCount) {
     try {
       print('📥 [OfflineSync] Processando resposta...');
-      // Limitar o log do body para não poluir o console
       final bodySubstring = response.body.substring(0, response.body.length > 200 ? 200 : response.body.length);
       print('📄 [OfflineSync] Body: $bodySubstring...');
 
@@ -245,17 +198,15 @@ class OfflineSyncService {
       if (e is FormatException) {
         print('⚠️ [OfflineSync] Resposta não é JSON válido');
         print('📄 [OfflineSync] Conteúdo: ${response.body}');
-        // Se não for JSON mas status foi 200, considerar sucesso
         if (response.statusCode >= 200 && response.statusCode < 300) {
           print('✅ [OfflineSync] Considerando sucesso baseado no status HTTP');
           return;
         }
       }
-      rethrow; // Relança a exceção
+      rethrow;
     }
   }
 
-  /// ✅ MÉTODO AUXILIAR PARA DIAGNÓSTICO
   Future<void> testConnection() async {
     print('🔍 [OfflineSync] Testando conexão com Google Sheets...');
 
@@ -267,12 +218,13 @@ class OfflineSyncService {
         'people': [{'timestamp': DateTime.now().toIso8601String()}],
       };
 
-      final request = http.Request('POST', Uri.parse(_sheetsWebhook))
-        ..followRedirects = false
-        ..headers['Content-Type'] = 'application/json'
-        ..headers['Accept'] = 'application/json'
-        ..headers['User-Agent'] = 'Flutter-App/1.0'
-        ..body = jsonEncode(testData);
+      // ✅ CORREÇÃO: Syntax correta para headers
+      final request = http.Request('POST', Uri.parse(_sheetsWebhook));
+      request.followRedirects = false;
+      request.headers['Content-Type'] = 'application/json';
+      request.headers['Accept'] = 'application/json';
+      request.headers['User-Agent'] = 'Flutter-App/1.0';
+      request.body = jsonEncode(testData);
 
       final streamedResponse = await client.send(request);
       final response = await http.Response.fromStream(streamedResponse);

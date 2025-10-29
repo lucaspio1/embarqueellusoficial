@@ -8,11 +8,7 @@ import 'package:embarqueellus/services/offline_sync_service.dart';
 
 const String apiUrl = "https://script.google.com/macros/s/AKfycbwdflIAiZfz9PnolgTsvzcVgs_IpugIhYs4-u0YT6SekJPUqGEhawIntA7tG51NlrlT/exec";
 
-// ✅ TIMER GLOBAL DE SINCRONIZAÇÃO
-Timer? _syncTimer;
-
 void main() async {
-  // Garantir que o Flutter esteja inicializado
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
@@ -20,23 +16,14 @@ void main() async {
     print('🚀 ELLUS - Inicializando Aplicação');
     print('🚀 ========================================');
 
-    // =========================================================================
-    // 1. BANCO DE DADOS
-    // =========================================================================
     print('');
     print('💾 [1/4] Inicializando Banco de Dados...');
     final db = DatabaseHelper.instance;
-    await db.database; // Força inicialização do banco
-
-    // CRÍTICO: Criar tabelas de facial se não existirem
+    await db.database;
     await db.ensureFacialSchema();
-
     print('✅ Banco de dados pronto!');
     print('   - Tabelas: passageiros, alunos, embeddings, logs, sync_queue');
 
-    // =========================================================================
-    // 2. RECONHECIMENTO FACIAL
-    // =========================================================================
     print('');
     print('🧠 [2/4] Carregando Modelo ArcFace...');
     try {
@@ -51,106 +38,38 @@ void main() async {
       print('   O app funcionará, mas reconhecimento estará desabilitado.');
     }
 
-    // =========================================================================
-    // 3. SINCRONIZAÇÃO OFFLINE
-    // =========================================================================
     print('');
     print('🔄 [3/4] Inicializando Sincronização Offline...');
-    await OfflineSyncService.instance.init();
+    OfflineSyncService.instance.init();
     print('✅ Sincronização ativa!');
     print('   - Detecta conectividade automaticamente');
     print('   - Fila de sincronização funcionando');
 
-    // =========================================================================
-    // 4. ✅ TIMER DE SINCRONIZAÇÃO AUTOMÁTICA (A CADA 3 MINUTOS)
-    // =========================================================================
     print('');
-    print('⏰ [4/4] Iniciando Timer de Sincronização...');
-    _iniciarSincronizacaoAutomatica();
-    print('✅ Timer configurado!');
-    print('   - Sincroniza automaticamente a cada 3 minutos');
-    print('   - Sincronização inicial acontecendo agora...');
-
-    // =========================================================================
-    // FINALIZAÇÃO
-    // =========================================================================
-    print('');
-    print('🎉 ========================================');
-    print('🎉 Aplicação inicializada com sucesso!');
-    print('🎉 ========================================');
+    print('📱 [4/4] Iniciando interface...');
+    runApp(const MyApp());
+    print('✅ Aplicação iniciada com sucesso!');
+    print('🚀 ========================================');
     print('');
 
+    Future.delayed(Duration(seconds: 2), () async {
+      try {
+        print('🔄 Tentando sincronização inicial...');
+        final success = await OfflineSyncService.instance.trySyncNow();
+
+        if (success) {
+          print('✅ Sincronização inicial concluída');
+        } else {
+          print('📵 Sincronização inicial não executada (sem internet ou sem dados pendentes)');
+        }
+      } catch (e) {
+        print('❌ Erro na sincronização inicial: $e');
+      }
+    });
   } catch (e) {
-    print('');
-    print('❌ ========================================');
-    print('❌ ERRO NA INICIALIZAÇÃO');
-    print('❌ ========================================');
-    print('❌ $e');
-    print('');
+    print('❌ ERRO CRÍTICO: $e');
+    runApp(ErrorApp(error: e.toString()));
   }
-
-  runApp(const MyApp());
-}
-
-/// ✅ FUNÇÃO DE SINCRONIZAÇÃO AUTOMÁTICA
-void _iniciarSincronizacaoAutomatica() {
-  // Cancelar timer anterior se existir
-  _syncTimer?.cancel();
-
-  // Criar novo timer que executa a cada 3 minutos
-  _syncTimer = Timer.periodic(const Duration(minutes: 3), (timer) async {
-    print('');
-    print('⏰ ========================================');
-    print('⏰ Timer de Sincronização Disparado');
-    print('⏰ ========================================');
-
-    try {
-      // Tentar sincronizar agora
-      final sucesso = await OfflineSyncService.instance.trySyncNow();
-
-      if (sucesso) {
-        print('✅ Sincronização automática concluída com sucesso!');
-      } else {
-        print('⚠️ Sincronização não executada (sem internet ou sem dados)');
-      }
-    } catch (e) {
-      print('❌ Erro na sincronização automática: $e');
-    }
-
-    print('⏰ Próxima sincronização em 3 minutos...');
-    print('⏰ ========================================');
-    print('');
-  });
-
-  // Executar primeira sincronização imediatamente
-  Future.delayed(const Duration(seconds: 2), () async {
-    print('');
-    print('🔄 ========================================');
-    print('🔄 Sincronização Inicial');
-    print('🔄 ========================================');
-
-    try {
-      final sucesso = await OfflineSyncService.instance.trySyncNow();
-
-      if (sucesso) {
-        print('✅ Sincronização inicial concluída!');
-      } else {
-        print('📵 Sincronização inicial não executada (sem internet ou sem dados pendentes)');
-      }
-    } catch (e) {
-      print('❌ Erro na sincronização inicial: $e');
-    }
-
-    print('🔄 ========================================');
-    print('');
-  });
-}
-
-/// ✅ FUNÇÃO PARA PARAR SINCRONIZAÇÃO (caso necessário)
-void pararSincronizacao() {
-  _syncTimer?.cancel();
-  _syncTimer = null;
-  print('🛑 Timer de sincronização parado');
 }
 
 class MyApp extends StatelessWidget {
@@ -182,14 +101,47 @@ class MyApp extends StatelessWidget {
             ),
           ),
         ),
-        cardTheme: CardTheme(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+
+      ),
+      home: const MainMenuScreen(),
+    );
+  }
+}
+
+class ErrorApp extends StatelessWidget {
+  final String error;
+
+  const ErrorApp({super.key, required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        backgroundColor: Colors.red.shade50,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: Colors.red.shade700),
+                const SizedBox(height: 24),
+                const Text(
+                  'Erro ao inicializar aplicação',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  error,
+                  style: const TextStyle(fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ),
       ),
-      home: const MainMenuScreen(),
     );
   }
 }
