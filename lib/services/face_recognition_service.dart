@@ -84,44 +84,27 @@ class FaceRecognitionService {
   }
 
   /// ✅ PRÉ-PROCESSAMENTO ESPECÍFICO DO ArcFace
-  /// ArcFace normalmente usa normalização [0, 1] ou ImageNet mean/std
+  /// ArcFace usa formato NHWC [1, 112, 112, 3] e normalização [0, 1]
   List<List<List<List<double>>>> _preprocessMobileFaceNet(img.Image image) {
+    // Formato NHWC: [batch, height, width, channels]
     final input = List.generate(
       1, (_) => List.generate(
-      3, (c) => List.generate(
-      INPUT_SIZE, (y) => List.generate(
-      INPUT_SIZE, (x) {
-      final pixel = image.getPixel(x, y);
+        INPUT_SIZE, (y) => List.generate(
+          INPUT_SIZE, (x) => List.generate(
+            3, (c) {
+              final pixel = image.getPixel(x, y);
 
-      // MÉTODO 1: Normalização [-1, 1] (MobileFaceNet/ArcFace padrão)
-      switch (c) {
-        case 0: return (pixel.r / 127.5) - 1.0; // R
-        case 1: return (pixel.g / 127.5) - 1.0; // G
-        case 2: return (pixel.b / 127.5) - 1.0; // B
-        default: return 0.0;
-      }
-
-      // MÉTODO 2: Se o método acima não funcionar, tente normalização [0, 1]:
-      // switch (c) {
-      //   case 0: return pixel.r / 255.0; // R
-      //   case 1: return pixel.g / 255.0; // G
-      //   case 2: return pixel.b / 255.0; // B
-      //   default: return 0.0;
-      // }
-
-      // MÉTODO 3: ImageNet mean/std (se os outros não funcionarem):
-      // final means = [0.485, 0.456, 0.406];
-      // final stds = [0.229, 0.224, 0.225];
-      // switch (c) {
-      //   case 0: return (pixel.r / 255.0 - means[0]) / stds[0];
-      //   case 1: return (pixel.g / 255.0 - means[1]) / stds[1];
-      //   case 2: return (pixel.b / 255.0 - means[2]) / stds[2];
-      //   default: return 0.0;
-      // }
-    },
-    ),
-    ),
-    ),
+              // Normalização [0, 1] para ArcFace
+              switch (c) {
+                case 0: return pixel.r / 255.0; // R
+                case 1: return pixel.g / 255.0; // G
+                case 2: return pixel.b / 255.0; // B
+                default: return 0.0;
+              }
+            },
+          ),
+        ),
+      ),
     );
 
     return input;
