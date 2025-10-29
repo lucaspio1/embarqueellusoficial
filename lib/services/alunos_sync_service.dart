@@ -10,7 +10,7 @@ class AlunosSyncService {
   final _db = DatabaseHelper.instance;
 
   final String _apiUrl =
-      'https://script.google.com/macros/s/AKfycbyO6m7XXvMvpi5Mm9M_a2rZ5ZCEmBXN2xXqHd9VrUbkozs-eNZfEsAmDJROd65Jn36H/exec';
+      'https://script.google.com/macros/s/AKfycbwb9dYG8PrcEnWxLUHEoGxOgpKd5NFqN8QAaluNJ8DLKWrdBssKdK2VfwHSAW6gDLhf/exec';
 
   /// Sincroniza PESSOAS da aba PESSOAS do Google Sheets (todos com embeddings)
   Future<SyncResult> syncPessoasFromSheets() async {
