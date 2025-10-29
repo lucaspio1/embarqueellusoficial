@@ -83,6 +83,20 @@ class DatabaseHelper {
         created_at TEXT
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE usuarios(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        nome TEXT NOT NULL,
+        cpf TEXT UNIQUE NOT NULL,
+        senha_hash TEXT NOT NULL,
+        perfil TEXT DEFAULT 'USUARIO',
+        ativo INTEGER DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''');
   }
 
   Future<void> ensureFacialSchema() async {
@@ -100,6 +114,28 @@ class DatabaseHelper {
     } catch (e) {
       await db.execute('ALTER TABLE alunos ADD COLUMN tem_qr TEXT DEFAULT "NAO"');
       print('✅ Campo tem_qr adicionado à tabela alunos');
+    }
+
+    // Garantir que tabela usuarios existe
+    try {
+      await db.rawQuery('SELECT * FROM usuarios LIMIT 1');
+      print('✅ Tabela usuarios já existe');
+    } catch (e) {
+      print('📝 Criando tabela usuarios...');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS usuarios(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT,
+          nome TEXT NOT NULL,
+          cpf TEXT UNIQUE NOT NULL,
+          senha_hash TEXT NOT NULL,
+          perfil TEXT DEFAULT 'USUARIO',
+          ativo INTEGER DEFAULT 1,
+          created_at TEXT,
+          updated_at TEXT
+        )
+      ''');
+      print('✅ Tabela usuarios criada');
     }
   }
 
@@ -298,7 +334,52 @@ class DatabaseHelper {
     await db.delete('embeddings');
     await db.delete('logs');
     await db.delete('sync_queue');
+    // NÃO deletar usuarios para manter login offline
     print('✅ Todos os dados foram limpos do banco de dados');
+  }
+
+  // ========================================================================
+  // MÉTODOS PARA USUÁRIOS (LOGIN OFFLINE)
+  // ========================================================================
+
+  Future<void> upsertUsuario(Map<String, dynamic> usuario) async {
+    final db = await database;
+    await db.insert(
+      'usuarios',
+      {
+        ...usuario,
+        'updated_at': DateTime.now().toIso8601String(),
+        'created_at': usuario['created_at'] ?? DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, dynamic>?> getUsuarioByCpf(String cpf) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'usuarios',
+      where: 'cpf = ? AND ativo = 1',
+      whereArgs: [cpf],
+    );
+    return maps.isNotEmpty ? maps.first : null;
+  }
+
+  Future<List<Map<String, dynamic>>> getAllUsuarios() async {
+    final db = await database;
+    return await db.query('usuarios', where: 'ativo = 1');
+  }
+
+  Future<int> getTotalUsuarios() async {
+    final db = await database;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM usuarios WHERE ativo = 1');
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<void> deleteAllUsuarios() async {
+    final db = await database;
+    await db.delete('usuarios');
+    print('✅ Todos os usuários foram deletados');
   }
 
   Future<void> close() async {

@@ -16,12 +16,81 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _carregando = false;
   bool _senhaVisivel = false;
+  bool _sincronizando = false;
+  bool _temUsuariosLocais = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _verificarUsuariosLocais();
+  }
 
   @override
   void dispose() {
     _cpfController.dispose();
     _senhaController.dispose();
     super.dispose();
+  }
+
+  Future<void> _verificarUsuariosLocais() async {
+    final temUsuarios = await _authService.temUsuariosLocais();
+    setState(() {
+      _temUsuariosLocais = temUsuarios;
+    });
+
+    if (!temUsuarios) {
+      // Mostrar aviso para sincronizar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ Nenhum usuário encontrado. Clique em "Sincronizar Usuários" para baixar os dados da planilha.'),
+            duration: Duration(seconds: 5),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _sincronizarUsuarios() async {
+    setState(() => _sincronizando = true);
+
+    try {
+      final sucesso = await _authService.syncUsuarios();
+
+      if (!mounted) return;
+
+      if (sucesso) {
+        setState(() => _temUsuariosLocais = true);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Usuários sincronizados com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Erro ao sincronizar usuários. Verifique sua conexão com a internet.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erro: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _sincronizando = false);
+      }
+    }
   }
 
   Future<void> _realizarLogin() async {
@@ -253,6 +322,44 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ),
                           ),
+
+                          const SizedBox(height: 16),
+
+                          // Botão de sincronização
+                          OutlinedButton.icon(
+                            onPressed: _sincronizando ? null : _sincronizarUsuarios,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF4C643C),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              side: BorderSide(
+                                color: _temUsuariosLocais ? Colors.grey : const Color(0xFF4C643C),
+                                width: 2,
+                              ),
+                            ),
+                            icon: _sincronizando
+                                ? const SizedBox(
+                                    height: 16,
+                                    width: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.sync),
+                            label: Text(
+                              _sincronizando
+                                  ? 'Sincronizando...'
+                                  : _temUsuariosLocais
+                                      ? 'Atualizar Usuários'
+                                      : 'Sincronizar Usuários',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -279,7 +386,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Use suas credenciais cadastradas no sistema',
+                            _temUsuariosLocais
+                                ? 'Login offline ativo. Suas credenciais estão armazenadas com segurança.'
+                                : 'Sincronize os usuários para fazer login offline',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade700,
