@@ -48,6 +48,7 @@ class DatabaseHelper {
         telefone TEXT,
         turma TEXT,
         facial TEXT,
+        tem_qr TEXT DEFAULT 'NAO',
         created_at TEXT
       )
     ''');
@@ -91,6 +92,14 @@ class DatabaseHelper {
       await db.rawQuery('SELECT facial FROM alunos LIMIT 1');
     } catch (e) {
       await db.execute('ALTER TABLE alunos ADD COLUMN facial TEXT');
+    }
+
+    // Garantir que tem_qr existe
+    try {
+      await db.rawQuery('SELECT tem_qr FROM alunos LIMIT 1');
+    } catch (e) {
+      await db.execute('ALTER TABLE alunos ADD COLUMN tem_qr TEXT DEFAULT "NAO"');
+      print('✅ Campo tem_qr adicionado à tabela alunos');
     }
   }
 

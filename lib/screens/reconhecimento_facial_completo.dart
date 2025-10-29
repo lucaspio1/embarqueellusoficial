@@ -871,7 +871,7 @@ class CameraPreviewScreen extends StatefulWidget {
 }
 
 class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
-  late CameraController controller;
+  CameraController? controller;
   bool _tirandoFoto = false;
   bool _disposed = false;
   List<CameraDescription> _cameras = [];
@@ -912,7 +912,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
         enableAudio: false,
       );
 
-      await controller.initialize();
+      await controller!.initialize();
 
       if (mounted && !_disposed) {
         setState(() {});
@@ -931,7 +931,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     setState(() => _tirandoFoto = true);
 
     try {
-      await controller.dispose();
+      await controller?.dispose();
 
       _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
 
@@ -947,17 +947,17 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   @override
   void dispose() {
     _disposed = true;
-    controller.dispose();
+    controller?.dispose();
     super.dispose();
   }
 
   Future<void> _tirarFoto() async {
-    if (_tirandoFoto || !controller.value.isInitialized) return;
+    if (_tirandoFoto || controller == null || !controller!.value.isInitialized) return;
 
     setState(() => _tirandoFoto = true);
 
     try {
-      final image = await controller.takePicture();
+      final image = await controller!.takePicture();
 
       if (mounted && !_disposed) {
         Navigator.pop(context, image.path);
@@ -975,7 +975,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!controller.value.isInitialized) {
+    if (controller == null || !controller!.value.isInitialized) {
       return Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
@@ -1013,7 +1013,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       ),
       body: Stack(
         children: [
-          CameraPreview(controller),
+          CameraPreview(controller!),
 
           Center(
             child: Container(
