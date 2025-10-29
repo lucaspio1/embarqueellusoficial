@@ -65,6 +65,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       // Garantir que esses passageiros existam na tabela alunos para facial
       for (final passageiro in todosPassageiros) {
+        if (passageiro.cpf.isEmpty) continue; // Pular se CPF estiver vazio
+
         final alunoExistente = await _db.getAlunoByCpf(passageiro.cpf);
         if (alunoExistente == null) {
           // Criar registro na tabela alunos
