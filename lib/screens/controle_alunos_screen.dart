@@ -65,13 +65,14 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       // Garantir que esses passageiros existam na tabela alunos para facial
       for (final passageiro in todosPassageiros) {
-        if (passageiro.cpf.isEmpty) continue; // Pular se CPF estiver vazio
+        final cpf = passageiro.cpf;
+        if (cpf == null || cpf.isEmpty) continue; // Pular se CPF for null ou vazio
 
-        final alunoExistente = await _db.getAlunoByCpf(passageiro.cpf);
+        final alunoExistente = await _db.getAlunoByCpf(cpf);
         if (alunoExistente == null) {
           // Criar registro na tabela alunos
           await _db.upsertAluno({
-            'cpf': passageiro.cpf,
+            'cpf': cpf,
             'nome': passageiro.nome,
             'email': '',
             'telefone': '',
