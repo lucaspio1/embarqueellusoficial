@@ -1,32 +1,45 @@
-// ====================================================================
-// SCRIPT COMPLETO DE RECONHECIMENTO FACIAL + SINCRONIZAÇÃO DE ALUNOS
-// ====================================================================
+// ============================================================================
+// GOOGLE APPS SCRIPT - ELLUS EMBARQUE
+// ============================================================================
+// Este script gerencia a integração entre o app Flutter e o Google Sheets
+// Planilha com as seguintes abas:
+// - PESSOAS: Lista de pessoas com embeddings faciais
+// - LOGIN: Usuários do sistema com credenciais
+// - LOGS: Logs de reconhecimento facial
+// - Outras abas de passeios/embarques
+// ============================================================================
+
+const SPREADSHEET_ID = 'SEU_SPREADSHEET_ID_AQUI'; // Substituir pelo ID da sua planilha
 
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
 
-    console.log('📡 Ação recebida:', action);
+    console.log('📥 Ação recebida:', action);
 
-    // Rotas
-    switch(action) {
-      case 'addPerson':
-        return addPerson(data);
-      case 'getPersonByCPF':
-        return getPersonByCPF(data);
-      case 'addMovementLog':
-        return addMovementLog(data);
-      case 'getAllStudents': // ✅ NOVA ROTA
-        return getAllStudents();
-      case 'getStats':
-        return getStats();
+    switch (action) {
+      case 'login':
+        return login(data);
+
       case 'getAllPeople':
         return getAllPeople();
-      default:
-        return createResponse(false, 'Ação inválida: ' + action);
-    }
 
+      case 'getAlunos':
+        return getAlunos(data);
+
+      case 'cadastrarFacial':
+        return cadastrarFacial(data);
+
+      case 'registrarLog':
+        return registrarLog(data);
+
+      case 'syncEmbedding':
+        return syncEmbedding(data);
+
+      default:
+        return createResponse(false, 'Ação não reconhecida: ' + action);
+    }
   } catch (error) {
     console.error('❌ Erro no doPost:', error);
     return createResponse(false, 'Erro no servidor: ' + error.message);
@@ -34,537 +47,307 @@ function doPost(e) {
 }
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({
-    status: 'API Ativa',
-    message: 'Use POST para acessar a API',
-    timestamp: new Date().toISOString()
-  })).setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput('API Ellus Embarque - Funcionando!');
 }
 
-// ============================================
-// CONFIGURAÇÃO DE ABAS
-// ============================================
-const ALUNOS_SHEET = 'Alunos';
-const PESSOAS_SHEET = 'Pessoas';
-const LOGS_SHEET = 'Movimentacoes';
-
-// ============================================
-// 1. BUSCAR TODOS OS ALUNOS (NOVA!) ✅
-// ============================================
-function getAllStudents() {
+// ============================================================================
+// FUNÇÃO DE LOGIN
+// ============================================================================
+function login(data) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const alunosSheet = ss.getSheetByName(ALUNOS_SHEET);
+    const cpf = data.cpf;
+    const senha = data.senha;
 
-    if (!alunosSheet) {
-      return createResponse(false, 'Aba "Alunos" não encontrada. Certifique-se de que a aba existe.');
+    console.log('🔐 Tentativa de login:', cpf);
+
+    if (!cpf || !senha) {
+      return createResponse(false, 'CPF e senha são obrigatórios');
     }
 
-    const alunosData = alunosSheet.getDataRange().getValues();
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const loginSheet = ss.getSheetByName('LOGIN');
 
-    if (alunosData.length <= 1) {
-      return createResponse(true, 'Nenhum aluno cadastrado', []);
+    if (!loginSheet) {
+      return createResponse(false, 'Aba LOGIN não encontrada na planilha');
     }
 
-    const alunosHeaders = alunosData[0];
-    const alunosRows = alunosData.slice(1);
+    const data_range = loginSheet.getDataRange();
+    const values = data_range.getValues();
 
-    // Converte cabeçalhos para minúsculas para busca flexível
-    const lowerHeaders = alunosHeaders.map(h => String(h).toLowerCase().trim());
+    // Primeira linha é cabeçalho: ID, NOME, CPF, SENHA, PERFIL
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const id = row[0];
+      const nome = row[1];
+      const cpfSheet = String(row[2]).trim();
+      const senhaSheet = String(row[3]).trim();
+      const perfil = String(row[4]).trim().toUpperCase();
 
-    // Índices das colunas
-    const idx = {
-      id: lowerHeaders.indexOf('id'),
-      cpf: lowerHeaders.indexOf('cpf'),
-      nome: lowerHeaders.indexOf('nome'),
-      email: lowerHeaders.indexOf('email'),
-      telefone: lowerHeaders.indexOf('telefone'),
-      turma: lowerHeaders.indexOf('turma'),
-      facial: lowerHeaders.indexOf('facial')
-    };
-
-    // Validar se encontrou as colunas essenciais
-    if (idx.cpf === -1 || idx.nome === -1) {
-      return createResponse(false, 'Colunas obrigatórias não encontradas. Certifique-se de que existe "CPF" e "Nome" na primeira linha.');
+      if (cpfSheet === cpf && senhaSheet === senha) {
+        console.log('✅ Login bem-sucedido:', nome);
+        return createResponse(true, 'Login bem-sucedido', {
+          user: {
+            id: id,
+            nome: nome,
+            cpf: cpfSheet,
+            perfil: perfil || 'USUARIO'
+          }
+        });
+      }
     }
 
-    const result = [];
+    console.log('❌ Credenciais inválidas');
+    return createResponse(false, 'CPF ou senha inválidos');
 
-    alunosRows.forEach(row => {
-      const cpf = row[idx.cpf];
-      const nome = row[idx.nome];
+  } catch (error) {
+    console.error('❌ Erro no login:', error);
+    return createResponse(false, 'Erro ao fazer login: ' + error.message);
+  }
+}
 
-      // Pular linhas vazias
-      if (!cpf || !nome) {
-        return;
+// ============================================================================
+// FUNÇÃO: GET ALL PEOPLE (com embeddings)
+// ============================================================================
+function getAllPeople() {
+  try {
+    console.log('📥 Buscando todas as pessoas com embeddings...');
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const pessoasSheet = ss.getSheetByName('PESSOAS');
+
+    if (!pessoasSheet) {
+      return createResponse(false, 'Aba PESSOAS não encontrada');
+    }
+
+    const data_range = pessoasSheet.getDataRange();
+    const values = data_range.getValues();
+
+    // Cabeçalho: ID, NOME, CPF, EMAIL, TELEFONE, TURMA, EMBEDDING, TEM_QR
+    const pessoas = [];
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+
+      const pessoa = {
+        id: row[0],
+        nome: row[1],
+        cpf: String(row[2]).trim(),
+        email: row[3] || '',
+        telefone: row[4] || '',
+        turma: row[5] || '',
+        embedding: row[6] || null, // JSON string ou null
+        tem_qr: String(row[7] || 'NAO').toUpperCase()
+      };
+
+      // Apenas adicionar pessoas com embedding válido
+      if (pessoa.embedding && pessoa.embedding.length > 0) {
+        pessoas.push(pessoa);
+      }
+    }
+
+    console.log('✅ Pessoas encontradas:', pessoas.length);
+    return createResponse(true, pessoas.length + ' pessoas encontradas', { data: pessoas });
+
+  } catch (error) {
+    console.error('❌ Erro ao buscar pessoas:', error);
+    return createResponse(false, 'Erro: ' + error.message);
+  }
+}
+
+// ============================================================================
+// FUNÇÃO: GET ALUNOS (de uma aba específica)
+// ============================================================================
+function getAlunos(data) {
+  try {
+    const nomeAba = data.nomeAba;
+    const numeroOnibus = data.numeroOnibus;
+
+    console.log('📥 Buscando alunos:', nomeAba, 'Ônibus:', numeroOnibus);
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(nomeAba);
+
+    if (!sheet) {
+      return createResponse(false, 'Aba não encontrada: ' + nomeAba);
+    }
+
+    const data_range = sheet.getDataRange();
+    const values = data_range.getValues();
+
+    const alunos = [];
+
+    // Cabeçalho: NOME, CPF, ID_PASSEIO, TURMA, EMBARQUE, RETORNO, ONIBUS, TEM_QR
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+
+      const onibus = String(row[6]).trim();
+
+      // Filtrar por ônibus se especificado
+      if (numeroOnibus && onibus !== numeroOnibus) {
+        continue;
       }
 
-      result.push({
-        id: row[idx.id] || '',
-        cpf: cpf.toString().trim(),
-        nome: nome.toString().trim(),
-        email: idx.email !== -1 ? (row[idx.email] || '') : '',
-        telefone: idx.telefone !== -1 ? (row[idx.telefone] || '') : '',
-        turma: idx.turma !== -1 ? (row[idx.turma] || '') : '',
-        facial_status: idx.facial !== -1 ? (row[idx.facial] || null) : null
-      });
-    });
+      const aluno = {
+        nome: row[0],
+        cpf: String(row[1]).trim(),
+        id_passeio: row[2] || '',
+        turma: row[3] || '',
+        embarque: String(row[4] || 'NAO').toUpperCase(),
+        retorno: String(row[5] || 'NAO').toUpperCase(),
+        onibus: onibus,
+        tem_qr: String(row[7] || 'NAO').toUpperCase()
+      };
 
-    console.log(`✅ ${result.length} alunos encontrados na aba Alunos`);
+      alunos.push(aluno);
+    }
 
-    return createResponse(true, `${result.length} alunos carregados`, result);
+    console.log('✅ Alunos encontrados:', alunos.length);
+    return createResponse(true, alunos.length + ' alunos encontrados', { data: alunos });
 
   } catch (error) {
     console.error('❌ Erro ao buscar alunos:', error);
-    return createResponse(false, 'Erro ao buscar alunos: ' + error.message, []);
+    return createResponse(false, 'Erro: ' + error.message);
   }
 }
 
-// ============================================
-// 2. BUSCAR PESSOA POR CPF (Aba Alunos)
-// ============================================
-function getPersonByCPF(data) {
+// ============================================================================
+// FUNÇÃO: CADASTRAR FACIAL
+// ============================================================================
+function cadastrarFacial(data) {
   try {
-    const cpf = data.cpf ? data.cpf.toString().replace(/\D/g, '') : null;
+    const cpf = data.cpf;
+    const nome = data.nome;
+    const email = data.email || '';
+    const telefone = data.telefone || '';
+    const embedding = data.embedding; // Array de números
 
-    if (!cpf) {
-      return createResponse(false, 'CPF é obrigatório');
-    }
+    console.log('📥 Cadastrando facial:', nome, 'CPF:', cpf);
 
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const alunosSheet = ss.getSheetByName(ALUNOS_SHEET);
-
-    if (!alunosSheet) {
-      return createResponse(false, 'Aba "Alunos" não encontrada. Crie a aba Alunos.');
-    }
-
-    const alunosData = alunosSheet.getDataRange().getValues();
-    const alunosHeaders = alunosData[0];
-    const alunosRows = alunosData.slice(1);
-
-    const idx = {
-      id: alunosHeaders.indexOf('ID'),
-      cpf: alunosHeaders.indexOf('CPF'),
-      nome: alunosHeaders.indexOf('Nome'),
-      email: alunosHeaders.indexOf('Email'),
-      telefone: alunosHeaders.indexOf('TELEFONE'),
-      facial: alunosHeaders.indexOf('FACIAL')
-    };
-
-    const linhaEncontrada = alunosRows.find(row => {
-      const rowCpf = row[idx.cpf] ? row[idx.cpf].toString().replace(/\D/g, '') : '';
-      return rowCpf === cpf;
-    });
-
-    if (!linhaEncontrada) {
-      return createResponse(false, 'CPF não encontrado na aba Alunos', null);
-    }
-
-    const result = {
-      id: linhaEncontrada[idx.id],
-      cpf: linhaEncontrada[idx.cpf],
-      nome: linhaEncontrada[idx.nome],
-      email: linhaEncontrada[idx.email] || '',
-      telefone: linhaEncontrada[idx.telefone] || '',
-      facial_status: linhaEncontrada[idx.facial] || '',
-      embedding: null
-    };
-
-    return createResponse(true, 'Pessoa encontrada', result);
-
-  } catch (error) {
-    console.error('❌ Erro ao buscar CPF:', error);
-    return createResponse(false, 'Erro ao buscar: ' + error.message, null);
-  }
-}
-
-// ============================================
-// 3. CADASTRAR FACE (Aba Pessoas + Atualiza Alunos)
-// ============================================
-function addPerson(data) {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let pessoasSheet = ss.getSheetByName(PESSOAS_SHEET);
-    let alunosSheet = ss.getSheetByName(ALUNOS_SHEET);
-
-    // ✅ CORREÇÃO: SUPORTE PARA AMBOS OS FORMATOS
-    let personData = data;
-    if (data.people && Array.isArray(data.people) && data.people.length > 0) {
-      personData = data.people[0]; // Pega o primeiro do array
-      console.log('📦 Formato com array "people" detectado');
-    } else {
-      console.log('📦 Formato direto detectado');
-    }
-
-    if (!personData.cpf || !personData.nome || !personData.embedding) {
+    if (!cpf || !nome || !embedding) {
       return createResponse(false, 'CPF, nome e embedding são obrigatórios');
     }
 
-    // Criar aba PESSOAS se não existir
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const pessoasSheet = ss.getSheetByName('PESSOAS');
+
     if (!pessoasSheet) {
-      pessoasSheet = ss.insertSheet(PESSOAS_SHEET);
-      pessoasSheet.appendRow(['ID', 'CPF', 'Nome', 'Email', 'Telefone', 'Facial (Embedding)', 'Data Cadastro']);
-      console.log('✅ Aba "Pessoas" criada');
+      return createResponse(false, 'Aba PESSOAS não encontrada');
     }
 
-    const now = new Date().toISOString();
+    // Converter embedding para JSON string
+    const embeddingJson = JSON.stringify(embedding);
 
+    // Verificar se já existe
+    const data_range = pessoasSheet.getDataRange();
+    const values = data_range.getValues();
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const cpfSheet = String(row[2]).trim();
+
+      if (cpfSheet === cpf) {
+        // Atualizar linha existente
+        pessoasSheet.getRange(i + 1, 2).setValue(nome); // NOME
+        pessoasSheet.getRange(i + 1, 4).setValue(email); // EMAIL
+        pessoasSheet.getRange(i + 1, 5).setValue(telefone); // TELEFONE
+        pessoasSheet.getRange(i + 1, 7).setValue(embeddingJson); // EMBEDDING
+
+        console.log('✅ Facial atualizada:', nome);
+        return createResponse(true, 'Facial atualizada com sucesso');
+      }
+    }
+
+    // Adicionar nova linha
     const newRow = [
-      personData.personId || '',
-      personData.cpf,
-      personData.nome,
-      personData.email || '',
-      personData.telefone || '',
-      JSON.stringify(personData.embedding),
-      now
+      values.length, // ID
+      nome,
+      cpf,
+      email,
+      telefone,
+      '', // TURMA
+      embeddingJson,
+      'SIM' // TEM_QR
     ];
 
     pessoasSheet.appendRow(newRow);
-    const newPersonRowIndex = pessoasSheet.getLastRow();
-    console.log(`✅ Registro de facial adicionado em Pessoas para: ${personData.nome}`);
 
-    // Atualizar o status "FACIAL" na aba ALUNOS
-    if (alunosSheet) {
-      const alunosData = alunosSheet.getDataRange().getValues();
-      const alunosHeaders = alunosData[0];
-      const idxCPF = alunosHeaders.indexOf('CPF');
-      const idxFacial = alunosHeaders.indexOf('FACIAL');
-
-      if (idxCPF !== -1 && idxFacial !== -1) {
-        for (let i = 1; i < alunosData.length; i++) {
-          const rowCpf = alunosData[i][idxCPF] ? alunosData[i][idxCPF].toString().replace(/\D/g, '') : '';
-          const searchCpf = personData.cpf.toString().replace(/\D/g, '');
-
-          if (rowCpf === searchCpf) {
-            alunosSheet.getRange(i + 1, idxFacial + 1).setValue('CADASTRADA');
-            console.log(`✅ Coluna FACIAL do aluno ${personData.nome} atualizada para 'CADASTRADA'.`);
-            break;
-          }
-        }
-      }
-    }
-
-    return createResponse(true, 'Cadastro facial e status de aluno atualizados com sucesso', {
-        personId: newPersonRowIndex
-    });
+    console.log('✅ Nova facial cadastrada:', nome);
+    return createResponse(true, 'Facial cadastrada com sucesso');
 
   } catch (error) {
-    console.error('❌ Erro ao adicionar pessoa:', error);
-    return createResponse(false, 'Erro ao cadastrar: ' + error.message);
+    console.error('❌ Erro ao cadastrar facial:', error);
+    return createResponse(false, 'Erro: ' + error.message);
   }
 }
 
-// ============================================
-// 4. REGISTRAR LOG DE MOVIMENTAÇÃO
-// ============================================
-function addMovementLog(data) {
+// ============================================================================
+// FUNÇÃO: REGISTRAR LOG
+// ============================================================================
+function registrarLog(data) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let logsSheet = ss.getSheetByName(LOGS_SHEET);
+    const cpf = data.cpf;
+    const nome = data.nome;
+    const confidence = data.confidence || 0;
+    const tipo = data.tipo || 'reconhecimento';
 
-    if (!data.people || !Array.isArray(data.people) || data.people.length === 0) {
-      return createResponse(false, 'Array "people" é obrigatório e deve conter ao menos um log');
-    }
+    console.log('📥 Registrando log:', nome, 'Confiança:', confidence);
 
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let logsSheet = ss.getSheetByName('LOGS');
+
+    // Criar aba LOGS se não existir
     if (!logsSheet) {
-      logsSheet = ss.insertSheet(LOGS_SHEET);
-      logsSheet.appendRow([
-        'ID',
-        'CPF',
-        'Nome',
-        'Data/Hora',
-        'Tipo',
-        'Confiança',
-        'Person ID'
-      ]);
-      console.log('✅ Aba "Movimentacoes" criada');
+      logsSheet = ss.insertSheet('LOGS');
+      logsSheet.appendRow(['TIMESTAMP', 'CPF', 'NOME', 'CONFIDENCE', 'TIPO']);
     }
 
-    const ultimaLinha = logsSheet.getLastRow();
-    let ultimoID = 0;
+    const timestamp = new Date().toISOString();
+    logsSheet.appendRow([timestamp, cpf, nome, confidence, tipo]);
 
-    if (ultimaLinha > 1) {
-      const valorUltimoID = logsSheet.getRange(ultimaLinha, 1).getValue();
-      const idLido = parseInt(valorUltimoID);
-      if (!isNaN(idLido) && idLido > 0) {
-        ultimoID = idLido;
-      }
-    }
-
-    const logsProcessados = [];
-
-    data.people.forEach(log => {
-      if (!log.cpf || !log.personName || !log.timestamp || !log.tipo) {
-        console.warn('⚠️ Log incompleto ignorado:', log);
-        return;
-      }
-
-      ultimoID++;
-
-      const novaLinha = [
-        ultimoID,
-        log.cpf,
-        log.personName,
-        log.timestamp,
-        log.tipo,
-        log.confidence || 0.95,
-        log.personId || log.cpf
-      ];
-
-      logsSheet.appendRow(novaLinha);
-      logsProcessados.push({
-        id: ultimoID,
-        cpf: log.cpf,
-        nome: log.personName,
-        tipo: log.tipo
-      });
-
-      console.log(`✅ Log registrado: ${log.personName} - ${log.tipo} (${log.timestamp})`);
-    });
-
-    return createResponse(true, `${logsProcessados.length} logs registrados com sucesso`, {
-      logs_processados: logsProcessados,
-      total: logsProcessados.length
-    });
+    console.log('✅ Log registrado');
+    return createResponse(true, 'Log registrado com sucesso');
 
   } catch (error) {
-    console.error('❌ Erro ao adicionar logs:', error);
-    return createResponse(false, 'Erro ao registrar logs: ' + error.message);
+    console.error('❌ Erro ao registrar log:', error);
+    return createResponse(false, 'Erro: ' + error.message);
   }
 }
 
-// ============================================
-// 5. SINCRONIZAR TODOS OS EMBEDDINGS
-// ============================================
-function getAllPeople() {
+// ============================================================================
+// FUNÇÃO: SYNC EMBEDDING (sincronizar embedding individual)
+// ============================================================================
+function syncEmbedding(data) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const pessoasSheet = ss.getSheetByName(PESSOAS_SHEET);
+    const cpf = data.cpf;
+    const nome = data.nome;
+    const embedding = data.embedding;
 
-    if (!pessoasSheet) {
-      console.error('❌ Aba "Pessoas" não encontrada');
-      return createResponse(false, 'Aba "Pessoas" não encontrada');
+    console.log('📥 Sincronizando embedding:', nome);
+
+    if (!cpf || !embedding) {
+      return createResponse(false, 'CPF e embedding são obrigatórios');
     }
 
-    const pessoasData = pessoasSheet.getDataRange().getValues();
-    const pessoasHeaders = pessoasData[0];
-    const pessoasRows = pessoasData.slice(1);
-
-    if (pessoasRows.length === 0) {
-        return createResponse(true, 'Nenhum cadastro facial encontrado', []);
-    }
-
-    const lowerCaseHeaders = pessoasHeaders.map(h => String(h).toLowerCase().trim());
-
-    const idx = {
-      id: lowerCaseHeaders.indexOf('id'),
-      cpf: lowerCaseHeaders.indexOf('cpf'),
-      nome: lowerCaseHeaders.indexOf('nome'),
-      email: lowerCaseHeaders.indexOf('email'),
-      telefone: lowerCaseHeaders.indexOf('telefone'),
-      embedding: lowerCaseHeaders.findIndex(h => h.includes('embedding') || h.includes('facial')),
-      dataCadastro: lowerCaseHeaders.indexOf('data cadastro')
-    };
-
-    if (idx.embedding === -1) {
-        console.error('❌ Erro: Coluna de Embedding (Facial) não encontrada.');
-        return createResponse(false, 'Erro: Coluna "embedding" não encontrada no cabeçalho. Verifique a ortografia.');
-    }
-
-    const result = [];
-    let pessoasComEmbeddingValido = 0;
-
-    pessoasRows.forEach(row => {
-      const cpfValue = row[idx.cpf];
-      const embeddingCellValue = row[idx.embedding];
-
-      if (!cpfValue || !embeddingCellValue) {
-          return;
-      }
-
-      const embeddingStr = embeddingCellValue.toString().trim();
-      let embedding = null;
-
-      if (embeddingStr.length > 2) {
-        try {
-          embedding = JSON.parse(embeddingStr);
-
-          if (Array.isArray(embedding) && embedding.length > 0) {
-            pessoasComEmbeddingValido++;
-          } else {
-             embedding = null;
-          }
-        } catch (e) {
-          console.error(`❌ Erro ao parsear JSON do embedding no CPF ${cpfValue}. Dado corrompido.`, e);
-          embedding = null;
-        }
-      }
-
-      if (embedding) {
-          result.push({
-            id: row[idx.id],
-            cpf: cpfValue,
-            nome: row[idx.nome],
-            email: row[idx.email] || '',
-            telefone: row[idx.telefone] || '',
-            data_cadastro: row[idx.dataCadastro] ? row[idx.dataCadastro].toString() : '',
-            embedding: embedding
-          });
-      }
-    });
-
-    console.log(`✅ ${result.length} registros prontos. ${pessoasComEmbeddingValido} com embedding válido.`);
-
-    return createResponse(true, 'Dados de sincronização carregados', result);
+    return cadastrarFacial(data);
 
   } catch (error) {
-    console.error('❌ Erro em getAllPeople:', error);
-    return createResponse(false, 'Erro ao buscar dados: ' + error.message, []);
+    console.error('❌ Erro ao sincronizar embedding:', error);
+    return createResponse(false, 'Erro: ' + error.message);
   }
 }
 
-// ============================================
-// 6. ESTATÍSTICAS
-// ============================================
-function getStats() {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const alunosSheet = ss.getSheetByName(ALUNOS_SHEET);
-    const pessoasSheet = ss.getSheetByName(PESSOAS_SHEET);
-    const logsSheet = ss.getSheetByName(LOGS_SHEET);
-
-    const stats = {
-      total_alunos: 0,
-      alunos_com_facial: 0,
-      total_cadastros_faciais: 0,
-      total_logs: 0,
-      logs_hoje: 0
-    };
-
-    if (alunosSheet) {
-      const totalAlunos = Math.max(0, alunosSheet.getLastRow() - 1);
-      stats.total_alunos = totalAlunos;
-
-      // Contar alunos com facial cadastrada
-      if (totalAlunos > 0) {
-        const data = alunosSheet.getDataRange().getValues();
-        const headers = data[0];
-        const idxFacial = headers.indexOf('FACIAL');
-
-        if (idxFacial !== -1) {
-          for (let i = 1; i < data.length; i++) {
-            if (data[i][idxFacial] === 'CADASTRADA') {
-              stats.alunos_com_facial++;
-            }
-          }
-        }
-      }
-    }
-
-    if (pessoasSheet) {
-      stats.total_cadastros_faciais = Math.max(0, pessoasSheet.getLastRow() - 1);
-    }
-
-    if (logsSheet) {
-      const totalLogs = Math.max(0, logsSheet.getLastRow() - 1);
-      stats.total_logs = totalLogs;
-
-      if (totalLogs > 0) {
-        const logsData = logsSheet.getDataRange().getValues();
-        const headers = logsData[0];
-        const idxTimestamp = headers.indexOf('Data/Hora');
-
-        if (idxTimestamp !== -1) {
-          const hoje = new Date();
-          hoje.setHours(0, 0, 0, 0);
-
-          for (let i = 1; i < logsData.length; i++) {
-            const timestamp = new Date(logsData[i][idxTimestamp]);
-            timestamp.setHours(0, 0, 0, 0);
-
-            if (timestamp.getTime() === hoje.getTime()) {
-              stats.logs_hoje++;
-            }
-          }
-        }
-      }
-    }
-
-    return createResponse(true, 'Estatísticas obtidas', stats);
-  } catch (error) {
-    return createResponse(false, 'Erro ao obter estatísticas: ' + error.message);
-  }
-}
-
-// ============================================
-// UTILITÁRIOS
-// ============================================
-function createResponse(success, message, data = null) {
+// ============================================================================
+// FUNÇÃO AUXILIAR: CREATE RESPONSE
+// ============================================================================
+function createResponse(success, message, data = {}) {
   const response = {
     success: success,
     message: message,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    ...data
   };
-
-  if (data !== null) {
-    response.data = data;
-  }
 
   return ContentService
     .createTextOutput(JSON.stringify(response))
     .setMimeType(ContentService.MimeType.JSON);
-}
-
-
-// ============================================
-// 7. TRATAR REQUISIÇÕES GET COM DADOS CODIFICADOS
-// ============================================
-function handleGetWithData(e) {
-  try {
-    const encodedData = e.parameter.data;
-
-    if (!encodedData) {
-      return createResponse(false, 'Dados não fornecidos via GET');
-    }
-
-    // Decodificar dados base64
-    const decodedData = Utilities.newBlob(Utilities.base64Decode(encodedData)).getDataAsString();
-    const data = JSON.parse(decodedData);
-
-    console.log('📡 Dados recebidos via GET:', data.action);
-
-    // Reutilizar a lógica existente do doPost
-    switch(data.action) {
-      case 'addPerson':
-        return addPerson(data);
-      case 'addMovementLog':
-        return addMovementLog(data);
-      case 'testConnection':
-        return createResponse(true, 'Conexão GET funcionando', {
-          timestamp: new Date().toISOString(),
-          method: 'GET'
-        });
-      default:
-        return createResponse(false, 'Ação inválida via GET: ' + data.action);
-    }
-
-  } catch (error) {
-    console.error('❌ Erro no handleGetWithData:', error);
-    return createResponse(false, 'Erro ao processar dados GET: ' + error.message);
-  }
-}
-
-// Atualize a função doGet para lidar com dados:
-function doGet(e) {
-  // Se tiver parâmetro data, processar como uma requisição de dados
-  if (e.parameter.data) {
-    return handleGetWithData(e);
-  }
-
-  // Caso contrário, retornar status normal da API
-  return ContentService.createTextOutput(JSON.stringify({
-    status: 'API Ativa',
-    message: 'Use POST para acessar a API ou forneça parâmetro "data" via GET',
-    timestamp: new Date().toISOString()
-  })).setMimeType(ContentService.MimeType.JSON);
 }
