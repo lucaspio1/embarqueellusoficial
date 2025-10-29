@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
+import 'package:embarqueellus/services/alunos_sync_service.dart';
 
 class ReconhecimentoFacialScreen extends StatefulWidget {
   const ReconhecimentoFacialScreen({super.key});
@@ -40,6 +41,15 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
   Future<void> _carregarDados() async {
     setState(() => _carregando = true);
     try {
+      // Sincronizar pessoas com embeddings do Google Sheets
+      print('🔄 [Reconhecimento] Sincronizando pessoas com facial...');
+      final syncResult = await AlunosSyncService.instance.syncPessoasFromSheets();
+      if (syncResult.success) {
+        print('✅ [Reconhecimento] ${syncResult.message}');
+      } else {
+        print('⚠️ [Reconhecimento] Erro ao sincronizar: ${syncResult.message}');
+      }
+
       final alunos = await _db.getAllAlunos();
       final logs = await _db.getLogsHoje();
 
