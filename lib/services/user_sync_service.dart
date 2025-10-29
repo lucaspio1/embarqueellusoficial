@@ -7,7 +7,8 @@ class UserSyncService {
   static final UserSyncService instance = UserSyncService._internal();
   UserSyncService._internal();
 
-  final String _apiUrl = 'https://script.google.com/macros/s/AKfycbzLXa6c0HHv8Ff4uxvMNhvw8OB5gLzIhEv2uE4VPDGTCgZu6RsFIRPOv7I62VwZzBNk/exec';
+  // URL atualizada do Google Apps Script (mesma que funciona no Postman)
+  final String _apiUrl = 'https://script.google.com/macros/s/AKfycbzI8u7j02KkgYeZQJN5JxWlUy0nZ5YP7rr_r8rur1BFw0U3HcEu80PDuvjM-WRJwvHZ/exec';
   final _db = DatabaseHelper.instance;
 
   /// Hash de senha usando SHA-256
@@ -19,14 +20,22 @@ class UserSyncService {
 
   /// Sincroniza usuários da planilha LOGIN
   Future<SyncResult> syncUsuariosFromSheets() async {
+    final client = http.Client();
+
     try {
       print('🔄 [UserSync] Iniciando sincronização de usuários...');
+      print('🔗 [UserSync] URL: $_apiUrl');
 
-      final response = await http.post(
-        Uri.parse(_apiUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'action': 'getAllUsers'}),
-      ).timeout(const Duration(seconds: 30));
+      // Usar o mesmo padrão do Postman que funciona (http.Request + send)
+      final request = http.Request('POST', Uri.parse(_apiUrl));
+      request.followRedirects = true; // Seguir redirects automaticamente (padrão é true, mas sendo explícito)
+      request.headers['Content-Type'] = 'application/json';
+      request.headers['Accept'] = 'application/json';
+      request.body = jsonEncode({'action': 'getAllUsers'});
+
+      print('📤 [UserSync] Enviando requisição...');
+      final streamedResponse = await client.send(request).timeout(const Duration(seconds: 30));
+      final response = await http.Response.fromStream(streamedResponse);
 
       print('📥 [UserSync] Status: ${response.statusCode}');
 
@@ -66,6 +75,7 @@ class UserSyncService {
           );
         } else {
           print('⚠️ [UserSync] Resposta sem usuários');
+          print('📥 [UserSync] Response body: ${response.body}');
           return SyncResult(
             success: false,
             message: 'Nenhum usuário encontrado na planilha',
@@ -74,6 +84,7 @@ class UserSyncService {
         }
       } else {
         print('❌ [UserSync] Erro HTTP: ${response.statusCode}');
+        print('📥 [UserSync] Response body: ${response.body}');
         return SyncResult(
           success: false,
           message: 'Erro ao conectar: ${response.statusCode}',
@@ -87,6 +98,8 @@ class UserSyncService {
         message: 'Erro: $e',
         count: 0,
       );
+    } finally {
+      client.close();
     }
   }
 
