@@ -114,12 +114,15 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
 
       final timestamp = DateTime.now();
 
-      // ✅ CORREÇÃO: Chamada correta sem parâmetro timestamp
+      // ✅ Usar score real de similaridade do reconhecimento facial
+      // Se não houver score (busca manual), usa 0.95 como fallback
+      final confidence = (aluno['similarity_score'] as double?) ?? 0.95;
+
       await _db.insertLog(
         cpf: aluno['cpf'],
         personName: aluno['nome'],
         timestamp: timestamp,
-        confidence: 0.95,
+        confidence: confidence,
         tipo: tipo,
       );
 
@@ -127,7 +130,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         cpf: aluno['cpf'],
         personName: aluno['nome'],
         timestamp: timestamp,
-        confidence: 0.95,
+        confidence: confidence,
         personId: aluno['cpf'],
         tipo: tipo,
       );

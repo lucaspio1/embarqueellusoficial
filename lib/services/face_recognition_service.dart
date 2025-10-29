@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
-import '/database/database_helper.dart';
+import 'package:embarqueellus/database/database_helper.dart';
 
 /// ✅ NOVO SERVIÇO COM MobileFaceNet - MAIS EFICIENTE
 class FaceRecognitionService {
@@ -26,13 +26,13 @@ class FaceRecognitionService {
 
   Future<void> _loadMobileFaceNet() async {
     try {
-      print('🧠 Carregando modelo MobileFaceNet...');
+      print('🧠 Carregando modelo ArcFace...');
 
       final options = InterpreterOptions();
 
-      // ✅ CARREGAR MobileFaceNet (precisa do arquivo .tflite)
+      // ✅ CARREGAR ArcFace (modelo de reconhecimento facial)
       _interpreter = await Interpreter.fromAsset(
-        'assets/models/mobile_facenet.tflite', // Nome do novo modelo
+        'assets/models/arcface.tflite', // Modelo ArcFace
         options: options,
       );
 
@@ -40,7 +40,7 @@ class FaceRecognitionService {
       final inputTensor = _interpreter!.getInputTensors().first;
       final outputTensor = _interpreter!.getOutputTensors().first;
 
-      print('✅ MobileFaceNet carregado!');
+      print('✅ ArcFace carregado!');
       print('📊 Input: ${inputTensor.shape}');
       print('📊 Output: ${outputTensor.shape}');
       print('🎯 Embedding size: $EMBEDDING_SIZE dimensões');
@@ -48,8 +48,8 @@ class FaceRecognitionService {
       _modelLoaded = true;
 
     } catch (e) {
-      print('❌ Erro ao carregar MobileFaceNet: $e');
-      print('💡 Certifique-se de que o arquivo mobile_facenet.tflite está em assets/models/');
+      print('❌ Erro ao carregar ArcFace: $e');
+      print('💡 Certifique-se de que o arquivo arcface.tflite está em assets/models/');
       rethrow;
     }
   }
@@ -83,7 +83,8 @@ class FaceRecognitionService {
     }
   }
 
-  /// ✅ PRÉ-PROCESSAMENTO ESPECÍFICO DO MobileFaceNet
+  /// ✅ PRÉ-PROCESSAMENTO ESPECÍFICO DO ArcFace
+  /// ArcFace normalmente usa normalização [0, 1] ou ImageNet mean/std
   List<List<List<List<float>>>> _preprocessMobileFaceNet(img.Image image) {
     final input = List.generate(
       1, (_) => List.generate(
@@ -91,13 +92,32 @@ class FaceRecognitionService {
       INPUT_SIZE, (y) => List.generate(
       INPUT_SIZE, (x) {
       final pixel = image.getPixel(x, y);
-      // MobileFaceNet espera pixels normalizados [-1, 1]
+
+      // MÉTODO 1: Normalização [-1, 1] (MobileFaceNet/ArcFace padrão)
       switch (c) {
         case 0: return (pixel.r / 127.5) - 1.0; // R
         case 1: return (pixel.g / 127.5) - 1.0; // G
         case 2: return (pixel.b / 127.5) - 1.0; // B
         default: return 0.0;
       }
+
+      // MÉTODO 2: Se o método acima não funcionar, tente normalização [0, 1]:
+      // switch (c) {
+      //   case 0: return pixel.r / 255.0; // R
+      //   case 1: return pixel.g / 255.0; // G
+      //   case 2: return pixel.b / 255.0; // B
+      //   default: return 0.0;
+      // }
+
+      // MÉTODO 3: ImageNet mean/std (se os outros não funcionarem):
+      // final means = [0.485, 0.456, 0.406];
+      // final stds = [0.229, 0.224, 0.225];
+      // switch (c) {
+      //   case 0: return (pixel.r / 255.0 - means[0]) / stds[0];
+      //   case 1: return (pixel.g / 255.0 - means[1]) / stds[1];
+      //   case 2: return (pixel.b / 255.0 - means[2]) / stds[2];
+      //   default: return 0.0;
+      // }
     },
     ),
     ),
@@ -146,7 +166,7 @@ class FaceRecognitionService {
   /// ✅ RECONHECIMENTO PRINCIPAL
   Future<Map<String, dynamic>?> recognize(img.Image faceImage) async {
     try {
-      print('🔍 Iniciando reconhecimento com MobileFaceNet...');
+      print('🔍 Iniciando reconhecimento com ArcFace...');
 
       final emb = await extractEmbedding(faceImage);
       final known = await DatabaseHelper.instance.getTodosAlunosComFacial();
@@ -173,7 +193,11 @@ class FaceRecognitionService {
 
       if (bestScore >= SIMILARITY_THRESHOLD) {
         print('✅ RECONHECIDO: ${bestMatch!['nome']}');
-        return bestMatch;
+        // ✅ ADICIONAR o score real ao resultado
+        return {
+          ...bestMatch,
+          'similarity_score': bestScore, // Score real para usar nos logs
+        };
       } else {
         print('❌ Não reconhecido (abaixo de ${(SIMILARITY_THRESHOLD * 100).toStringAsFixed(1)}%)');
         return null;

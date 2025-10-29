@@ -31,7 +31,7 @@ dependencies:
   shared_preferences: ^2.5.3
 
   # Reconhecimento Facial
-  google_mlkit_face_detection: ^0.13.1t
+  google_mlkit_face_detection: ^0.13.1
 
 
 
