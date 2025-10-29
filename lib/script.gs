@@ -13,10 +13,20 @@ const SPREADSHEET_ID = 'SEU_SPREADSHEET_ID_AQUI'; // Substituir pelo ID da sua p
 
 function doPost(e) {
   try {
+    // Log da requisição recebida
+    console.log('📥 Requisição recebida');
+    console.log('postData:', e.postData);
+
+    if (!e.postData || !e.postData.contents) {
+      console.error('❌ Sem postData.contents');
+      return createResponse(false, 'Requisição inválida: sem dados POST');
+    }
+
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
 
     console.log('📥 Ação recebida:', action);
+    console.log('📥 Dados:', JSON.stringify(data));
 
     switch (action) {
       case 'login':
@@ -38,11 +48,13 @@ function doPost(e) {
         return syncEmbedding(data);
 
       default:
+        console.error('❌ Ação não reconhecida:', action);
         return createResponse(false, 'Ação não reconhecida: ' + action);
     }
   } catch (error) {
     console.error('❌ Erro no doPost:', error);
-    return createResponse(false, 'Erro no servidor: ' + error.message);
+    console.error('Stack:', error.stack);
+    return createResponse(false, 'Erro no servidor: ' + error.message + ' | ' + error.stack);
   }
 }
 

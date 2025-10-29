@@ -16,28 +16,23 @@ class AuthService {
     try {
       print('🔐 [Auth] Tentando login: CPF=$cpf');
 
-      final request = http.Request('POST', Uri.parse(_apiUrl))
-        ..headers['Content-Type'] = 'application/json'
-        ..body = jsonEncode({
+      // Google Apps Script usa redirecionamento, precisamos seguir manualmente
+      final uri = Uri.parse(_apiUrl);
+
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
           'action': 'login',
           'cpf': cpf,
           'senha': senha,
-        });
+        }),
+      ).timeout(const Duration(seconds: 30));
 
-      final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 30),
-      );
-
-      var response = await http.Response.fromStream(streamedResponse);
-
-      // Lidar com redirecionamento 302
-      if (response.statusCode == 302) {
-        final redirectUrl = response.headers['location'];
-        if (redirectUrl != null) {
-          print('🔄 [Auth] Redirecionando para: $redirectUrl');
-          response = await http.get(Uri.parse(redirectUrl));
-        }
-      }
+      print('📥 [Auth] Status Code: ${response.statusCode}');
+      print('📥 [Auth] Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -55,11 +50,12 @@ class AuthService {
 
           return user;
         } else {
-          print('❌ [Auth] Credenciais inválidas');
+          print('❌ [Auth] Credenciais inválidas: ${data['message']}');
           return null;
         }
       } else {
         print('❌ [Auth] Erro HTTP: ${response.statusCode}');
+        print('📥 [Auth] Response: ${response.body}');
         return null;
       }
     } catch (e) {
