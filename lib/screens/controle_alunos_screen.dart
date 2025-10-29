@@ -60,27 +60,27 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
   Future<void> _carregarAlunos() async {
     setState(() => _carregando = true);
     try {
-      // Buscar passageiros embarcados da tabela passageiros
-      final passageirosEmbarcados = await _db.getPassageirosEmbarcados();
+      // Buscar TODOS os passageiros da tabela passageiros (carregados pelo QR Code)
+      final todosPassageiros = await _db.getPassageiros();
 
       // Garantir que esses passageiros existam na tabela alunos para facial
-      for (final passageiro in passageirosEmbarcados) {
-        final alunoExistente = await _db.getAlunoByCpf(passageiro['cpf']);
+      for (final passageiro in todosPassageiros) {
+        final alunoExistente = await _db.getAlunoByCpf(passageiro.cpf);
         if (alunoExistente == null) {
           // Criar registro na tabela alunos
           await _db.upsertAluno({
-            'cpf': passageiro['cpf'],
-            'nome': passageiro['nome'],
+            'cpf': passageiro.cpf,
+            'nome': passageiro.nome,
             'email': '',
             'telefone': '',
-            'turma': passageiro['turma'] ?? '',
+            'turma': passageiro.turma ?? '',
             'facial': 'NAO',
             'tem_qr': 'SIM',
           });
         }
       }
 
-      // Agora buscar os alunos da tabela alunos
+      // Agora buscar os alunos da tabela alunos com tem_qr='SIM'
       final alunos = await _db.getAlunosEmbarcadosParaCadastro();
 
       setState(() {
@@ -90,7 +90,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         _carregando = false;
       });
 
-      print('📋 ${_alunos.length} alunos embarcados carregados');
+      print('📋 ${_alunos.length} alunos carregados para cadastro facial');
     } catch (e) {
       print('❌ Erro ao carregar alunos: $e');
       setState(() => _carregando = false);
