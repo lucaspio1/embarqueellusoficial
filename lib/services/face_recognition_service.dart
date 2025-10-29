@@ -14,10 +14,10 @@ class FaceRecognitionService {
   Interpreter? _interpreter;
   bool _modelLoaded = false;
 
-  // ✅ CONFIGURAÇÕES OTIMIZADAS
+  // ✅ CONFIGURAÇÕES OTIMIZADAS PARA ARCFACE
   static const double SIMILARITY_THRESHOLD = 0.6; // Pode ajustar depois
-  static const int INPUT_SIZE = 112; // MobileFaceNet usa 112x112
-  static const int EMBEDDING_SIZE = 192; // Dimensões do embedding
+  static const int INPUT_SIZE = 112; // ArcFace usa 112x112
+  static const int EMBEDDING_SIZE = 512; // ArcFace retorna 512 dimensões
 
   Future<void> init() async {
     if (_modelLoaded) return;
