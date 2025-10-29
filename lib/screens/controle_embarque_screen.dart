@@ -303,7 +303,7 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
                                 fontSize: 16, color: Colors.grey.shade700)),
                         if (_pulseira != null && _pulseira!.isNotEmpty) ...[
                           const SizedBox(height: 4),
-                          Text('Pulseira: $_pulseira',
+                          Text('FACIAL: $_pulseira',
                               style: TextStyle(
                                   fontSize: 16,
                                   color: Colors.grey.shade700,
