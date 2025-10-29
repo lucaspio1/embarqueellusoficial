@@ -1,12 +1,73 @@
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/screens/controle_embarque_screen.dart';
 import 'package:embarqueellus/screens/reconhecimento_facial_completo.dart';
+import 'package:embarqueellus/screens/painel_admin_screen.dart';
+import 'package:embarqueellus/screens/login_screen.dart';
+import 'package:embarqueellus/services/auth_service.dart';
 
-class MainMenuScreen extends StatelessWidget {
+class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
 
   @override
+  State<MainMenuScreen> createState() => _MainMenuScreenState();
+}
+
+class _MainMenuScreenState extends State<MainMenuScreen> {
+  final _authService = AuthService.instance;
+  Map<String, dynamic>? _usuario;
+  bool _carregando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarUsuario();
+  }
+
+  Future<void> _carregarUsuario() async {
+    final usuario = await _authService.getUsuarioLogado();
+    setState(() {
+      _usuario = usuario;
+      _carregando = false;
+    });
+  }
+
+  Future<void> _realizarLogout() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sair'),
+        content: const Text('Deseja realmente sair do sistema?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sair'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      await _authService.logout();
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_carregando) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       backgroundColor: const Color(0xFFD1D2D1),
       body: SafeArea(
@@ -35,6 +96,15 @@ class MainMenuScreen extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
+                      // Botão de logout no canto superior direito
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: IconButton(
+                          onPressed: _realizarLogout,
+                          icon: const Icon(Icons.logout, color: Colors.white),
+                          tooltip: 'Sair',
+                        ),
+                      ),
                       Container(
                         padding: const EdgeInsets.all(16.0),
                         decoration: BoxDecoration(
@@ -68,6 +138,54 @@ class MainMenuScreen extends StatelessWidget {
                           fontWeight: FontWeight.w300,
                         ),
                       ),
+                      if (_usuario != null) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.person, color: Colors.white70, size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                _usuario!['nome'] ?? 'Usuário',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              if (_usuario!['perfil']?.toString().toUpperCase() == 'ADMIN') ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withOpacity(0.3),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Text(
+                                    'ADMIN',
+                                    style: TextStyle(
+                                      color: Colors.amber,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -125,6 +243,27 @@ class MainMenuScreen extends StatelessWidget {
                           );
                         },
                       ),
+
+                      // Botão Painel (apenas para ADMIN)
+                      if (_usuario?['perfil']?.toString().toUpperCase() == 'ADMIN') ...[
+                        const SizedBox(height: 16),
+                        _buildMenuButton(
+                          context: context,
+                          label: 'PAINEL',
+                          subtitle: 'Área Administrativa',
+                          icon: Icons.admin_panel_settings,
+                          color: Colors.deepPurple,
+                          onPressed: () {
+                            print('📍 [MainMenu] Navegando para Painel Admin');
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const PainelAdminScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
 
                       const SizedBox(height: 32),
 

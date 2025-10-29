@@ -285,6 +285,22 @@ class DatabaseHelper {
     );
   }
 
+  // Métodos para painel administrativo
+  Future<List<Map<String, dynamic>>> getAllLogs() async {
+    final db = await database;
+    return await db.query('logs', orderBy: 'timestamp DESC');
+  }
+
+  Future<void> clearAllData() async {
+    final db = await database;
+    await db.delete('passageiros');
+    await db.delete('alunos');
+    await db.delete('embeddings');
+    await db.delete('logs');
+    await db.delete('sync_queue');
+    print('✅ Todos os dados foram limpos do banco de dados');
+  }
+
   Future<void> close() async {
     final db = await database;
     await db.close();
