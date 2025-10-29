@@ -60,6 +60,27 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
   Future<void> _carregarAlunos() async {
     setState(() => _carregando = true);
     try {
+      // Buscar passageiros embarcados da tabela passageiros
+      final passageirosEmbarcados = await _db.getPassageirosEmbarcados();
+
+      // Garantir que esses passageiros existam na tabela alunos para facial
+      for (final passageiro in passageirosEmbarcados) {
+        final alunoExistente = await _db.getAlunoByCpf(passageiro['cpf']);
+        if (alunoExistente == null) {
+          // Criar registro na tabela alunos
+          await _db.upsertAluno({
+            'cpf': passageiro['cpf'],
+            'nome': passageiro['nome'],
+            'email': '',
+            'telefone': '',
+            'turma': passageiro['turma'] ?? '',
+            'facial': 'NAO',
+            'tem_qr': 'SIM',
+          });
+        }
+      }
+
+      // Agora buscar os alunos da tabela alunos
       final alunos = await _db.getAlunosEmbarcadosParaCadastro();
 
       setState(() {

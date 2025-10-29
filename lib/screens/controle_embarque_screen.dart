@@ -52,9 +52,9 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
 
       final passageiros = DataService().passageirosEmbarque.value;
 
-      // Verificar alunos com QR/pulseira e faciais cadastradas
+      // Verificar passageiros embarcados e faciais cadastradas
       final db = DatabaseHelper.instance;
-      final alunosComQR = await db.getAlunosEmbarcadosParaCadastro();
+      final passageirosEmbarcados = await db.getPassageirosEmbarcados();
       final alunosComFacial = await db.getTodosAlunosComFacial();
 
       setState(() {
@@ -66,7 +66,7 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
         _totalEmbarcados = passageiros.where((p) => p.embarque == 'SIM').length;
         _totalRetornados = passageiros.where((p) => p.retorno == 'SIM').length;
         _totalFaciaisCadastradas = alunosComFacial.length;
-        _temAlunosComQR = alunosComQR.isNotEmpty;
+        _temAlunosComQR = passageirosEmbarcados.isNotEmpty;
         _temDadosSalvos = true;
       });
     } else {
