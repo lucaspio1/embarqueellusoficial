@@ -697,7 +697,7 @@ class CameraPreviewScreen extends StatefulWidget {
 }
 
 class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
-  late CameraController controller;
+  CameraController? controller;
   bool _tirandoFoto = false;
   bool _disposed = false;
   List<CameraDescription> _cameras = [];
@@ -735,7 +735,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
         enableAudio: false,
       );
 
-      await controller.initialize();
+      await controller!.initialize();
 
       if (mounted && !_disposed) {
         setState(() {});
@@ -752,7 +752,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     setState(() => _tirandoFoto = true);
 
     try {
-      await controller.dispose();
+      await controller?.dispose();
       _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
       await _initializeCamera();
       setState(() => _tirandoFoto = false);
@@ -765,15 +765,15 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   @override
   void dispose() {
     _disposed = true;
-    if (controller.value.isInitialized) {
-      controller.dispose();
+    if (controller?.value.isInitialized == true) {
+      controller!.dispose();
     }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!controller.value.isInitialized) {
+    if (controller == null || !controller!.value.isInitialized) {
       return Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
@@ -811,7 +811,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       ),
       body: Stack(
         children: [
-          CameraPreview(controller),
+          CameraPreview(controller!),
 
           Center(
             child: Container(
@@ -889,7 +889,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
         backgroundColor: _tirandoFoto ? Colors.grey : const Color(0xFF4C643C),
         onPressed: _tirandoFoto ? null : () async {
           setState(() => _tirandoFoto = true);
-          final image = await controller.takePicture();
+          final image = await controller!.takePicture();
 
           if (mounted && !_disposed) {
             Navigator.pop(context, image.path);

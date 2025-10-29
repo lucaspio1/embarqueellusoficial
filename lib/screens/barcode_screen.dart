@@ -1,3 +1,7 @@
+// ============================================================================
+// ARQUIVO NÃO MAIS EM USO - CÓDIGO DE PULSEIRA DESABILITADO
+// Mantido para referência futura
+// ============================================================================
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/widgets/barcode_camera_view.dart';
 

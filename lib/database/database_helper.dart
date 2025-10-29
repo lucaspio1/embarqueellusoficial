@@ -48,6 +48,7 @@ class DatabaseHelper {
         telefone TEXT,
         turma TEXT,
         facial TEXT,
+        tem_qr TEXT DEFAULT 'NAO',
         created_at TEXT
       )
     ''');
@@ -91,6 +92,14 @@ class DatabaseHelper {
       await db.rawQuery('SELECT facial FROM alunos LIMIT 1');
     } catch (e) {
       await db.execute('ALTER TABLE alunos ADD COLUMN facial TEXT');
+    }
+
+    // Garantir que tem_qr existe
+    try {
+      await db.rawQuery('SELECT tem_qr FROM alunos LIMIT 1');
+    } catch (e) {
+      await db.execute('ALTER TABLE alunos ADD COLUMN tem_qr TEXT DEFAULT "NAO"');
+      print('✅ Campo tem_qr adicionado à tabela alunos');
     }
   }
 
@@ -136,7 +145,8 @@ class DatabaseHelper {
 
   Future<List<Map<String, dynamic>>> getAlunosEmbarcadosParaCadastro() async {
     final db = await database;
-    return await db.query('alunos');
+    // Retorna apenas alunos que tem QR/pulseira cadastrada (embarcados)
+    return await db.query('alunos', where: 'tem_qr = ?', whereArgs: ['SIM']);
   }
 
   Future<Map<String, dynamic>?> getAlunoByCpf(String cpf) async {
