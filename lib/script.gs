@@ -82,6 +82,37 @@ function doGet(e) {
           numeroOnibus: params.numeroOnibus
         });
 
+      case 'cadastrarFacial':
+        // Quando vem via GET (após redirect 302), os dados vêm em params
+        try {
+          const embeddingParam = params.embedding;
+          const embedding = embeddingParam ? JSON.parse(embeddingParam) : null;
+
+          return cadastrarFacial({
+            cpf: params.cpf,
+            nome: params.nome,
+            email: params.email || '',
+            telefone: params.telefone || '',
+            embedding: embedding
+          });
+        } catch (e) {
+          return ContentService
+            .createTextOutput(JSON.stringify({
+              success: false,
+              message: 'Erro ao processar cadastro facial via GET: ' + e.message,
+              timestamp: new Date().toISOString()
+            }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+
+      case 'registrarLog':
+        return registrarLog({
+          cpf: params.cpf,
+          nome: params.nome,
+          confidence: parseFloat(params.confidence || '0'),
+          tipo: params.tipo || 'reconhecimento'
+        });
+
       default:
         return ContentService
           .createTextOutput(JSON.stringify({

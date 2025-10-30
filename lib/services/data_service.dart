@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:embarqueellus/models/passageiro.dart';
 import 'package:embarqueellus/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:embarqueellus/database/database_helper.dart';
 
 class DataService {
   static final DataService _instance = DataService._internal();
@@ -76,10 +77,37 @@ class DataService {
   // =========================================================
   Future<void> saveLocalData(
       String nomeAba, String onibus, List<Passageiro> lista) async {
+    // Salvar em SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     final listaJson = json.encode(lista.map((p) => p.toJson()).toList());
     await prefs.setString('passageiros_json', listaJson);
-    print('💾 [DataService] Dados salvos localmente');
+
+    // Salvar também no banco SQLite (tabela passageiros)
+    final db = DatabaseHelper.instance;
+    try {
+      for (final passageiro in lista) {
+        await db.insertPassageiro(passageiro);
+      }
+      print('💾 [DataService] ${lista.length} passageiros salvos (SharedPreferences + SQLite)');
+
+      // Também sincronizar para tabela alunos com tem_qr='SIM'
+      for (final passageiro in lista) {
+        if (passageiro.cpf != null && passageiro.cpf!.isNotEmpty) {
+          await db.upsertAluno({
+            'cpf': passageiro.cpf,
+            'nome': passageiro.nome,
+            'email': '',
+            'telefone': '',
+            'turma': passageiro.turma ?? '',
+            'facial': 'NAO',
+            'tem_qr': 'SIM', // Todos os passageiros baixados têm QR
+          });
+        }
+      }
+      print('✅ [DataService] Passageiros sincronizados para tabela alunos');
+    } catch (e) {
+      print('❌ [DataService] Erro ao salvar no SQLite: $e');
+    }
   }
 
   Future<void> loadLocalData(String nomeAba, String onibus) async {
