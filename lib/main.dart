@@ -56,14 +56,9 @@ void main() async {
 
     Future.delayed(Duration(seconds: 2), () async {
       try {
-        print('🔄 Tentando sincronização inicial...');
-        final success = await OfflineSyncService.instance.trySyncNow();
-
-        if (success) {
-          print('✅ Sincronização inicial concluída');
-        } else {
-          print('📵 Sincronização inicial não executada (sem internet ou sem dados pendentes)');
-        }
+        print('🔄 Tentando sincronização inicial em background...');
+        OfflineSyncService.instance.trySyncInBackground();
+        print('✅ Sincronização inicial iniciada em background');
       } catch (e) {
         print('❌ Erro na sincronização inicial: $e');
       }

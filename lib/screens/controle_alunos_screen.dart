@@ -278,10 +278,9 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('✅ [CadastroFacial] Embedding enfileirado para sincronização');
 
-      _atualizarProgresso('Enviando para nuvem...');
-      final syncResult = await OfflineSyncService.instance.trySyncNow();
-
-      print('🔄 [CadastroFacial] Tentativa de sync: ${syncResult ? "SUCESSO" : "FALHOU (tentará novamente)"}');
+      // Sincronizar em background (não bloqueia a UI)
+      OfflineSyncService.instance.trySyncInBackground();
+      print('🔄 [CadastroFacial] Sincronização em background iniciada');
 
       await _db.updateAlunoFacial(aluno['cpf'], 'CADASTRADA');
 
@@ -298,9 +297,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
             children: [
               Text('✅ Facial cadastrada: ${aluno['nome']}',
                   style: TextStyle(fontWeight: FontWeight.bold)),
-              Text(syncResult
-                  ? '☁️ Sincronizado com sucesso'
-                  : '📱 Sincronizará quando houver internet'),
+              Text('☁️ Sincronizando em segundo plano...'),
             ],
           ),
           backgroundColor: Colors.green,
@@ -368,10 +365,9 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('✅ [CadastroFacialAvançado] Embedding enfileirado para sincronização');
 
-      _atualizarProgresso('Enviando para nuvem...');
-      final syncResult = await OfflineSyncService.instance.trySyncNow();
-
-      print('🔄 [CadastroFacialAvançado] Tentativa de sync: ${syncResult ? "SUCESSO" : "FALHOU"}');
+      // Sincronizar em background (não bloqueia a UI)
+      OfflineSyncService.instance.trySyncInBackground();
+      print('🔄 [CadastroFacialAvançado] Sincronização em background iniciada');
 
       await _db.updateAlunoFacial(aluno['cpf'], 'CADASTRADA');
 
@@ -389,9 +385,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
               Text('✅ Facial cadastrada com alta precisão!',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               Text('${aluno['nome']} - ${faces.length} imagens processadas'),
-              Text(syncResult
-                  ? '☁️ Sincronizado com sucesso'
-                  : '📱 Sincronizará quando houver internet'),
+              Text('☁️ Sincronizando em segundo plano...'),
             ],
           ),
           backgroundColor: Colors.green,
@@ -453,16 +447,14 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           IconButton(
             icon: const Icon(Icons.cloud_upload),
             onPressed: () async {
-              _mostrarProgresso('Sincronizando embeddings...');
-              final result = await OfflineSyncService.instance.trySyncNow();
-              if (Navigator.canPop(context)) Navigator.pop(context);
+              // Sincronizar em background
+              OfflineSyncService.instance.trySyncInBackground();
 
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(result
-                      ? '✅ Embeddings sincronizados'
-                      : '❌ Falha na sincronização'),
-                  backgroundColor: result ? Colors.green : Colors.red,
+                const SnackBar(
+                  content: Text('☁️ Sincronização iniciada em segundo plano'),
+                  backgroundColor: Colors.blue,
+                  duration: Duration(seconds: 2),
                 ),
               );
             },
