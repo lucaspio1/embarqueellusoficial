@@ -214,6 +214,8 @@ class OfflineSyncService {
 
         print('[Background] Sincronizando ${batch.length} itens...');
 
+        final successIds = <int>[];
+
         // Processar cada item
         for (final row in batch) {
           try {
@@ -239,17 +241,25 @@ class OfflineSyncService {
               body: jsonEncode(body),
             );
 
-            // Se sucesso, remover da fila
+            // Se sucesso, adicionar à lista de IDs para remover
             if (response.statusCode >= 200 && response.statusCode < 400) {
-              await db.deleteOutboxItem(id);
-              print('[Background] Item $id enviado');
+              successIds.add(id);
+              print('[Background] Item $id enviado (${response.statusCode})');
+            } else {
+              print('[Background] Item $id falhou (${response.statusCode})');
             }
           } catch (e) {
             print('[Background] Erro item: $e');
           }
         }
 
-        print('[Background] Sync finalizado');
+        // Remover todos os itens com sucesso de uma vez
+        if (successIds.isNotEmpty) {
+          await db.deleteOutboxIds(successIds);
+          print('[Background] Removidos ${successIds.length} itens da fila');
+        }
+
+        print('[Background] Sync finalizado (${successIds.length}/${batch.length} enviados)');
       });
     } catch (e) {
       print('❌ [Background] Erro ao executar isolate: $e');
