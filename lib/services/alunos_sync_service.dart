@@ -185,29 +185,65 @@ class AlunosSyncService {
           countAlunos++;
 
           // Salvar embedding se existir
-          if (pessoa['embedding'] != null) {
-            List<double> embedding;
+          if (pessoa['embedding'] != null && pessoa['embedding'] != '') {
+            try {
+              List<double> embedding;
 
-            // Se o embedding vier como string, fazer parse
-            if (pessoa['embedding'] is String) {
-              final embeddingList = jsonDecode(pessoa['embedding']);
-              embedding = List<double>.from(embeddingList);
-            } else if (pessoa['embedding'] is List) {
-              embedding = List<double>.from(pessoa['embedding']);
-            } else {
-              print('⚠️ Embedding inválido para ${pessoa['nome']}');
-              continue;
+              // Log para debug
+              print('🔍 [Debug] Processando embedding para ${pessoa['nome']} (CPF: ${pessoa['cpf']})');
+              print('🔍 [Debug] Tipo do embedding: ${pessoa['embedding'].runtimeType}');
+
+              // Se o embedding vier como string, fazer parse
+              if (pessoa['embedding'] is String) {
+                final embeddingStr = pessoa['embedding'] as String;
+
+                // Verificar se é uma string vazia ou data (formato inválido)
+                if (embeddingStr.isEmpty || embeddingStr.contains('T') || embeddingStr.length < 10) {
+                  print('⚠️ [${pessoa['cpf']}] Embedding inválido (string vazia ou formato incorreto): "${embeddingStr.substring(0, embeddingStr.length > 50 ? 50 : embeddingStr.length)}"');
+                  continue;
+                }
+
+                try {
+                  final embeddingList = jsonDecode(embeddingStr);
+                  if (embeddingList is! List) {
+                    print('⚠️ [${pessoa['cpf']}] Embedding não é um array: $embeddingList');
+                    continue;
+                  }
+                  embedding = List<double>.from(embeddingList);
+                } catch (e) {
+                  print('⚠️ [${pessoa['cpf']}] Erro ao fazer parse do embedding string: $e');
+                  print('⚠️ [${pessoa['cpf']}] Conteúdo: "${embeddingStr.substring(0, embeddingStr.length > 100 ? 100 : embeddingStr.length)}..."');
+                  continue;
+                }
+              } else if (pessoa['embedding'] is List) {
+                embedding = List<double>.from(pessoa['embedding']);
+              } else {
+                print('⚠️ [${pessoa['cpf']}] Tipo de embedding não suportado: ${pessoa['embedding'].runtimeType}');
+                continue;
+              }
+
+              // Validar que o embedding tem tamanho adequado (geralmente 128 ou 512 dimensões)
+              if (embedding.isEmpty || embedding.length < 50) {
+                print('⚠️ [${pessoa['cpf']}] Embedding com tamanho suspeito: ${embedding.length} dimensões');
+                continue;
+              }
+
+              await _db.insertEmbedding({
+                'cpf': pessoa['cpf'] ?? '',
+                'nome': pessoa['nome'] ?? '',
+                'embedding': embedding,
+              });
+              countEmbeddings++;
+              print('✅ [${pessoa['cpf']}] Embedding salvo com sucesso (${embedding.length} dimensões)');
+            } catch (e, stack) {
+              print('❌ [${pessoa['cpf']}] Erro ao processar embedding: $e');
+              print('Stack: $stack');
             }
-
-            await _db.insertEmbedding({
-              'cpf': pessoa['cpf'] ?? '',
-              'nome': pessoa['nome'] ?? '',
-              'embedding': embedding,
-            });
-            countEmbeddings++;
+          } else {
+            print('⚠️ [${pessoa['cpf']}] Pessoa ${pessoa['nome']} não tem embedding');
           }
         } catch (e) {
-          print('❌ Erro ao salvar pessoa ${pessoa['nome']}: $e');
+          print('❌ Erro ao salvar pessoa ${pessoa['cpf']} - ${pessoa['nome']}: $e');
         }
       }
 

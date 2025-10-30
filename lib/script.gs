@@ -184,11 +184,27 @@ function getAllPeople() {
     const data_range = pessoasSheet.getDataRange();
     const values = data_range.getValues();
 
+    // Log do cabeçalho para debug
+    console.log('📋 Cabeçalho da planilha PESSOAS:', values[0]);
+    console.log('📋 Total de colunas:', values[0].length);
+
     // Cabeçalho: ID, NOME, CPF, EMAIL, TELEFONE, TURMA, EMBEDDING, TEM_QR
     const pessoas = [];
 
     for (let i = 1; i < values.length; i++) {
       const row = values[i];
+
+      // Log da primeira pessoa para debug
+      if (i === 1) {
+        console.log('🔍 Debug primeira pessoa:');
+        for (let col = 0; col < row.length; col++) {
+          const value = row[col];
+          const preview = typeof value === 'string' && value.length > 50
+            ? value.substring(0, 50) + '...'
+            : value;
+          console.log(`  Coluna ${col}: ${preview} (tipo: ${typeof value})`);
+        }
+      }
 
       const pessoa = {
         id: row[0],
@@ -203,7 +219,13 @@ function getAllPeople() {
 
       // Apenas adicionar pessoas com embedding válido
       if (pessoa.embedding && pessoa.embedding.length > 0) {
-        pessoas.push(pessoa);
+        // Verificar se não é uma data
+        const embeddingStr = String(pessoa.embedding);
+        if (!embeddingStr.includes('T') && embeddingStr.startsWith('[')) {
+          pessoas.push(pessoa);
+        } else {
+          console.log(`⚠️ Ignorando pessoa ${pessoa.nome} - embedding parece ser data ou formato inválido: ${embeddingStr.substring(0, 50)}`);
+        }
       }
     }
 
@@ -586,11 +608,27 @@ function getAllPeople() {
     const data_range = pessoasSheet.getDataRange();
     const values = data_range.getValues();
 
+    // Log do cabeçalho para debug
+    console.log('📋 Cabeçalho da planilha PESSOAS:', values[0]);
+    console.log('📋 Total de colunas:', values[0].length);
+
     // Cabeçalho: ID, NOME, CPF, EMAIL, TELEFONE, TURMA, EMBEDDING, TEM_QR
     const pessoas = [];
 
     for (let i = 1; i < values.length; i++) {
       const row = values[i];
+
+      // Log da primeira pessoa para debug
+      if (i === 1) {
+        console.log('🔍 Debug primeira pessoa:');
+        for (let col = 0; col < row.length; col++) {
+          const value = row[col];
+          const preview = typeof value === 'string' && value.length > 50
+            ? value.substring(0, 50) + '...'
+            : value;
+          console.log(`  Coluna ${col}: ${preview} (tipo: ${typeof value})`);
+        }
+      }
 
       const pessoa = {
         id: row[0],
@@ -605,7 +643,13 @@ function getAllPeople() {
 
       // Apenas adicionar pessoas com embedding válido
       if (pessoa.embedding && pessoa.embedding.length > 0) {
-        pessoas.push(pessoa);
+        // Verificar se não é uma data
+        const embeddingStr = String(pessoa.embedding);
+        if (!embeddingStr.includes('T') && embeddingStr.startsWith('[')) {
+          pessoas.push(pessoa);
+        } else {
+          console.log(`⚠️ Ignorando pessoa ${pessoa.nome} - embedding parece ser data ou formato inválido: ${embeddingStr.substring(0, 50)}`);
+        }
       }
     }
 
