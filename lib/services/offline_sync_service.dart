@@ -17,7 +17,7 @@ class OfflineSyncService {
   OfflineSyncService._();
   static final OfflineSyncService instance = OfflineSyncService._();
 
-  final String _sheetsWebhook = 'https://script.google.com/macros/s/AKfycbzI8u7j02KkgYeZQJN5JxWlUy0nZ5YP7rr_r8rur1BFw0U3HcEu80PDuvjM-WRJwvHZ/exec';
+  final String _sheetsWebhook = 'https://script.google.com/macros/s/AKfycbz8H_y2g5Zh8KvzxZiFKS4ToQjhfXZ2rlFjOHBAjCZXAksT96jevRekqYjAsVarETcI/exec';
   final DatabaseHelper _db = DatabaseHelper.instance;
 
   Timer? _syncTimer;
