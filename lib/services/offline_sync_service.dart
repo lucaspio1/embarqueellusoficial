@@ -245,7 +245,7 @@ class OfflineSyncService {
 
   Future<bool> _sendPersonIndividually(Map<String, dynamic> item) async {
     final copy = Map<String, dynamic>.from(item)..remove('idOutbox');
-    final body = <String, dynamic>{'action': 'addPerson', ...copy};
+    final body = <String, dynamic>{'action': 'cadastrarFacial', ...copy};
     return _postWithRetriesAndSuccess(body);
   }
 
