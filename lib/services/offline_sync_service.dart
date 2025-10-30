@@ -21,6 +21,14 @@ class OfflineSyncService {
   final String _sheetsWebhook = 'https://script.google.com/macros/s/AKfycby14ubSOGVMr7Wzoof-r_pnNKUESSMvhk20z7NO2ZBqvS-DdiErwprhaEQ8Ay99IkIa/exec';
   final DatabaseHelper _db = DatabaseHelper.instance;
 
+  /// IMPORTANTE: NÃO tente usar background isolates (compute/Isolate.spawn) com este serviço!
+  /// Motivo: Este serviço contém objetos não-serializáveis que não podem ser enviados
+  /// entre isolates:
+  /// - _syncTimer (Timer instance)
+  /// - _db (DatabaseHelper com conexões SQLite)
+  ///
+  /// Se precisar de processamento em background, use Timer.periodic (como abaixo)
+  /// que roda no isolate principal, ou refatore para passar apenas dados serializáveis.
   Timer? _syncTimer;
 
   /// Inicializa o agendador de sincronização automática (1 min) + sync de embeddings.
