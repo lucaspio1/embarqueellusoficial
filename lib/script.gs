@@ -188,7 +188,7 @@ function getAllPeople() {
     console.log('📋 Cabeçalho da planilha PESSOAS:', values[0]);
     console.log('📋 Total de colunas:', values[0].length);
 
-    // Cabeçalho: ID, NOME, CPF, EMAIL, TELEFONE, TURMA, EMBEDDING, TEM_QR
+    // Cabeçalho: ID, CPF, Nome, Email, TELEFONE, embedding, DATA_CADASTRO
     const pessoas = [];
 
     for (let i = 1; i < values.length; i++) {
@@ -208,13 +208,13 @@ function getAllPeople() {
 
       const pessoa = {
         id: row[0],
-        nome: row[1],
-        cpf: String(row[2]).trim(),
+        cpf: String(row[1]).trim(),
+        nome: row[2],
         email: row[3] || '',
         telefone: row[4] || '',
-        turma: row[5] || '',
-        embedding: row[6] || null, // JSON string ou null
-        tem_qr: String(row[7] || 'NAO').toUpperCase()
+        embedding: row[5] || null, // JSON string na coluna 5 (embedding)
+        turma: '', // Não existe na aba PESSOAS
+        tem_qr: 'NAO' // Não existe na aba PESSOAS
       };
 
       // Apenas adicionar pessoas com embedding válido
@@ -612,7 +612,7 @@ function getAllPeople() {
     console.log('📋 Cabeçalho da planilha PESSOAS:', values[0]);
     console.log('📋 Total de colunas:', values[0].length);
 
-    // Cabeçalho: ID, NOME, CPF, EMAIL, TELEFONE, TURMA, EMBEDDING, TEM_QR
+    // Cabeçalho: ID, CPF, Nome, Email, TELEFONE, embedding, DATA_CADASTRO
     const pessoas = [];
 
     for (let i = 1; i < values.length; i++) {
@@ -632,13 +632,13 @@ function getAllPeople() {
 
       const pessoa = {
         id: row[0],
-        nome: row[1],
-        cpf: String(row[2]).trim(),
+        cpf: String(row[1]).trim(),
+        nome: row[2],
         email: row[3] || '',
         telefone: row[4] || '',
-        turma: row[5] || '',
-        embedding: row[6] || null, // JSON string ou null
-        tem_qr: String(row[7] || 'NAO').toUpperCase()
+        embedding: row[5] || null, // JSON string na coluna 5 (embedding)
+        turma: '', // Não existe na aba PESSOAS
+        tem_qr: 'NAO' // Não existe na aba PESSOAS
       };
 
       // Apenas adicionar pessoas com embedding válido
