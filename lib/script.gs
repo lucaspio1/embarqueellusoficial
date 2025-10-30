@@ -449,18 +449,18 @@ function registrarLog(data) {
     console.log('📥 Registrando log:', nome, 'Confiança:', confidence);
 
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    let logsSheet = ss.getSheetByName('LOGS');
+    let movimentacoesSheet = ss.getSheetByName('Movimentacoes');
 
-    // Criar aba LOGS se não existir
-    if (!logsSheet) {
-      logsSheet = ss.insertSheet('LOGS');
-      logsSheet.appendRow(['TIMESTAMP', 'CPF', 'NOME', 'CONFIDENCE', 'TIPO']);
+    // Criar aba Movimentacoes se não existir
+    if (!movimentacoesSheet) {
+      movimentacoesSheet = ss.insertSheet('Movimentacoes');
+      movimentacoesSheet.appendRow(['TIMESTAMP', 'CPF', 'NOME', 'CONFIDENCE', 'TIPO']);
     }
 
     const timestamp = new Date().toISOString();
-    logsSheet.appendRow([timestamp, cpf, nome, confidence, tipo]);
+    movimentacoesSheet.appendRow([timestamp, cpf, nome, confidence, tipo]);
 
-    console.log('✅ Log registrado');
+    console.log('✅ Log registrado na aba Movimentacoes');
     return createResponse(true, 'Log registrado com sucesso');
 
   } catch (error) {

@@ -1,6 +1,7 @@
-// lib/services/offline_sync_service.dart — VERSÃO CORRIGIDA (envio inteligente + sync embeddings)
+// lib/services/offline_sync_service.dart — VERSÃO CORRIGIDA (envio inteligente + sync embeddings + isolates)
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:embarqueellus/database/database_helper.dart';
@@ -17,7 +18,7 @@ class OfflineSyncService {
   OfflineSyncService._();
   static final OfflineSyncService instance = OfflineSyncService._();
 
-  final String _sheetsWebhook = 'https://script.google.com/macros/s/AKfycbz8H_y2g5Zh8KvzxZiFKS4ToQjhfXZ2rlFjOHBAjCZXAksT96jevRekqYjAsVarETcI/exec';
+  final String _sheetsWebhook = 'https://script.google.com/macros/s/AKfycby14ubSOGVMr7Wzoof-r_pnNKUESSMvhk20z7NO2ZBqvS-DdiErwprhaEQ8Ay99IkIa/exec';
   final DatabaseHelper _db = DatabaseHelper.instance;
 
   Timer? _syncTimer;
@@ -28,11 +29,11 @@ class OfflineSyncService {
 
     _syncTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
       print('⏰ [OfflineSync] Timer de sincronização disparado');
-      await trySyncNow();
+      await trySyncInBackground(); // ✅ Agora em background!
     });
 
     print('✅ [OfflineSync] Sincronização automática iniciada (a cada 1 minuto)');
-    trySyncNow();
+    trySyncInBackground(); // ✅ Primeira sync também em background
     // 🔽 Faz o download dos embeddings no startup (após limpar dados, garante reconhecimento)
     syncEmbeddingsFromServer();
   }
@@ -182,6 +183,76 @@ class OfflineSyncService {
     } catch (e) {
       print('❌ [OfflineSync] Erro na sincronização: $e');
       return false;
+    }
+  }
+
+  // -----------------------------
+  // Sync em Background (Isolate)
+  // -----------------------------
+
+  /// Executa sincronização em background sem bloquear a UI
+  Future<void> trySyncInBackground() async {
+    try {
+      await Isolate.run(() async {
+        // Criar nova instância do DatabaseHelper no isolate
+        final db = DatabaseHelper.instance;
+        final webhook = _sheetsWebhook;
+
+        // Verificar internet
+        final c = await Connectivity().checkConnectivity();
+        if (c == ConnectivityResult.none) {
+          print('[Background] Sem conexão');
+          return;
+        }
+
+        // Buscar fila
+        final batch = await db.getOutboxBatch(limit: 50);
+        if (batch.isEmpty) {
+          print('[Background] Fila vazia');
+          return;
+        }
+
+        print('[Background] Sincronizando ${batch.length} itens...');
+
+        // Processar cada item
+        for (final row in batch) {
+          try {
+            final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
+            final tipo = row['tipo'] as String;
+            final id = row['id'] as int;
+
+            // Preparar body baseado no tipo
+            Map<String, dynamic> body;
+            if (tipo == 'face_register') {
+              body = {'action': 'cadastrarFacial', ...payload};
+            } else {
+              body = {'action': 'registrarLog', ...payload};
+            }
+
+            // Enviar
+            final response = await http.post(
+              Uri.parse(webhook),
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: jsonEncode(body),
+            );
+
+            // Se sucesso, remover da fila
+            if (response.statusCode >= 200 && response.statusCode < 400) {
+              await db.deleteOutboxItem(id);
+              print('[Background] Item $id enviado');
+            }
+          } catch (e) {
+            print('[Background] Erro item: $e');
+          }
+        }
+
+        print('[Background] Sync finalizado');
+      });
+    } catch (e) {
+      print('❌ [Background] Erro ao executar isolate: $e');
     }
   }
 
