@@ -8,7 +8,7 @@ class UserSyncService {
   UserSyncService._internal();
 
   // URL do GAS /exec
-  final String _apiBase = 'https://script.google.com/macros/s/AKfycbz8H_y2g5Zh8KvzxZiFKS4ToQjhfXZ2rlFjOHBAjCZXAksT96jevRekqYjAsVarETcI/exec';
+  final String _apiBase = 'https://script.google.com/macros/s/AKfycby14ubSOGVMr7Wzoof-r_pnNKUESSMvhk20z7NO2ZBqvS-DdiErwprhaEQ8Ay99IkIa/exec';
   final _db = DatabaseHelper.instance;
 
   String _hashSenha(String senha) => sha256.convert(utf8.encode(senha)).toString();
