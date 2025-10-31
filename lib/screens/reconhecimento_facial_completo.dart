@@ -7,6 +7,7 @@ import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
+import 'package:embarqueellus/services/auth_service.dart';
 
 class ReconhecimentoFacialScreen extends StatefulWidget {
   const ReconhecimentoFacialScreen({super.key});
@@ -130,6 +131,10 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       // Se não houver score (busca manual), usa 0.95 como fallback
       final confidence = (aluno['similarity_score'] as double?) ?? 0.95;
 
+      // ✅ Obter usuário logado para registrar nome do operador
+      final usuarioLogado = await AuthService.instance.getUsuarioLogado();
+      final operadorNome = usuarioLogado?['nome'] ?? 'Sistema';
+
       // ❌ REMOVIDO: insertLog() duplicado - queueLogAcesso já faz isso
       // await _db.insertLog(...)
 
@@ -141,6 +146,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         confidence: confidence,
         personId: aluno['cpf'],
         tipo: tipo,
+        operadorNome: operadorNome,
       );
 
       if (Navigator.canPop(context)) Navigator.pop(context);
@@ -429,6 +435,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
   Widget _buildLogCard(Map<String, dynamic> log) {
     final tipo = log['tipo'] ?? 'desconhecido';
     final nome = log['person_name'] ?? 'Sem nome';
+    final operador = log['operador_nome'] ?? 'Sistema';
     final timestamp = DateTime.parse(log['timestamp'] ?? DateTime.now().toIso8601String());
     final hora = '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
 
@@ -446,7 +453,21 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
           nome,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        subtitle: Text(tipoInfo['label']),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tipoInfo['label']),
+            const SizedBox(height: 2),
+            Text(
+              'Registrado por: $operador',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(

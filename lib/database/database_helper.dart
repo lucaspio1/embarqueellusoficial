@@ -19,9 +19,18 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDatabase,
+      onUpgrade: _upgradeDatabase,
     );
+  }
+
+  Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Adicionar coluna operador_nome à tabela logs
+      await db.execute('ALTER TABLE logs ADD COLUMN operador_nome TEXT');
+      print('✅ [DB] Migração v1 -> v2: Adicionado campo operador_nome na tabela logs');
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -86,6 +95,7 @@ class DatabaseHelper {
         timestamp TEXT,
         confidence REAL,
         tipo TEXT,
+        operador_nome TEXT,
         created_at TEXT,
         UNIQUE(cpf, timestamp, tipo)
       )
@@ -399,6 +409,7 @@ class DatabaseHelper {
     required DateTime timestamp,
     required double confidence,
     required String tipo,
+    String? operadorNome,
   }) async {
     final db = await database;
     await db.insert('logs', {
@@ -407,6 +418,7 @@ class DatabaseHelper {
       'timestamp': timestamp.toIso8601String(),
       'confidence': confidence,
       'tipo': tipo,
+      'operador_nome': operadorNome,
       'created_at': DateTime.now().toIso8601String(),
     });
   }
