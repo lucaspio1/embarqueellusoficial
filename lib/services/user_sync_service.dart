@@ -2,14 +2,16 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/config/app_config.dart';
 
 class UserSyncService {
   static final UserSyncService instance = UserSyncService._internal();
   UserSyncService._internal();
 
-  // URL do GAS /exec
-  final String _apiBase = 'https://script.google.com/macros/s/AKfycbzWUgnxCHr_60E2v8GEc8VyJrarq5JMp0nSIXDFKQsJb8yYXygocuqeeLiif_3HJc8A/exec';
   final _db = DatabaseHelper.instance;
+
+  // URL lida do arquivo .env
+  String get _apiBase => AppConfig.instance.googleAppsScriptUrl;
 
   String _hashSenha(String senha) => sha256.convert(utf8.encode(senha)).toString();
 

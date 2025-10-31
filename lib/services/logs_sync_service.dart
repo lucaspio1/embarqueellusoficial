@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/config/app_config.dart';
 
 /// Serviço para sincronizar logs do Google Sheets (aba LOGS)
 class LogsSyncService {
@@ -9,8 +10,8 @@ class LogsSyncService {
 
   final _db = DatabaseHelper.instance;
 
-  final String _apiUrl =
-      'https://script.google.com/macros/s/AKfycbzWUgnxCHr_60E2v8GEc8VyJrarq5JMp0nSIXDFKQsJb8yYXygocuqeeLiif_3HJc8A/exec';
+  // URL lida do arquivo .env
+  String get _apiUrl => AppConfig.instance.googleAppsScriptUrl;
 
   /// Sincroniza LOGS da aba LOGS do Google Sheets
   Future<SyncResult> syncLogsFromSheets() async {
