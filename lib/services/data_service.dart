@@ -256,7 +256,7 @@ class DataService {
       print('📤 [DataService] Enviando: ${json.encode(requestBody)}');
 
       final response = await http.post(
-        Uri.parse(apiUrl),
+        Uri.parse(_apiUrl),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -346,6 +346,7 @@ class DataService {
 // =========================================================
 Future<Passageiro?> fetchByCpf(String colegio, String cpf) async {
   try {
+    final apiUrl = AppConfig.instance.embarqueScriptUrl;
     final url = '$apiUrl?colegio=$colegio&cpf=$cpf';
     print('🔍 [DataService] Buscando por CPF: $url');
 
