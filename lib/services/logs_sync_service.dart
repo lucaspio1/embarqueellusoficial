@@ -88,13 +88,19 @@ class LogsSyncService {
 
   Future<SyncResult> _processarResposta(http.Response response) async {
     try {
+      print('📦 [LogsSync] Response body: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}...');
+
       final data = jsonDecode(response.body);
+      print('📦 [LogsSync] Decoded data: success=${data['success']}, data length=${data['data']?.length ?? 0}');
+
       if (data['success'] != true) {
         final msg = data['message'] ?? 'Erro desconhecido';
+        print('❌ [LogsSync] Erro: $msg');
         return SyncResult(success: false, count: 0, message: msg);
       }
 
       final logs = data['data'] ?? [];
+      print('📊 [LogsSync] Total de logs recebidos: ${logs.length}');
       int count = 0;
 
       for (final log in logs) {
@@ -115,9 +121,12 @@ class LogsSyncService {
             timestamp = DateTime.now();
           }
 
+          final personName = log['person_name'] ?? log['nome'] ?? '';
+          print('💾 [LogsSync] Salvando log: $personName (${log['cpf']}) - ${log['tipo']}');
+
           await _db.insertLog(
             cpf: log['cpf'] ?? '',
-            personName: log['person_name'] ?? log['nome'] ?? '',
+            personName: personName,
             timestamp: timestamp,
             confidence: (log['confidence'] ?? 0.0).toDouble(),
             tipo: log['tipo'] ?? 'FACIAL',
@@ -127,7 +136,9 @@ class LogsSyncService {
         } catch (e) {
           // Ignora duplicatas (constraint UNIQUE)
           if (!e.toString().contains('UNIQUE constraint failed')) {
-            print('❌ Erro ao salvar log: $e');
+            print('❌ Erro ao salvar log ${log['person_name']}: $e');
+          } else {
+            print('⚠️ Log duplicado ignorado: ${log['person_name']}');
           }
         }
       }
