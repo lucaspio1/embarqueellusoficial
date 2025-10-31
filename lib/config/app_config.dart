@@ -8,10 +8,18 @@ class AppConfig {
   AppConfig._();
   static final AppConfig instance = AppConfig._();
 
-  /// URL do Google Apps Script (Web App)
+  /// URL do Google Apps Script - DADOS GERAIS (ALUNOS, PESSOAS, LOGS, LOGIN)
   String get googleAppsScriptUrl {
     return dotenv.get(
       'GOOGLE_APPS_SCRIPT_URL',
+      fallback: '',
+    );
+  }
+
+  /// URL do Google Apps Script - EMBARQUES/PASSEIOS
+  String get embarqueScriptUrl {
+    return dotenv.get(
+      'EMBARQUE_SCRIPT_URL',
       fallback: '',
     );
   }
@@ -65,6 +73,10 @@ class AppConfig {
       print('❌ [Config] GOOGLE_APPS_SCRIPT_URL não configurada no .env');
       return false;
     }
+    if (embarqueScriptUrl.isEmpty) {
+      print('❌ [Config] EMBARQUE_SCRIPT_URL não configurada no .env');
+      return false;
+    }
     if (spreadsheetId.isEmpty) {
       print('❌ [Config] SPREADSHEET_ID não configurada no .env');
       return false;
@@ -75,7 +87,8 @@ class AppConfig {
   /// Imprime as configurações atuais (sem expor valores sensíveis)
   void printConfig() {
     print('📋 [Config] Configurações carregadas:');
-    print('   - Google Apps Script URL: ${googleAppsScriptUrl.isNotEmpty ? "✓ Configurada" : "✗ Não configurada"}');
+    print('   - Google Apps Script URL (Dados): ${googleAppsScriptUrl.isNotEmpty ? "✓ Configurada" : "✗ Não configurada"}');
+    print('   - Embarque Script URL (Passeios): ${embarqueScriptUrl.isNotEmpty ? "✓ Configurada" : "✗ Não configurada"}');
     print('   - Spreadsheet ID: ${spreadsheetId.isNotEmpty ? "✓ Configurada" : "✗ Não configurada"}');
     print('   - Intervalo de Sync: $syncIntervalMinutes minuto(s)');
     print('   - Max Retry: $maxRetryAttempts tentativa(s)');

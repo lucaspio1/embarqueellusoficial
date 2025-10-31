@@ -27,8 +27,13 @@ cp .env.example .env
 Abra o arquivo `.env` e preencha com suas configurações:
 
 ```env
-# URL do Google Apps Script (obrigatório)
-GOOGLE_APPS_SCRIPT_URL=https://script.google.com/macros/s/SEU_ID_AQUI/exec
+# URL do Google Apps Script - DADOS GERAIS (obrigatório)
+# Gerencia ALUNOS, PESSOAS, LOGS, LOGIN
+GOOGLE_APPS_SCRIPT_URL=https://script.google.com/macros/s/SEU_ID_DADOS/exec
+
+# URL do Google Apps Script - EMBARQUES (obrigatório)
+# Gerencia listas de embarque por passeio
+EMBARQUE_SCRIPT_URL=https://script.google.com/macros/s/SEU_ID_EMBARQUES/exec
 
 # ID da Planilha do Google Sheets (obrigatório)
 SPREADSHEET_ID=1xl2wJdaqzIkTA3gjBQws5j6XrOw3AR5RC7_CrDR1M0U
@@ -41,18 +46,28 @@ EMBEDDING_SIZE=512
 API_TIMEOUT_SECONDS=30
 ```
 
-### 3. Obter a URL do Google Apps Script
+### 3. Obter as URLs do Google Apps Script
 
-1. Acesse sua planilha do Google Sheets
+**Importante**: O sistema usa **2 scripts diferentes**:
+
+#### Script 1 - DADOS GERAIS (ALUNOS, PESSOAS, LOGS, LOGIN)
+1. Acesse a planilha com as abas ALUNOS, PESSOAS, LOGS, LOGIN
 2. Vá em **Extensões** > **Apps Script**
-3. Clique em **Implantar** > **Nova implantação**
-4. Escolha **Aplicativo da Web**
-5. Configure:
+3. Cole o código do arquivo `lib/script.gs`
+4. Clique em **Implantar** > **Nova implantação**
+5. Escolha **Aplicativo da Web**
+6. Configure:
    - Execute as: **Me**
    - Who has access: **Anyone**
-6. Clique em **Implantar**
-7. **Copie a URL** gerada
-8. Cole no arquivo `.env` em `GOOGLE_APPS_SCRIPT_URL`
+7. Clique em **Implantar**
+8. **Copie a URL** gerada
+9. Cole no arquivo `.env` em `GOOGLE_APPS_SCRIPT_URL`
+
+#### Script 2 - EMBARQUES/PASSEIOS
+1. Acesse o script que gerencia embarques
+2. Faça o deploy seguindo os mesmos passos acima
+3. **Copie a URL** gerada
+4. Cole no arquivo `.env` em `EMBARQUE_SCRIPT_URL`
 
 ### 4. Instale as dependências
 
@@ -74,7 +89,8 @@ Quando você iniciar o app, verá no console:
 ✅ Arquivo .env carregado com sucesso
 ⚙️  [1/5] Validando Configurações...
 📋 [Config] Configurações carregadas:
-   - Google Apps Script URL: ✓ Configurada
+   - Google Apps Script URL (Dados): ✓ Configurada
+   - Embarque Script URL (Passeios): ✓ Configurada
    - Spreadsheet ID: ✓ Configurada
    - Intervalo de Sync: 1 minuto(s)
    - Max Retry: 3 tentativa(s)
@@ -128,10 +144,11 @@ embarqueellusoficial/
 │   ├── config/
 │   │   └── app_config.dart # Classe que lê o .env
 │   ├── services/
-│   │   ├── offline_sync_service.dart    # Usa AppConfig
-│   │   ├── user_sync_service.dart       # Usa AppConfig
-│   │   ├── logs_sync_service.dart       # Usa AppConfig
-│   │   └── alunos_sync_service.dart     # Usa AppConfig
+│   │   ├── offline_sync_service.dart    # Usa AppConfig (dados gerais)
+│   │   ├── user_sync_service.dart       # Usa AppConfig (dados gerais)
+│   │   ├── logs_sync_service.dart       # Usa AppConfig (dados gerais)
+│   │   ├── alunos_sync_service.dart     # Usa AppConfig (dados gerais)
+│   │   └── data_service.dart            # Usa AppConfig (embarques)
 │   └── main.dart           # Carrega .env na inicialização
 └── pubspec.yaml            # Configurado com flutter_dotenv
 ```
@@ -149,7 +166,8 @@ Após configurar o `.env`:
 
 | Variável | Obrigatória | Padrão | Descrição |
 |----------|-------------|--------|-----------|
-| `GOOGLE_APPS_SCRIPT_URL` | ✅ Sim | - | URL do webhook do Google Apps Script |
+| `GOOGLE_APPS_SCRIPT_URL` | ✅ Sim | - | URL do script de dados gerais (ALUNOS, PESSOAS, LOGS, LOGIN) |
+| `EMBARQUE_SCRIPT_URL` | ✅ Sim | - | URL do script de embarques/passeios |
 | `SPREADSHEET_ID` | ✅ Sim | - | ID da planilha do Google Sheets |
 | `SYNC_INTERVAL_MINUTES` | ❌ Não | 1 | Intervalo de sincronização em minutos |
 | `MAX_RETRY_ATTEMPTS` | ❌ Não | 3 | Número de tentativas em caso de erro |
