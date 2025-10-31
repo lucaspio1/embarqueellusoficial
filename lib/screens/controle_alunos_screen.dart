@@ -8,6 +8,7 @@ import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ControleAlunosScreen extends StatefulWidget {
   const ControleAlunosScreen({super.key});
@@ -64,6 +65,10 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
       // Buscar TODOS os passageiros da tabela passageiros (carregados pelo QR Code)
       final todosPassageiros = await _db.getPassageiros();
 
+      final prefs = await SharedPreferences.getInstance();
+      final facialLiberada =
+          (prefs.getString('pulseira') ?? '').toUpperCase() == 'SIM';
+
       // Garantir que esses passageiros existam na tabela alunos para facial
       for (final passageiro in todosPassageiros) {
         final cpf = passageiro.cpf;
@@ -78,8 +83,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
             'email': '',
             'telefone': '',
             'turma': passageiro.turma ?? '',
-            'facial': 'NAO',
-            'tem_qr': 'SIM',
+            'facial': facialLiberada ? 'NAO' : 'BLOQUEADA',
+            'tem_qr': facialLiberada ? 'SIM' : 'NAO',
           });
         }
       }
