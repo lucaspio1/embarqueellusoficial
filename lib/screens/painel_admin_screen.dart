@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/auth_service.dart';
+import 'package:embarqueellus/screens/lista_alunos_screen.dart';
 
 class PainelAdminScreen extends StatefulWidget {
   const PainelAdminScreen({super.key});
@@ -16,8 +17,6 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
   bool _carregando = true;
   int _totalAlunos = 0;
   int _totalFaciais = 0;
-  int _totalPassageiros = 0;
-  int _totalEmbeddings = 0;
   int _totalLogs = 0;
   Map<String, dynamic>? _usuario;
 
@@ -33,16 +32,12 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     try {
       final alunos = await _db.getAllAlunos();
       final alunosComFacial = await _db.getTodosAlunosComFacial();
-      final passageiros = await _db.getPassageiros();
-      final embeddings = await _db.getAllEmbeddings();
       final logs = await _db.getAllLogs();
       final usuario = await _authService.getUsuarioLogado();
 
       setState(() {
         _totalAlunos = alunos.length;
         _totalFaciais = alunosComFacial.length;
-        _totalPassageiros = passageiros.length;
-        _totalEmbeddings = embeddings.length;
         _totalLogs = logs.length;
         _usuario = usuario;
         _carregando = false;
@@ -184,6 +179,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
                           _totalAlunos.toString(),
                           Icons.people,
                           Colors.blue,
+                          onTap: _abrirListaAlunos,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -193,30 +189,6 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
                           _totalFaciais.toString(),
                           Icons.face,
                           Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          'Passageiros',
-                          _totalPassageiros.toString(),
-                          Icons.directions_bus,
-                          Colors.orange,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Embeddings',
-                          _totalEmbeddings.toString(),
-                          Icons.fingerprint,
-                          Colors.purple,
                         ),
                       ),
                     ],
@@ -289,8 +261,23 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
-    return Card(
+  void _abrirListaAlunos() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ListaAlunosScreen(),
+      ),
+    );
+  }
+
+  Widget _buildStatCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
+    final card = Card(
       elevation: 4,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -318,5 +305,15 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
         ),
       ),
     );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: card,
+      );
+    }
+
+    return card;
   }
 }
