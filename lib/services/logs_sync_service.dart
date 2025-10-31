@@ -99,9 +99,26 @@ class LogsSyncService {
 
       for (final log in logs) {
         try {
+          // Parse do timestamp - pode vir como string ou já estar no formato correto
+          DateTime timestamp;
+          try {
+            if (log['timestamp'] is String) {
+              timestamp = DateTime.parse(log['timestamp']);
+            } else if (log['timestamp'] is DateTime) {
+              timestamp = log['timestamp'];
+            } else {
+              // Se não houver timestamp válido, usar a data atual
+              timestamp = DateTime.now();
+            }
+          } catch (e) {
+            print('⚠️ Erro ao fazer parse do timestamp: $e, usando data atual');
+            timestamp = DateTime.now();
+          }
+
           await _db.insertLog(
             cpf: log['cpf'] ?? '',
             personName: log['person_name'] ?? log['nome'] ?? '',
+            timestamp: timestamp,
             confidence: (log['confidence'] ?? 0.0).toDouble(),
             tipo: log['tipo'] ?? 'FACIAL',
             operadorNome: log['operador_nome'] ?? log['operador'] ?? '',

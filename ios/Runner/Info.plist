@@ -53,5 +53,9 @@
 	<string>Este aplicativo precisa salvar fotos na biblioteca para manter registros dos embarques.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Este aplicativo precisa acessar o microfone para funcionalidades de câmera.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Este aplicativo usa reconhecimento facial para identificar alunos durante o embarque.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Este aplicativo precisa acessar a localização para registrar onde os embarques estão ocorrendo.</string>
 </dict>
 </plist>
