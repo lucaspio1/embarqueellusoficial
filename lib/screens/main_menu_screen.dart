@@ -320,7 +320,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     return Center(
       child: SizedBox(
         width: 320,
-        height: subtitle != null ? 110 : 90,
+        height: subtitle != null ? 115 : 95,
         child: ElevatedButton(
           onPressed: onPressed,
           style: ElevatedButton.styleFrom(
