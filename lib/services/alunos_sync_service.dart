@@ -168,23 +168,15 @@ class AlunosSyncService {
       }
 
       final pessoas = data['data'] ?? [];
-      int countAlunos = 0;
+      int countPessoas = 0;
       int countEmbeddings = 0;
 
       for (final pessoa in pessoas) {
         try {
-          // Salvar na tabela alunos
-          await _db.upsertAluno({
-            'cpf': pessoa['cpf'] ?? '',
-            'nome': pessoa['nome'] ?? '',
-            'email': pessoa['email'] ?? '',
-            'telefone': pessoa['telefone'] ?? '',
-            'turma': pessoa['turma'] ?? '',
-            'facial': 'CADASTRADA', // Vem da aba PESSOAS, então já tem facial
-          });
-          countAlunos++;
+          // 🔽 NOVA LÓGICA: Salvar na tabela pessoas_facial ao invés de alunos
+          // Pessoas vêm da aba "Pessoas" e já têm facial cadastrada
 
-          // Salvar embedding se existir
+          // Processar embedding se existir
           if (pessoa['embedding'] != null && pessoa['embedding'] != '') {
             try {
               List<double> embedding;
@@ -199,7 +191,7 @@ class AlunosSyncService {
 
                 // Verificar se é uma string vazia ou data (formato inválido)
                 if (embeddingStr.isEmpty || embeddingStr.contains('T') || embeddingStr.length < 10) {
-                  print('⚠️ [${pessoa['cpf']}] Embedding inválido (string vazia ou formato incorreto): "${embeddingStr.substring(0, embeddingStr.length > 50 ? 50 : embeddingStr.length)}"');
+                  print('⚠️ [${pessoa['cpf']}] Embedding inválido (string vazia ou formato incorreto)');
                   continue;
                 }
 
@@ -212,7 +204,6 @@ class AlunosSyncService {
                   embedding = List<double>.from(embeddingList);
                 } catch (e) {
                   print('⚠️ [${pessoa['cpf']}] Erro ao fazer parse do embedding string: $e');
-                  print('⚠️ [${pessoa['cpf']}] Conteúdo: "${embeddingStr.substring(0, embeddingStr.length > 100 ? 100 : embeddingStr.length)}..."');
                   continue;
                 }
               } else if (pessoa['embedding'] is List) {
@@ -228,15 +219,29 @@ class AlunosSyncService {
                 continue;
               }
 
+              // Salvar na tabela pessoas_facial (nova tabela)
+              await _db.upsertPessoaFacial({
+                'cpf': pessoa['cpf'] ?? '',
+                'nome': pessoa['nome'] ?? '',
+                'email': pessoa['email'] ?? '',
+                'telefone': pessoa['telefone'] ?? '',
+                'turma': pessoa['turma'] ?? '',
+                'embedding': jsonEncode(embedding),
+                'facial_status': 'CADASTRADA',
+              });
+
+              // Também salvar na tabela embeddings antiga para compatibilidade
               await _db.insertEmbedding({
                 'cpf': pessoa['cpf'] ?? '',
                 'nome': pessoa['nome'] ?? '',
                 'embedding': embedding,
               });
+
+              countPessoas++;
               countEmbeddings++;
-              print('✅ [${pessoa['cpf']}] Embedding salvo com sucesso (${embedding.length} dimensões)');
+              print('✅ [${pessoa['cpf']}] Pessoa e embedding salvos com sucesso (${embedding.length} dimensões)');
             } catch (e, stack) {
-              print('❌ [${pessoa['cpf']}] Erro ao processar embedding: $e');
+              print('❌ [${pessoa['cpf']}] Erro ao processar pessoa/embedding: $e');
               print('Stack: $stack');
             }
           } else {
@@ -247,11 +252,11 @@ class AlunosSyncService {
         }
       }
 
-      print('✅ [$countAlunos] pessoas sincronizadas | [$countEmbeddings] embeddings salvos');
+      print('✅ [$countPessoas] pessoas sincronizadas | [$countEmbeddings] embeddings salvos');
       return SyncResult(
         success: true,
-        count: countAlunos,
-        message: '$countAlunos pessoas e $countEmbeddings embeddings sincronizados'
+        count: countPessoas,
+        message: '$countPessoas pessoas e $countEmbeddings embeddings sincronizados'
       );
     } catch (e) {
       print('❌ [ProcessarRespostaPessoas] Erro: $e');
