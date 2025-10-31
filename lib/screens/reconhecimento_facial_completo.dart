@@ -52,7 +52,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         print('⚠️ [Reconhecimento] Erro ao sincronizar: ${syncResult.message}');
       }
 
-      final alunos = await _db.getAllAlunos();
+      final alunos = await _db.getTodosAlunosComFacial();
       final logs = await _db.getLogsHoje();
 
       setState(() {
@@ -256,7 +256,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
 
   @override
   Widget build(BuildContext context) {
-    final alunosComFacial = _todosAlunos.where((a) => a['facial'] != null).length;
+    final alunosComFacial = _todosAlunos.length;
     final totalPassagensHoje = _logsHoje.length;
 
     return Scaffold(
@@ -701,7 +701,9 @@ class _BuscaManualDialogState extends State<_BuscaManualDialog> {
                 itemCount: _alunosFiltrados.length,
                 itemBuilder: (context, index) {
                   final aluno = _alunosFiltrados[index];
-                  final temFacial = aluno['facial'] != null;
+                  final temFacial =
+                      (aluno['facial'] ?? '').toString().toUpperCase() ==
+                          'CADASTRADA';
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),

@@ -82,6 +82,9 @@ class DataService {
     final listaJson = json.encode(lista.map((p) => p.toJson()).toList());
     await prefs.setString('passageiros_json', listaJson);
 
+    final pulseira = (prefs.getString('pulseira') ?? '').toUpperCase();
+    final facialLiberada = pulseira == 'SIM';
+
     // Salvar também no banco SQLite (tabela passageiros)
     final db = DatabaseHelper.instance;
     try {
@@ -92,15 +95,20 @@ class DataService {
 
       // Também sincronizar para tabela alunos com tem_qr='SIM'
       for (final passageiro in lista) {
-        if (passageiro.cpf != null && passageiro.cpf!.isNotEmpty) {
+        final cpf = passageiro.cpf;
+        if (cpf != null && cpf.isNotEmpty) {
+          final alunoExistente = await db.getAlunoByCpf(cpf);
+          final statusFacial = alunoExistente?['facial'] ??
+              (facialLiberada ? 'NAO' : 'BLOQUEADA');
+
           await db.upsertAluno({
-            'cpf': passageiro.cpf,
+            'cpf': cpf,
             'nome': passageiro.nome,
-            'email': '',
-            'telefone': '',
-            'turma': passageiro.turma ?? '',
-            'facial': 'NAO',
-            'tem_qr': 'SIM', // Todos os passageiros baixados têm QR
+            'email': alunoExistente?['email'] ?? '',
+            'telefone': alunoExistente?['telefone'] ?? '',
+            'turma': passageiro.turma ?? alunoExistente?['turma'] ?? '',
+            'facial': statusFacial,
+            'tem_qr': facialLiberada ? 'SIM' : 'NAO',
           });
         }
       }

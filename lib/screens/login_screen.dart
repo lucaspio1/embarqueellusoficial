@@ -22,7 +22,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _verificarUsuariosLocais();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _verificarUsuariosLocais(exibirAviso: false);
+      await _sincronizarUsuarios(automatico: true);
+    });
   }
 
   @override
@@ -32,59 +35,71 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _verificarUsuariosLocais() async {
+  Future<void> _verificarUsuariosLocais({bool exibirAviso = true}) async {
     final temUsuarios = await _authService.temUsuariosLocais();
+
+    if (!mounted) return;
+
     setState(() {
       _temUsuariosLocais = temUsuarios;
     });
 
-    if (!temUsuarios) {
-      // Mostrar aviso para sincronizar
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ Nenhum usuário encontrado. Clique em "Sincronizar Usuários" para baixar os dados da planilha.'),
-            duration: Duration(seconds: 5),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+    if (!temUsuarios && exibirAviso) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Nenhum usuário encontrado. Clique em "Sincronizar Usuários" para baixar os dados da planilha.'),
+          duration: Duration(seconds: 5),
+          backgroundColor: Colors.orange,
+        ),
+      );
     }
   }
 
-  Future<void> _sincronizarUsuarios() async {
+  Future<void> _sincronizarUsuarios({bool automatico = false}) async {
+    if (_sincronizando) return;
+
     setState(() => _sincronizando = true);
 
     try {
+      final tinhaUsuariosLocais = _temUsuariosLocais;
       final sucesso = await _authService.syncUsuarios();
+      final temUsuariosAtualizados = await _authService.temUsuariosLocais();
 
       if (!mounted) return;
 
-      if (sucesso) {
-        setState(() => _temUsuariosLocais = true);
+      setState(() => _temUsuariosLocais = temUsuariosAtualizados);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Usuários sincronizados com sucesso!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Erro ao sincronizar usuários. Verifique sua conexão com a internet.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      final deveExibirFeedback = !automatico || !tinhaUsuariosLocais;
+
+      if (deveExibirFeedback) {
+        if (sucesso && temUsuariosAtualizados) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Usuários sincronizados com sucesso!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Erro ao sincronizar usuários. Verifique sua conexão com a internet.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
+
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Erro: $e'),
-            backgroundColor: Colors.red,
-          ),
+        final mensagem = SnackBar(
+          content: Text('❌ Erro: $e'),
+          backgroundColor: Colors.red,
         );
+
+        final deveExibirFeedback = !automatico || !_temUsuariosLocais;
+        if (deveExibirFeedback) {
+          ScaffoldMessenger.of(context).showSnackBar(mensagem);
+        }
       }
     } finally {
       if (mounted) {
