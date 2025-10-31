@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/screens/lista_alunos_screen.dart';
+import 'package:embarqueellus/screens/lista_logs_screen.dart';
 
 class PainelAdminScreen extends StatefulWidget {
   const PainelAdminScreen({super.key});
@@ -201,6 +202,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
                     _totalLogs.toString(),
                     Icons.history,
                     Colors.indigo,
+                    onTap: _abrirListaLogs,
                   ),
 
                   const SizedBox(height: 32),
@@ -266,6 +268,15 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => const ListaAlunosScreen(),
+      ),
+    );
+  }
+
+  void _abrirListaLogs() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ListaLogsScreen(),
       ),
     );
   }
