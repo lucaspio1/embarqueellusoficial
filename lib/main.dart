@@ -8,7 +8,7 @@ import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
 import 'package:embarqueellus/services/auth_service.dart';
 
-const String apiUrl = "https://script.google.com/macros/s/AKfycby14ubSOGVMr7Wzoof-r_pnNKUESSMvhk20z7NO2ZBqvS-DdiErwprhaEQ8Ay99IkIa/exec";
+const String apiUrl = "https://script.google.com/macros/s/AKfycbwdflIAiZfz9PnolgTsvzcVgs_IpugIhYs4-u0YT6SekJPUqGEhawIntA7tG51NlrlT/exec";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

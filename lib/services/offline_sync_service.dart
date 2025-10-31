@@ -1,19 +1,10 @@
-// lib/services/offline_sync_service.dart — VERSÃO CORRIGIDA (envio inteligente + sync embeddings + isolates)
+// lib/services/offline_sync_service.dart — VERSÃO CORRIGIDA (sem isolate!)
 import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:embarqueellus/database/database_helper.dart';
 
-/// Serviço de sincronização offline com Google Apps Script / Google Sheets.
-///
-/// Estratégia:
-/// - Movimentações: tenta LOTE; se parcial/falha, fallback por item (retries).
-/// - Cadastros faciais: envia sempre individualmente (compatível com seu GAS).
-/// - Remove da fila apenas itens confirmados.
-/// - Trata 301/302 do GAS como sucesso (POST processado).
-/// - Sincroniza embeddings do servidor para o SQLite no init().
 class OfflineSyncService {
   OfflineSyncService._();
   static final OfflineSyncService instance = OfflineSyncService._();
@@ -21,28 +12,18 @@ class OfflineSyncService {
   final String _sheetsWebhook = 'https://script.google.com/macros/s/AKfycby14ubSOGVMr7Wzoof-r_pnNKUESSMvhk20z7NO2ZBqvS-DdiErwprhaEQ8Ay99IkIa/exec';
   final DatabaseHelper _db = DatabaseHelper.instance;
 
-  /// IMPORTANTE: NÃO tente usar background isolates (compute/Isolate.spawn) com este serviço!
-  /// Motivo: Este serviço contém objetos não-serializáveis que não podem ser enviados
-  /// entre isolates:
-  /// - _syncTimer (Timer instance)
-  /// - _db (DatabaseHelper com conexões SQLite)
-  ///
-  /// Se precisar de processamento em background, use Timer.periodic (como abaixo)
-  /// que roda no isolate principal, ou refatore para passar apenas dados serializáveis.
   Timer? _syncTimer;
 
-  /// Inicializa o agendador de sincronização automática (1 min) + sync de embeddings.
   void init() {
     _syncTimer?.cancel();
 
     _syncTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
       print('⏰ [OfflineSync] Timer de sincronização disparado');
-      await trySyncInBackground(); // ✅ Agora em background!
+      await trySyncInBackground();
     });
 
     print('✅ [OfflineSync] Sincronização automática iniciada (a cada 1 minuto)');
-    trySyncInBackground(); // ✅ Primeira sync também em background
-    // 🔽 Faz o download dos embeddings no startup (após limpar dados, garante reconhecimento)
+    trySyncInBackground();
     syncEmbeddingsFromServer();
   }
 
@@ -98,10 +79,6 @@ class OfflineSyncService {
     print('📝 [OfflineSync] Cadastro facial enfileirado: $nome');
   }
 
-  // -----------------------------
-  // Execução de sync
-  // -----------------------------
-
   Future<bool> _hasInternet() async {
     final c = await Connectivity().checkConnectivity();
     return c != ConnectivityResult.none;
@@ -141,9 +118,8 @@ class OfflineSyncService {
     final successIds = <int>[];
 
     try {
-      // 1) cadastros faciais — individual
       if (faceRegisters.isNotEmpty) {
-        print('📸 [OfflineSync] Enviando ${faceRegisters.length} cadastro(s) facial(is) individualmente...');
+        print('📸 [OfflineSync] Enviando ${faceRegisters.length} cadastro(s) facial(is)...');
         for (final item in faceRegisters) {
           final ok = await _sendPersonIndividually(item);
           if (ok) {
@@ -153,7 +129,6 @@ class OfflineSyncService {
         }
       }
 
-      // 2) movimentações — lote + fallback
       if (movementLogs.isNotEmpty) {
         print('📍 [OfflineSync] Tentando envio em LOTE de ${movementLogs.length} movimentação(ões)...');
         final lot = await _sendMovementsBatch(movementLogs);
@@ -164,7 +139,7 @@ class OfflineSyncService {
           );
           print('✅ [OfflineSync] Lote de movimentações confirmado');
         } else {
-          print('⚠️ [OfflineSync] Lote parcial/sem confirmação — fallback individual...');
+          print('⚠️ [OfflineSync] Lote parcial — fallback individual...');
           for (final item in lot.notConfirmedItems) {
             final ok = await _sendMovementIndividually(item);
             if (ok) {
@@ -195,82 +170,14 @@ class OfflineSyncService {
   }
 
   // -----------------------------
-  // Sync em Background (Isolate)
+  // Background sem isolate!
   // -----------------------------
 
-  /// Executa sincronização em background sem bloquear a UI
   Future<void> trySyncInBackground() async {
     try {
-      await Isolate.run(() async {
-        // Criar nova instância do DatabaseHelper no isolate
-        final db = DatabaseHelper.instance;
-        final webhook = _sheetsWebhook;
-
-        // Verificar internet
-        final c = await Connectivity().checkConnectivity();
-        if (c == ConnectivityResult.none) {
-          print('[Background] Sem conexão');
-          return;
-        }
-
-        // Buscar fila
-        final batch = await db.getOutboxBatch(limit: 50);
-        if (batch.isEmpty) {
-          print('[Background] Fila vazia');
-          return;
-        }
-
-        print('[Background] Sincronizando ${batch.length} itens...');
-
-        final successIds = <int>[];
-
-        // Processar cada item
-        for (final row in batch) {
-          try {
-            final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
-            final tipo = row['tipo'] as String;
-            final id = row['id'] as int;
-
-            // Preparar body baseado no tipo
-            Map<String, dynamic> body;
-            if (tipo == 'face_register') {
-              body = {'action': 'cadastrarFacial', ...payload};
-            } else {
-              body = {'action': 'registrarLog', ...payload};
-            }
-
-            // Enviar
-            final response = await http.post(
-              Uri.parse(webhook),
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
-              body: jsonEncode(body),
-            );
-
-            // Se sucesso, adicionar à lista de IDs para remover
-            if (response.statusCode >= 200 && response.statusCode < 400) {
-              successIds.add(id);
-              print('[Background] Item $id enviado (${response.statusCode})');
-            } else {
-              print('[Background] Item $id falhou (${response.statusCode})');
-            }
-          } catch (e) {
-            print('[Background] Erro item: $e');
-          }
-        }
-
-        // Remover todos os itens com sucesso de uma vez
-        if (successIds.isNotEmpty) {
-          await db.deleteOutboxIds(successIds);
-          print('[Background] Removidos ${successIds.length} itens da fila');
-        }
-
-        print('[Background] Sync finalizado (${successIds.length}/${batch.length} enviados)');
-      });
+      await trySyncNow();
     } catch (e) {
-      print('❌ [Background] Erro ao executar isolate: $e');
+      print('❌ [OfflineSync] Erro em background: $e');
     }
   }
 
@@ -302,7 +209,7 @@ class OfflineSyncService {
         final json = jsonDecode(resp.body);
         final success = json is Map && json['success'] == true;
         if (!success) {
-          print('⚠️ [OfflineSync] Lote 2xx porém success=false: ${resp.body}');
+          print('⚠️ [OfflineSync] 2xx porém success=false: ${resp.body}');
           return _BatchResult(allSucceeded: false, notConfirmedItems: items);
         }
         final data = (json['data'] as Map?) ?? const {};
@@ -313,7 +220,6 @@ class OfflineSyncService {
         print('ℹ️ [OfflineSync] Lote parcial: total=$total de ${items.length}');
         return _BatchResult(allSucceeded: false, notConfirmedItems: items);
       } catch (_) {
-        print('ℹ️ [OfflineSync] Lote 2xx sem JSON — considerando sucesso');
         return _BatchResult(allSucceeded: true, notConfirmedItems: const []);
       }
     }
@@ -332,10 +238,9 @@ class OfflineSyncService {
   // Envio — Cadastros faciais
   // -----------------------------
 
-  /// Envia cadastro facial para a aba "Pessoas" do Google Sheets
   Future<bool> _sendPersonIndividually(Map<String, dynamic> item) async {
     final copy = Map<String, dynamic>.from(item)..remove('idOutbox');
-    // 🔽 IMPORTANTE: action 'addPessoa' envia para a aba PESSOAS (não para embarque)
+
     final body = <String, dynamic>{
       'action': 'addPessoa',
       'cpf': copy['cpf'],
@@ -347,10 +252,6 @@ class OfflineSyncService {
     };
     return _postWithRetriesAndSuccess(body);
   }
-
-  // -----------------------------
-  // POST helpers (retries & 302)
-  // -----------------------------
 
   Future<bool> _postWithRetriesAndSuccess(Map<String, dynamic> body, {int maxRetries = 3}) async {
     int attempt = 0;
@@ -369,10 +270,8 @@ class OfflineSyncService {
             try {
               final json = jsonDecode(resp.body);
               if (json is Map && json['success'] == true) return true;
-              print('ℹ️ [OfflineSync] 2xx sem success=true — considerando sucesso.');
               return true;
             } catch (_) {
-              print('ℹ️ [OfflineSync] 2xx sem JSON — considerando sucesso.');
               return true;
             }
           }
@@ -382,7 +281,7 @@ class OfflineSyncService {
       } catch (e) {
         print('❌ [OfflineSync] Exceção ao enviar: $e (tentativa $attempt/$maxRetries)');
       }
-      await Future.delayed(Duration(seconds: attempt)); // backoff simples
+      await Future.delayed(Duration(seconds: attempt));
     }
     return false;
   }
@@ -413,7 +312,7 @@ class OfflineSyncService {
   }
 
   // -----------------------------
-  // Download de embeddings do servidor → SQLite
+  // Download de embeddings do servidor
   // -----------------------------
 
   Future<void> syncEmbeddingsFromServer() async {
@@ -447,7 +346,7 @@ class OfflineSyncService {
           print("⚠️ [Embeddings] Resposta sem success=true: ${resp.body}");
         }
       } else if (resp.statusCode == 301 || resp.statusCode == 302) {
-        print("ℹ️ [Embeddings] 301/302 recebido — considere sucesso se o GAS já tiver processado.");
+        print("ℹ️ [Embeddings] 301/302 recebido — considere sucesso.");
       } else {
         print("❌ [Embeddings] HTTP ${resp.statusCode}: ${resp.body}");
       }
@@ -456,10 +355,8 @@ class OfflineSyncService {
     }
   }
 
-  // -----------------------------
-
   Future<void> testConnection() async {
-    print('🔍 [OfflineSync] Testando conexão com Google Apps Script...');
+    print('🔍 [OfflineSync] Testando conexão...');
     final ok = await _postWithRetriesAndSuccess({
       'action': 'testConnection',
       'people': [
