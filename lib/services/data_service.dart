@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:embarqueellus/models/passageiro.dart';
-import 'package:embarqueellus/main.dart';
+import 'package:embarqueellus/config/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 
@@ -15,6 +15,9 @@ class DataService {
   DataService._internal() {
     _loadPendingData();
   }
+
+  // URL lida do arquivo .env (script de embarques)
+  String get _apiUrl => AppConfig.instance.embarqueScriptUrl;
 
   final ValueNotifier<List<Passageiro>> passageirosEmbarque = ValueNotifier([]);
 
@@ -35,7 +38,7 @@ class DataService {
 
     try {
       final url =
-          '$apiUrl?colegio=$nomeAba&id_passeio=$nomePasseio&onibus=$_numeroOnibus';
+          '$_apiUrl?colegio=$nomeAba&id_passeio=$nomePasseio&onibus=$_numeroOnibus';
       print('🔍 [DataService] URL: $url');
 
       final response = await http.get(Uri.parse(url));
