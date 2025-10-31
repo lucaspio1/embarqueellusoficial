@@ -203,10 +203,6 @@ class OfflineSyncService {
       return _BatchResult(allSucceeded: false, notConfirmedItems: items);
     }
 
-    if (resp.statusCode == 301 || resp.statusCode == 302) {
-      return _BatchResult(allSucceeded: true, notConfirmedItems: const []);
-    }
-
     if (resp.statusCode >= 200 && resp.statusCode < 300) {
       try {
         final json = jsonDecode(resp.body);
@@ -267,8 +263,6 @@ class OfflineSyncService {
         } else {
           print('📡 [OfflineSync] Status: ${resp.statusCode} (tentativa $attempt/$maxRetries)');
 
-          if (resp.statusCode == 301 || resp.statusCode == 302) return true;
-
           if (resp.statusCode >= 200 && resp.statusCode < 300) {
             try {
               final json = jsonDecode(resp.body);
@@ -305,6 +299,44 @@ class OfflineSyncService {
 
       final preview = resp.body.length > 300 ? '${resp.body.substring(0, 300)}...' : resp.body;
       print('📥 [OfflineSync] Resp ${resp.statusCode} | body: $preview');
+
+      // Tratar redirecionamento 302
+      if (resp.statusCode == 302 && resp.headers['location'] != null) {
+        final redirectedUrl = resp.headers['location']!;
+        print('🔁 [OfflineSync] Seguindo redirect: $redirectedUrl');
+
+        try {
+          // Tentar POST primeiro
+          http.Response redirectedResponse = await http.post(
+            Uri.parse(redirectedUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'User-Agent': 'Flutter-App/1.0',
+            },
+            body: jsonEncode(body),
+          );
+
+          // Se POST não funcionar (405), tentar GET
+          if (redirectedResponse.statusCode == 405) {
+            print('⚠️ [OfflineSync] POST não permitido, tentando GET...');
+            redirectedResponse = await http.get(
+              Uri.parse(redirectedUrl),
+              headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Flutter-App/1.0',
+              },
+            );
+          }
+
+          print('📡 [OfflineSync] Redirect Status: ${redirectedResponse.statusCode}');
+          return redirectedResponse;
+        } catch (e) {
+          print('❌ [OfflineSync] Erro ao seguir redirect: $e');
+          return resp; // Retorna resposta original em caso de erro
+        }
+      }
+
       return resp;
     } catch (e) {
       print('❌ [OfflineSync] Erro ao enviar POST: $e');
@@ -348,8 +380,6 @@ class OfflineSyncService {
         } else {
           print("⚠️ [Embeddings] Resposta sem success=true: ${resp.body}");
         }
-      } else if (resp.statusCode == 301 || resp.statusCode == 302) {
-        print("ℹ️ [Embeddings] 301/302 recebido — considere sucesso.");
       } else {
         print("❌ [Embeddings] HTTP ${resp.statusCode}: ${resp.body}");
       }
