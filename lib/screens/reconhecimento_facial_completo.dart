@@ -130,14 +130,10 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       // Se não houver score (busca manual), usa 0.95 como fallback
       final confidence = (aluno['similarity_score'] as double?) ?? 0.95;
 
-      await _db.insertLog(
-        cpf: aluno['cpf'],
-        personName: aluno['nome'],
-        timestamp: timestamp,
-        confidence: confidence,
-        tipo: tipo,
-      );
+      // ❌ REMOVIDO: insertLog() duplicado - queueLogAcesso já faz isso
+      // await _db.insertLog(...)
 
+      // ✅ ÚNICA ORIGEM DE ESCRITA: queueLogAcesso insere no DB + enfileira para sync
       await OfflineSyncService.instance.queueLogAcesso(
         cpf: aluno['cpf'],
         personName: aluno['nome'],
