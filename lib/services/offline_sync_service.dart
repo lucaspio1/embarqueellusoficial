@@ -38,6 +38,7 @@ class OfflineSyncService {
     required double confidence,
     required String personId,
     required String tipo,
+    String? operadorNome,
   }) async {
     await _db.insertLog(
       cpf: cpf,
@@ -45,6 +46,7 @@ class OfflineSyncService {
       timestamp: timestamp,
       confidence: confidence,
       tipo: tipo,
+      operadorNome: operadorNome,
     );
 
     await _db.enqueueOutbox('movement_log', {
@@ -54,9 +56,10 @@ class OfflineSyncService {
       'confidence': confidence,
       'personId': personId,
       'tipo': tipo,
+      'operadorNome': operadorNome,
     });
 
-    print('📝 [OfflineSync] Log enfileirado: $personName - $tipo');
+    print('📝 [OfflineSync] Log enfileirado: $personName - $tipo (Operador: ${operadorNome ?? "N/A"})');
   }
 
   Future<void> queueCadastroFacial({
