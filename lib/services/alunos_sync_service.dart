@@ -161,13 +161,19 @@ class AlunosSyncService {
 
   Future<SyncResult> _processarRespostaPessoas(http.Response response) async {
     try {
+      print('📦 [PessoasSync] Response body: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}...');
+
       final data = jsonDecode(response.body);
+      print('📦 [PessoasSync] Decoded data: success=${data['success']}, data length=${data['data']?.length ?? 0}');
+
       if (data['success'] != true) {
         final msg = data['message'] ?? 'Erro desconhecido';
+        print('❌ [PessoasSync] Erro: $msg');
         return SyncResult(success: false, count: 0, message: msg);
       }
 
       final pessoas = data['data'] ?? [];
+      print('📊 [PessoasSync] Total de pessoas recebidas: ${pessoas.length}');
       int countPessoas = 0;
       int countEmbeddings = 0;
 
@@ -267,28 +273,36 @@ class AlunosSyncService {
 
   Future<SyncResult> _processarResposta(http.Response response) async {
     try {
+      print('📦 [AlunosSync] Response body: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}...');
+
       final data = jsonDecode(response.body);
+      print('📦 [AlunosSync] Decoded data: success=${data['success']}, data length=${data['data']?.length ?? 0}');
+
       if (data['success'] != true) {
         final msg = data['message'] ?? 'Erro desconhecido';
+        print('❌ [AlunosSync] Erro: $msg');
         return SyncResult(success: false, count: 0, message: msg);
       }
 
       final alunos = data['data'] ?? [];
+      print('📊 [AlunosSync] Total de alunos recebidos: ${alunos.length}');
       int count = 0;
       for (final aluno in alunos) {
         try {
-          await _db.upsertAluno({
+          final alunoData = {
             'cpf': aluno['cpf'] ?? '',
             'nome': aluno['nome'] ?? '',
             'email': aluno['email'] ?? '',
             'telefone': aluno['telefone'] ?? '',
             'turma': aluno['turma'] ?? '',
             'facial': aluno['facial_status'],
-            'tem_qr': aluno['tem_qr'] ?? aluno['pulseira'] ?? 'NAO', // Campo para controle de QR/pulseira
-          });
+            'tem_qr': aluno['tem_qr'] ?? aluno['pulseira'] ?? 'NAO',
+          };
+          print('💾 [AlunosSync] Salvando aluno: ${alunoData['nome']} (${alunoData['cpf']})');
+          await _db.upsertAluno(alunoData);
           count++;
         } catch (e) {
-          print('❌ Erro ao salvar aluno: $e');
+          print('❌ Erro ao salvar aluno ${aluno['nome']}: $e');
         }
       }
 
