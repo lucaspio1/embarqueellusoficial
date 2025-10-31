@@ -86,7 +86,8 @@ class DatabaseHelper {
         timestamp TEXT,
         confidence REAL,
         tipo TEXT,
-        created_at TEXT
+        created_at TEXT,
+        UNIQUE(cpf, timestamp, tipo)
       )
     ''');
 
@@ -174,6 +175,100 @@ class DatabaseHelper {
         )
       ''');
       print('✅ Tabela pessoas_facial criada');
+    }
+
+    // 🔒 MIGRATION: Adicionar UNIQUE constraint na tabela logs
+    // Verifica se precisa migrar (apps existentes sem a constraint)
+    try {
+      // Tenta inserir log duplicado para testar se constraint existe
+      final testTimestamp = '2000-01-01T00:00:00.000Z';
+      await db.insert('logs', {
+        'cpf': 'TEST',
+        'person_name': 'TEST',
+        'timestamp': testTimestamp,
+        'confidence': 0.0,
+        'tipo': 'TEST',
+        'created_at': testTimestamp,
+      });
+      // Tenta inserir novamente
+      await db.insert('logs', {
+        'cpf': 'TEST',
+        'person_name': 'TEST',
+        'timestamp': testTimestamp,
+        'confidence': 0.0,
+        'tipo': 'TEST',
+        'created_at': testTimestamp,
+      });
+      // Se chegou aqui, constraint NÃO existe - precisa migrar!
+      print('⚠️ UNIQUE constraint não encontrada na tabela logs - iniciando migração...');
+
+      // Limpar logs de teste
+      await db.delete('logs', where: 'cpf = ?', whereArgs: ['TEST']);
+
+      // Backup dos dados atuais
+      final logsBackup = await db.query('logs');
+
+      // Dropar tabela antiga
+      await db.execute('DROP TABLE logs');
+
+      // Criar tabela nova com UNIQUE constraint
+      await db.execute('''
+        CREATE TABLE logs(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          cpf TEXT,
+          person_name TEXT,
+          timestamp TEXT,
+          confidence REAL,
+          tipo TEXT,
+          created_at TEXT,
+          UNIQUE(cpf, timestamp, tipo)
+        )
+      ''');
+
+      // Restaurar dados SEM duplicatas
+      final Set<String> chavesDuplicatas = {};
+      int duplicatasRemovidas = 0;
+
+      for (final log in logsBackup) {
+        final chave = '${log['cpf']}_${log['timestamp']}_${log['tipo']}';
+
+        if (chavesDuplicatas.contains(chave)) {
+          duplicatasRemovidas++;
+          continue; // Pula duplicata
+        }
+
+        chavesDuplicatas.add(chave);
+
+        try {
+          await db.insert('logs', {
+            'cpf': log['cpf'],
+            'person_name': log['person_name'],
+            'timestamp': log['timestamp'],
+            'confidence': log['confidence'],
+            'tipo': log['tipo'],
+            'created_at': log['created_at'],
+          });
+        } catch (e) {
+          print('⚠️ Erro ao restaurar log: $e');
+        }
+      }
+
+      print('✅ Migração concluída: ${logsBackup.length - duplicatasRemovidas} logs únicos restaurados');
+      if (duplicatasRemovidas > 0) {
+        print('🗑️ $duplicatasRemovidas duplicatas removidas');
+      }
+    } catch (e) {
+      // Se deu erro, significa que a constraint já existe ou outro erro
+      // Limpar logs de teste se existirem
+      try {
+        await db.delete('logs', where: 'cpf = ?', whereArgs: ['TEST']);
+      } catch (_) {}
+
+      if (e.toString().contains('UNIQUE constraint failed')) {
+        print('✅ UNIQUE constraint já existe na tabela logs');
+      } else {
+        print('ℹ️ Tabela logs já está atualizada ou erro ao verificar: ${e.toString()}');
+      }
     }
   }
 
