@@ -21,6 +21,7 @@ dependencies:
 
   # HTTP e APIs
   http: ^1.1.0
+  flutter_dotenv: ^5.1.0
 
   # Códigos de Barras
   google_mlkit_barcode_scanning: ^0.14.1
@@ -54,6 +55,7 @@ flutter:
 
   assets:
     - assets/models/arcface.tflite
+    - .env
 
 flutter_launcher_icons:
   android: true

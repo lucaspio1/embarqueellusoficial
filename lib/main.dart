@@ -1,17 +1,26 @@
 // lib/main.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:embarqueellus/screens/main_menu_screen.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
 import 'package:embarqueellus/services/auth_service.dart';
-
-const String apiUrl = "https://script.google.com/macros/s/AKfycbwdflIAiZfz9PnolgTsvzcVgs_IpugIhYs4-u0YT6SekJPUqGEhawIntA7tG51NlrlT/exec";
+import 'package:embarqueellus/config/app_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Carregar arquivo .env
+  try {
+    await dotenv.load(fileName: ".env");
+    print('✅ Arquivo .env carregado com sucesso');
+  } catch (e) {
+    print('⚠️  Erro ao carregar .env: $e');
+    print('   Certifique-se que o arquivo .env existe na raiz do projeto');
+  }
 
   try {
     print('🚀 ========================================');
@@ -19,7 +28,17 @@ void main() async {
     print('🚀 ========================================');
 
     print('');
-    print('💾 [1/4] Inicializando Banco de Dados...');
+    print('⚙️  [1/5] Validando Configurações...');
+    AppConfig.instance.printConfig();
+    if (!AppConfig.instance.isValid) {
+      print('❌ ERRO: Configurações inválidas!');
+      print('   Verifique o arquivo .env na raiz do projeto');
+    } else {
+      print('✅ Configurações válidas!');
+    }
+
+    print('');
+    print('💾 [2/5] Inicializando Banco de Dados...');
     final db = DatabaseHelper.instance;
     await db.database;
     await db.ensureFacialSchema();
@@ -27,7 +46,7 @@ void main() async {
     print('   - Tabelas: passageiros, alunos, embeddings, logs, sync_queue');
 
     print('');
-    print('🧠 [2/4] Carregando Modelo ArcFace...');
+    print('🧠 [3/5] Carregando Modelo ArcFace...');
     try {
       await FaceRecognitionService.instance.init();
       print('✅ Modelo ArcFace carregado!');
@@ -41,14 +60,14 @@ void main() async {
     }
 
     print('');
-    print('🔄 [3/4] Inicializando Sincronização Offline...');
+    print('🔄 [4/5] Inicializando Sincronização Offline...');
     OfflineSyncService.instance.init();
     print('✅ Sincronização ativa!');
     print('   - Detecta conectividade automaticamente');
     print('   - Fila de sincronização funcionando');
 
     print('');
-    print('📱 [4/4] Iniciando interface...');
+    print('📱 [5/5] Iniciando interface...');
     runApp(const MyApp());
     print('✅ Aplicação iniciada com sucesso!');
     print('🚀 ========================================');

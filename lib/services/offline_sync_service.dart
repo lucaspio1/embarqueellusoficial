@@ -4,13 +4,16 @@ import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/config/app_config.dart';
 
 class OfflineSyncService {
   OfflineSyncService._();
   static final OfflineSyncService instance = OfflineSyncService._();
 
-  final String _sheetsWebhook = 'https://script.google.com/macros/s/AKfycbzWUgnxCHr_60E2v8GEc8VyJrarq5JMp0nSIXDFKQsJb8yYXygocuqeeLiif_3HJc8A/exec';
   final DatabaseHelper _db = DatabaseHelper.instance;
+
+  // URL lida do arquivo .env
+  String get _sheetsWebhook => AppConfig.instance.googleAppsScriptUrl;
 
   Timer? _syncTimer;
 
