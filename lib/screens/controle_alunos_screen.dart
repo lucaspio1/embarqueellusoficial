@@ -1,5 +1,6 @@
 // lib/screens/controle_alunos_screen.dart
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
@@ -267,6 +268,19 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
+      // Salvar também na tabela pessoas_facial
+      await _db.upsertPessoaFacial({
+        'cpf': aluno['cpf'],
+        'nome': aluno['nome'],
+        'email': aluno['email'] ?? '',
+        'telefone': aluno['telefone'] ?? '',
+        'turma': aluno['turma'] ?? '',
+        'embedding': jsonEncode(embedding),
+        'facial_status': 'CADASTRADA',
+      });
+
+      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial');
+
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
         nome: aluno['nome'],
@@ -276,7 +290,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         personId: aluno['cpf'],
       );
 
-      print('✅ [CadastroFacial] Embedding enfileirado para sincronização');
+      print('✅ [CadastroFacial] Embedding enfileirado para sincronização com aba Pessoas');
 
       _atualizarProgresso('Enviando para nuvem...');
       final syncResult = await OfflineSyncService.instance.trySyncNow();
@@ -357,6 +371,19 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('📤 [CadastroFacialAvançado] Embedding extraído: ${embedding.length} dimensões');
 
+      // Salvar também na tabela pessoas_facial
+      await _db.upsertPessoaFacial({
+        'cpf': aluno['cpf'],
+        'nome': aluno['nome'],
+        'email': aluno['email'] ?? '',
+        'telefone': aluno['telefone'] ?? '',
+        'turma': aluno['turma'] ?? '',
+        'embedding': jsonEncode(embedding),
+        'facial_status': 'CADASTRADA',
+      });
+
+      print('✅ [CadastroFacialAvançado] Salvo na tabela pessoas_facial');
+
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
         nome: aluno['nome'],
@@ -366,7 +393,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         personId: aluno['cpf'],
       );
 
-      print('✅ [CadastroFacialAvançado] Embedding enfileirado para sincronização');
+      print('✅ [CadastroFacialAvançado] Embedding enfileirado para sincronização com aba Pessoas');
 
       _atualizarProgresso('Enviando para nuvem...');
       final syncResult = await OfflineSyncService.instance.trySyncNow();

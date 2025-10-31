@@ -64,6 +64,21 @@ class DatabaseHelper {
     ''');
 
     await db.execute('''
+      CREATE TABLE pessoas_facial(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cpf TEXT UNIQUE,
+        nome TEXT,
+        email TEXT,
+        telefone TEXT,
+        turma TEXT,
+        embedding TEXT,
+        facial_status TEXT DEFAULT 'CADASTRADA',
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
       CREATE TABLE logs(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         cpf TEXT,
@@ -136,6 +151,29 @@ class DatabaseHelper {
         )
       ''');
       print('✅ Tabela usuarios criada');
+    }
+
+    // Garantir que tabela pessoas_facial existe
+    try {
+      await db.rawQuery('SELECT * FROM pessoas_facial LIMIT 1');
+      print('✅ Tabela pessoas_facial já existe');
+    } catch (e) {
+      print('📝 Criando tabela pessoas_facial...');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS pessoas_facial(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          cpf TEXT UNIQUE,
+          nome TEXT,
+          email TEXT,
+          telefone TEXT,
+          turma TEXT,
+          embedding TEXT,
+          facial_status TEXT DEFAULT 'CADASTRADA',
+          created_at TEXT,
+          updated_at TEXT
+        )
+      ''');
+      print('✅ Tabela pessoas_facial criada');
     }
   }
 
@@ -380,6 +418,76 @@ class DatabaseHelper {
     final db = await database;
     await db.delete('usuarios');
     print('✅ Todos os usuários foram deletados');
+  }
+
+  // ========================================================================
+  // MÉTODOS PARA PESSOAS_FACIAL (Reconhecimento Facial)
+  // ========================================================================
+
+  /// Insere ou atualiza uma pessoa com facial cadastrada
+  Future<void> upsertPessoaFacial(Map<String, dynamic> pessoa) async {
+    final db = await database;
+    await db.insert(
+      'pessoas_facial',
+      {
+        ...pessoa,
+        'updated_at': DateTime.now().toIso8601String(),
+        'created_at': pessoa['created_at'] ?? DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Busca todas as pessoas com facial cadastrada
+  Future<List<Map<String, dynamic>>> getAllPessoasFacial() async {
+    final db = await database;
+    final List<Map<String, dynamic>> pessoas = await db.query('pessoas_facial');
+
+    // Decodificar embeddings
+    return pessoas.map((pessoa) {
+      if (pessoa['embedding'] != null && pessoa['embedding'] != '') {
+        return {
+          ...pessoa,
+          'embedding': jsonDecode(pessoa['embedding']),
+        };
+      }
+      return pessoa;
+    }).toList();
+  }
+
+  /// Busca uma pessoa por CPF
+  Future<Map<String, dynamic>?> getPessoaFacialByCpf(String cpf) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'pessoas_facial',
+      where: 'cpf = ?',
+      whereArgs: [cpf],
+    );
+
+    if (maps.isEmpty) return null;
+
+    final pessoa = maps.first;
+    if (pessoa['embedding'] != null && pessoa['embedding'] != '') {
+      pessoa['embedding'] = jsonDecode(pessoa['embedding']);
+    }
+    return pessoa;
+  }
+
+  /// Deleta uma pessoa facial por CPF
+  Future<void> deletePessoaFacial(String cpf) async {
+    final db = await database;
+    await db.delete(
+      'pessoas_facial',
+      where: 'cpf = ?',
+      whereArgs: [cpf],
+    );
+  }
+
+  /// Conta total de pessoas com facial
+  Future<int> getTotalPessoasFacial() async {
+    final db = await database;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM pessoas_facial');
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 
   Future<void> close() async {

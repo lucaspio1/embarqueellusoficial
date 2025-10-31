@@ -251,9 +251,19 @@ class OfflineSyncService {
   // Envio — Cadastros faciais
   // -----------------------------
 
+  /// Envia cadastro facial para a aba "Pessoas" do Google Sheets
   Future<bool> _sendPersonIndividually(Map<String, dynamic> item) async {
     final copy = Map<String, dynamic>.from(item)..remove('idOutbox');
-    final body = <String, dynamic>{'action': 'cadastrarFacial', ...copy};
+    // 🔽 IMPORTANTE: action 'addPessoa' envia para a aba PESSOAS (não para embarque)
+    final body = <String, dynamic>{
+      'action': 'addPessoa',
+      'cpf': copy['cpf'],
+      'nome': copy['nome'],
+      'email': copy['email'] ?? '',
+      'telefone': copy['telefone'] ?? '',
+      'embedding': copy['embedding'],
+      'personId': copy['personId'] ?? copy['cpf'],
+    };
     return _postWithRetriesAndSuccess(body);
   }
 
