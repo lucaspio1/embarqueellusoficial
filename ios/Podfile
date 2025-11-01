@@ -45,9 +45,12 @@ post_install do |installer|
       # Desabilitar Bitcode (necessário para TensorFlow Lite e MLKit)
       config.build_settings['ENABLE_BITCODE'] = 'NO'
 
-      # Configurações de arquitetura
+      # Configurações de arquitetura - PADRONIZADAS para evitar conflitos
       config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
-      config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
+
+      # Remover configuração que causava conflito entre pods
+      # EXCLUDED_ARCHS será gerenciado individualmente pelos pods
+      config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
 
       # Fix para MLKit e outras libs que não suportam simulador arm64
       config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
@@ -57,18 +60,24 @@ post_install do |installer|
 
       # Configurações de otimização
       config.build_settings['SWIFT_VERSION'] = '5.0'
-      config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
-      config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
 
-      # Permitir instalação em dispositivos sem assinatura (para debug)
-      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+      # Otimizações apenas para Debug
+      if config.name == 'Debug'
+        config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+        config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+      end
+
+      # Remover configuração que pode causar problemas
+      config.build_settings.delete('CODE_SIGNING_ALLOWED')
 
       # Permite que o simulador use as bibliotecas
       if config.base_configuration_reference
         xcconfig_path = config.base_configuration_reference.real_path
-        xcconfig = File.read(xcconfig_path)
-        xcconfig_mod = xcconfig.gsub(/DT_TOOLCHAIN_DIR/, "TOOLCHAIN_DIR")
-        File.open(xcconfig_path, "w") { |file| file << xcconfig_mod }
+        if File.exist?(xcconfig_path)
+          xcconfig = File.read(xcconfig_path)
+          xcconfig_mod = xcconfig.gsub(/DT_TOOLCHAIN_DIR/, "TOOLCHAIN_DIR")
+          File.open(xcconfig_path, "w") { |file| file << xcconfig_mod }
+        end
       end
     end
   end

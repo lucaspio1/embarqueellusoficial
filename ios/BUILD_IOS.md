@@ -119,6 +119,8 @@ O Podfile está configurado com as seguintes otimizações:
 - **BUILD_LIBRARY_FOR_DISTRIBUTION**: Habilitado (compatibilidade com MLKit)
 - **IPHONEOS_DEPLOYMENT_TARGET**: 15.5
 - **SWIFT_VERSION**: 5.0
+- **EXCLUDED_ARCHS**: Removido para evitar conflitos entre pods (gerenciado individualmente)
+- **Otimizações de Debug**: Aplicadas apenas em modo Debug
 
 ## Arquivos de Modelo
 
@@ -148,6 +150,17 @@ pod install
 ### Erro: "DT_TOOLCHAIN_DIR cannot be used to evaluate..."
 
 Este erro já está resolvido no `post_install` do Podfile.
+
+### Warning: "Can't merge user_target_xcconfig... EXCLUDED_ARCHS has different values"
+
+**Solução aplicada**: A configuração `EXCLUDED_ARCHS[sdk=iphonesimulator*]` foi removida do Podfile
+para permitir que cada pod gerencie suas próprias arquiteturas. Isso elimina conflitos entre
+MLKit, TensorFlow Lite e outros frameworks.
+
+### Warning: "CocoaPods did not set the base configuration..."
+
+**Solução aplicada**: Criado arquivo `ios/Flutter/Profile.xcconfig` que inclui as configurações
+dos Pods. Os arquivos Debug.xcconfig e Release.xcconfig já estavam configurados corretamente.
 
 ### Erro: "Missing purpose string in Info.plist"
 
