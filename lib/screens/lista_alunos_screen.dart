@@ -1,6 +1,12 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
+import 'package:image/image.dart' as img;
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
+import 'package:embarqueellus/services/face_recognition_service.dart';
+import 'package:embarqueellus/services/offline_sync_service.dart';
 
 class ListaAlunosScreen extends StatefulWidget {
   const ListaAlunosScreen({super.key});
@@ -12,9 +18,11 @@ class ListaAlunosScreen extends StatefulWidget {
 class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
   final _db = DatabaseHelper.instance;
   final _alunosSync = AlunosSyncService.instance;
+  final _faceService = FaceRecognitionService.instance;
 
   bool _carregando = true;
   bool _sincronizando = false;
+  bool _processando = false;
   List<Map<String, dynamic>> _alunos = [];
   List<Map<String, dynamic>> _alunosFiltrados = [];
   final TextEditingController _searchController = TextEditingController();
@@ -240,6 +248,162 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
     );
   }
 
+  // =========================================================
+  // CADASTRO FACIAL
+  // =========================================================
+  Future<void> _cadastrarFacial(Map<String, dynamic> aluno) async {
+    try {
+      final imagePath = await _abrirCameraTela();
+      if (imagePath == null) return;
+
+      setState(() => _processando = true);
+      _mostrarProgresso('Processando imagem...');
+
+      final processedImage = await _processarImagemParaModelo(File(imagePath));
+
+      _atualizarProgresso('Extraindo características faciais...');
+
+      await _faceService.saveEmbeddingFromImage(
+        aluno['cpf'],
+        aluno['nome'],
+        processedImage,
+      );
+
+      final embeddings = await _db.getAllEmbeddings();
+      final embeddingAluno = embeddings.firstWhere(
+        (e) => e['cpf'] == aluno['cpf'],
+        orElse: () => throw Exception('Embedding não encontrado após salvar'),
+      );
+
+      final embedding = List<double>.from(embeddingAluno['embedding']);
+
+      print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
+
+      // Salvar também na tabela pessoas_facial
+      await _db.upsertPessoaFacial({
+        'cpf': aluno['cpf'],
+        'nome': aluno['nome'],
+        'email': aluno['email'] ?? '',
+        'telefone': aluno['telefone'] ?? '',
+        'turma': aluno['turma'] ?? '',
+        'embedding': jsonEncode(embedding),
+        'facial_status': 'CADASTRADA',
+      });
+
+      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial');
+
+      await OfflineSyncService.instance.queueCadastroFacial(
+        cpf: aluno['cpf'],
+        nome: aluno['nome'],
+        email: aluno['email'] ?? '',
+        telefone: aluno['telefone'] ?? '',
+        embedding: embedding,
+        personId: aluno['cpf'],
+      );
+
+      print('✅ [CadastroFacial] Embedding enfileirado para sincronização com aba Pessoas');
+
+      // Sincronizar em background
+      OfflineSyncService.instance.trySyncInBackground();
+      print('🔄 [CadastroFacial] Sincronização em background iniciada');
+
+      await _db.updateAlunoFacial(aluno['cpf'], 'CADASTRADA');
+
+      if (Navigator.canPop(context)) Navigator.pop(context);
+      setState(() => _processando = false);
+
+      await _carregarAlunos();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('✅ Facial cadastrada: ${aluno['nome']}',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('☁️ Sincronizando em segundo plano...'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Erro ao cadastrar facial: $e');
+      if (Navigator.canPop(context)) Navigator.pop(context);
+      setState(() => _processando = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erro ao cadastrar facial: $e')),
+        );
+      }
+    }
+  }
+
+  Future<String?> _abrirCameraTela() async {
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) {
+      throw Exception('Nenhuma câmera disponível');
+    }
+
+    final camera = cameras.firstWhere(
+      (c) => c.lensDirection == CameraLensDirection.front,
+      orElse: () => cameras.first,
+    );
+
+    if (!mounted) return null;
+
+    return await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _CameraScreen(camera: camera),
+      ),
+    );
+  }
+
+  Future<img.Image> _processarImagemParaModelo(File imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) throw Exception('Falha ao decodificar imagem.');
+
+    final resized = img.copyResize(decoded, width: 160, height: 160);
+
+    if (resized.numChannels != 3) {
+      throw Exception(
+          'Imagem final não possui 3 canais RGB (${resized.numChannels}).');
+    }
+
+    return resized;
+  }
+
+  void _mostrarProgresso(String mensagem) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(mensagem),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _atualizarProgresso(String mensagem) {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    _mostrarProgresso(mensagem);
+  }
+
   Widget _buildAlunoCard(Map<String, dynamic> aluno) {
     final nome = aluno['nome'] ?? 'Sem nome';
     final cpf = aluno['cpf'] ?? 'Sem CPF';
@@ -353,6 +517,27 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
               _buildInfoRow(Icons.email, 'Email', email),
             if (telefone.isNotEmpty)
               _buildInfoRow(Icons.phone, 'Telefone', telefone),
+
+            // Botão de cadastro facial
+            if (!hasFacial) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _processando ? null : () => _cadastrarFacial(aluno),
+                  icon: const Icon(Icons.face_retouching_natural, size: 20),
+                  label: const Text('Cadastrar Facial'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4C643C),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -388,6 +573,89 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// =========================================================
+// WIDGET DE CÂMERA
+// =========================================================
+class _CameraScreen extends StatefulWidget {
+  final CameraDescription camera;
+
+  const _CameraScreen({required this.camera});
+
+  @override
+  State<_CameraScreen> createState() => _CameraScreenState();
+}
+
+class _CameraScreenState extends State<_CameraScreen> {
+  late CameraController _controller;
+  late Future<void> _initializeControllerFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = CameraController(
+      widget.camera,
+      ResolutionPreset.medium,
+    );
+    _initializeControllerFuture = _controller.initialize();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _takePicture() async {
+    try {
+      await _initializeControllerFuture;
+      final image = await _controller.takePicture();
+      if (mounted) {
+        Navigator.pop(context, image.path);
+      }
+    } catch (e) {
+      print('❌ Erro ao tirar foto: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Tirar Foto'),
+        backgroundColor: const Color(0xFF4C643C),
+      ),
+      body: FutureBuilder<void>(
+        future: _initializeControllerFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done) {
+            return Stack(
+              children: [
+                SizedBox.expand(
+                  child: CameraPreview(_controller),
+                ),
+                Positioned(
+                  bottom: 32,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: FloatingActionButton(
+                      onPressed: _takePicture,
+                      backgroundColor: Colors.white,
+                      child: const Icon(Icons.camera_alt, color: Color(0xFF4C643C)),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          } else {
+            return const Center(child: CircularProgressIndicator());
+          }
+        },
       ),
     );
   }
