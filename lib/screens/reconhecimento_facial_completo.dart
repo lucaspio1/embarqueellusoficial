@@ -41,16 +41,27 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     super.dispose();
   }
 
-  Future<void> _carregarDados() async {
+  Future<void> _carregarDados({bool forcarSync = false}) async {
     setState(() => _carregando = true);
     try {
-      // Sincronizar pessoas com embeddings do Google Sheets
-      print('🔄 [Reconhecimento] Sincronizando pessoas com facial...');
-      final syncResult = await AlunosSyncService.instance.syncPessoasFromSheets();
-      if (syncResult.success) {
-        print('✅ [Reconhecimento] ${syncResult.message}');
+      // Verificar se já existem alunos locais com facial
+      final alunosLocais = await _db.getTodosAlunosComFacial();
+
+      // Apenas sincronizar na primeira vez (quando não há dados locais) ou se forçado
+      if (alunosLocais.isEmpty || forcarSync) {
+        if (forcarSync) {
+          print('🔄 [Reconhecimento] Sincronização forçada - atualizando pessoas com facial...');
+        } else {
+          print('🔄 [Reconhecimento] Primeira abertura - sincronizando pessoas com facial...');
+        }
+        final syncResult = await AlunosSyncService.instance.syncPessoasFromSheets();
+        if (syncResult.success) {
+          print('✅ [Reconhecimento] ${syncResult.message}');
+        } else {
+          print('⚠️ [Reconhecimento] Erro ao sincronizar: ${syncResult.message}');
+        }
       } else {
-        print('⚠️ [Reconhecimento] Erro ao sincronizar: ${syncResult.message}');
+        print('📱 [Reconhecimento] Carregando dados locais (${alunosLocais.length} alunos com facial)');
       }
 
       final alunos = await _db.getTodosAlunosComFacial();
@@ -148,6 +159,18 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         tipo: tipo,
         operadorNome: operadorNome,
       );
+
+      // 🔄 Sincronizar embeddings em segundo plano após envio da movimentação
+      print('🔄 [Reconhecimento] Iniciando sincronização em segundo plano...');
+      AlunosSyncService.instance.syncPessoasFromSheets().then((result) {
+        if (result.success) {
+          print('✅ [Reconhecimento] Sincronização em segundo plano concluída: ${result.message}');
+        } else {
+          print('⚠️ [Reconhecimento] Erro na sincronização em segundo plano: ${result.message}');
+        }
+      }).catchError((e) {
+        print('❌ [Reconhecimento] Erro na sincronização em segundo plano: $e');
+      });
 
       if (Navigator.canPop(context)) Navigator.pop(context);
 
@@ -268,7 +291,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _carregarDados,
+            onPressed: () => _carregarDados(forcarSync: true),
             tooltip: 'Atualizar',
           ),
         ],
