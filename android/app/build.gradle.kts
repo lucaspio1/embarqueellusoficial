@@ -24,6 +24,11 @@ android {
 
         // Mantém compatibilidade com Flutter
         multiDexEnabled = true
+
+        // ✅ Configuração para TensorFlow Lite - inclui bibliotecas nativas
+        ndk {
+            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
+        }
     }
 
     buildTypes {
@@ -65,4 +70,9 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.5.0")
     implementation("androidx.camera:camera-lifecycle:1.5.0")
     implementation("androidx.camera:camera-view:1.5.0")
+
+    // 🔹 TensorFlow Lite (necessário para tflite_flutter)
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 }
