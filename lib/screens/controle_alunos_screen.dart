@@ -257,23 +257,12 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       _atualizarProgresso('Extraindo características faciais...');
 
-      await _faceService.saveEmbeddingFromImage(
-        aluno['cpf'],
-        aluno['nome'],
-        processedImage,
-      );
-
-      final embeddings = await _db.getAllEmbeddings();
-      final embeddingAluno = embeddings.firstWhere(
-            (e) => e['cpf'] == aluno['cpf'],
-        orElse: () => throw Exception('Embedding não encontrado após salvar'),
-      );
-
-      final embedding = List<double>.from(embeddingAluno['embedding']);
+      // ✅ CORREÇÃO: Extrair embedding diretamente (SEM salvar em 'embeddings')
+      final embedding = await _faceService.extractEmbedding(processedImage);
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
-      // Salvar também na tabela pessoas_facial
+      // ✅ Salvar APENAS na tabela pessoas_facial (fonte única da verdade)
       await _db.upsertPessoaFacial({
         'cpf': aluno['cpf'],
         'nome': aluno['nome'],
@@ -357,23 +346,25 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       _atualizarProgresso('Processando ${faces.length} imagens...');
 
-      await _faceService.saveEmbeddingEnhanced(
-        aluno['cpf'],
-        aluno['nome'],
-        faces,
-      );
+      // ✅ CORREÇÃO: Extrair embedding avançado diretamente (SEM salvar em 'embeddings')
+      // Calcular média dos embeddings das múltiplas fotos
+      final embeddings = <List<double>>[];
+      for (final face in faces) {
+        final emb = await _faceService.extractEmbedding(face);
+        embeddings.add(emb);
+      }
 
-      final embeddings = await _db.getAllEmbeddings();
-      final embeddingAluno = embeddings.firstWhere(
-            (e) => e['cpf'] == aluno['cpf'],
-        orElse: () => throw Exception('Embedding não encontrado após salvar'),
-      );
+      // Média dos embeddings para melhor precisão
+      final embedding = List<double>.filled(embeddings[0].length, 0.0);
+      for (final emb in embeddings) {
+        for (int i = 0; i < emb.length; i++) {
+          embedding[i] += emb[i] / embeddings.length;
+        }
+      }
 
-      final embedding = List<double>.from(embeddingAluno['embedding']);
+      print('📤 [CadastroFacialAvançado] Embedding extraído de ${faces.length} fotos: ${embedding.length} dimensões');
 
-      print('📤 [CadastroFacialAvançado] Embedding extraído: ${embedding.length} dimensões');
-
-      // Salvar também na tabela pessoas_facial
+      // ✅ Salvar APENAS na tabela pessoas_facial (fonte única da verdade)
       await _db.upsertPessoaFacial({
         'cpf': aluno['cpf'],
         'nome': aluno['nome'],

@@ -226,7 +226,8 @@ class AlunosSyncService {
                 continue;
               }
 
-              // Salvar na tabela pessoas_facial (nova tabela)
+              // ✅ CORREÇÃO: Salvar APENAS na tabela pessoas_facial (fonte única)
+              // Removida duplicação em 'embeddings' - não é mais necessário
               await _db.upsertPessoaFacial({
                 'cpf': pessoa['cpf'] ?? '',
                 'nome': pessoa['nome'] ?? '',
@@ -235,13 +236,6 @@ class AlunosSyncService {
                 'turma': pessoa['turma'] ?? '',
                 'embedding': jsonEncode(embedding),
                 'facial_status': 'CADASTRADA',
-              });
-
-              // Também salvar na tabela embeddings antiga para compatibilidade
-              await _db.insertEmbedding({
-                'cpf': pessoa['cpf'] ?? '',
-                'nome': pessoa['nome'] ?? '',
-                'embedding': embedding,
               });
 
               countPessoas++;
