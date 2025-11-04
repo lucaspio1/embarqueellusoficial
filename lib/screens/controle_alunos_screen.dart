@@ -884,6 +884,22 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
             ),
           ),
 
+          // 🎯 Moldura de guia sutil (apenas borda, sem obstruir visão)
+          Center(
+            child: Container(
+              width: 280,
+              height: 360,
+              decoration: BoxDecoration(
+                shape: BoxShape.rectangle,
+                borderRadius: BorderRadius.circular(180),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.7),
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+
           Positioned(
             top: 60,
             left: 0,
