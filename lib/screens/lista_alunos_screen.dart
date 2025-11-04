@@ -263,23 +263,12 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
 
       _atualizarProgresso('Extraindo características faciais...');
 
-      await _faceService.saveEmbeddingFromImage(
-        aluno['cpf'],
-        aluno['nome'],
-        processedImage,
-      );
-
-      final embeddings = await _db.getAllEmbeddings();
-      final embeddingAluno = embeddings.firstWhere(
-        (e) => e['cpf'] == aluno['cpf'],
-        orElse: () => throw Exception('Embedding não encontrado após salvar'),
-      );
-
-      final embedding = List<double>.from(embeddingAluno['embedding']);
+      // ✅ CORREÇÃO: Extrair embedding diretamente (SEM salvar em 'embeddings')
+      final embedding = await _faceService.extractEmbedding(processedImage);
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
-      // Salvar também na tabela pessoas_facial
+      // ✅ Salvar APENAS na tabela pessoas_facial (fonte única da verdade)
       await _db.upsertPessoaFacial({
         'cpf': aluno['cpf'],
         'nome': aluno['nome'],

@@ -387,25 +387,18 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getTodosAlunosComFacial() async {
     final db = await database;
 
-    // ✅ CORREÇÃO: Buscar de AMBAS as tabelas: alunos (antiga) e pessoas_facial (nova)
-    // UNION para combinar resultados de ambas as fontes
-    final List<Map<String, dynamic>> alunosComFacial = await db.rawQuery('''
-      SELECT a.cpf, a.nome, a.email, a.telefone, a.turma, e.embedding
-      FROM alunos a
-      INNER JOIN embeddings e ON a.cpf = e.cpf
-      WHERE a.facial = 'CADASTRADA'
-
-      UNION
-
-      SELECT p.cpf, p.nome, p.email, p.telefone, p.turma, p.embedding
-      FROM pessoas_facial p
-      WHERE p.facial_status = 'CADASTRADA' AND p.embedding IS NOT NULL
+    // ✅ CORREÇÃO: Buscar APENAS da tabela pessoas_facial (fonte única da verdade)
+    // Removido UNION desnecessário - pessoas_facial já contém tudo
+    final List<Map<String, dynamic>> pessoasComFacial = await db.rawQuery('''
+      SELECT cpf, nome, email, telefone, turma, embedding
+      FROM pessoas_facial
+      WHERE facial_status = 'CADASTRADA' AND embedding IS NOT NULL
     ''');
 
-    return alunosComFacial.map((aluno) {
+    return pessoasComFacial.map((pessoa) {
       return {
-        ...aluno,
-        'embedding': jsonDecode(aluno['embedding']),
+        ...pessoa,
+        'embedding': jsonDecode(pessoa['embedding']),
       };
     }).toList();
   }
