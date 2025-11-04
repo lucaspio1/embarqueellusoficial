@@ -5,6 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
+import 'package:embarqueellus/services/face_image_processor.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/auth_service.dart';
@@ -200,56 +201,14 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
   }
 
   Future<img.Image> _processarImagemParaModelo(File imageFile) async {
-    final bytes = await imageFile.readAsBytes();
-
-    img.Image? decoded;
     try {
-      decoded = img.decodeImage(bytes);
+      return await FaceImageProcessor.instance.processFile(
+        imageFile,
+        outputSize: FaceRecognitionService.INPUT_SIZE,
+      );
     } catch (e) {
-      throw Exception('Falha ao decodificar imagem: $e');
+      throw Exception('Falha ao preparar imagem facial: $e');
     }
-
-    if (decoded == null) {
-      throw Exception('Imagem inválida ou não suportada.');
-    }
-
-    if (decoded.numChannels == 1) {
-      final rgb = img.Image(
-        width: decoded.width,
-        height: decoded.height,
-        numChannels: 3,
-      );
-      for (int y = 0; y < decoded.height; y++) {
-        for (int x = 0; x < decoded.width; x++) {
-          final p = decoded.getPixel(x, y);
-          final gray = p.luminance;
-          rgb.setPixelRgb(x, y, gray, gray, gray);
-        }
-      }
-      decoded = rgb;
-    } else if (decoded.numChannels == 4) {
-      final rgb = img.Image(
-        width: decoded.width,
-        height: decoded.height,
-        numChannels: 3,
-      );
-      for (int y = 0; y < decoded.height; y++) {
-        for (int x = 0; x < decoded.width; x++) {
-          final p = decoded.getPixel(x, y);
-          rgb.setPixelRgb(x, y, p.r, p.g, p.b);
-        }
-      }
-      decoded = rgb;
-    }
-
-    final resized = img.copyResize(decoded, width: 160, height: 160);
-
-    if (resized.numChannels != 3) {
-      throw Exception(
-          'Imagem final não possui 3 canais RGB (${resized.numChannels}).');
-    }
-
-    return resized;
   }
 
   Future<String?> _abrirCameraTela({bool frontal = false}) async {

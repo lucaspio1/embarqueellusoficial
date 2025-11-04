@@ -13,7 +13,7 @@ class FaceRecognitionService {
   bool _modelLoaded = false;
 
   // Configurações
-  static const double SIMILARITY_THRESHOLD = 0.6; // ajuste conforme calibração
+  static const double DISTANCE_THRESHOLD = 1.1; // ajuste conforme calibração
   static const int INPUT_SIZE = 112;              // ArcFace usa 112x112
   static const int EMBEDDING_SIZE = 512;          // ArcFace retorna 512 dims
 
@@ -132,28 +132,33 @@ class FaceRecognitionService {
         return null;
       }
 
-      double bestScore = 0.0;
+      double bestDistance = double.infinity;
       Map<String, dynamic>? best;
 
       for (final pessoa in known) {
-        final stored = List<double>.from(pessoa['embedding']);
-        final score = _cosineSimilarity(probe, stored);
-        if (score > bestScore) {
-          bestScore = score;
+        final stored = _toDoubleList(pessoa['embedding']);
+        final distance = _euclideanDistance(probe, stored);
+        if (distance < bestDistance) {
+          bestDistance = distance;
           best = pessoa;
         }
       }
 
-      print('🎯 Melhor score: ${(bestScore * 100).toStringAsFixed(1)}%');
+      final double confidence =
+          (DISTANCE_THRESHOLD - bestDistance) / DISTANCE_THRESHOLD;
+      final double normalizedConfidence = confidence.clamp(0.0, 1.0);
 
-      if (bestScore >= SIMILARITY_THRESHOLD && best != null) {
+      print('🎯 Menor distância L2: ${bestDistance.toStringAsFixed(4)}');
+
+      if (bestDistance <= DISTANCE_THRESHOLD && best != null) {
         print('✅ RECONHECIDO: ${best['nome']}');
         return {
           ...best,
-          'similarity_score': bestScore,
+          'similarity_score': normalizedConfidence,
+          'distance_l2': bestDistance,
         };
       }
-      print('❌ Não reconhecido (abaixo de ${(SIMILARITY_THRESHOLD * 100).toStringAsFixed(1)}%)');
+      print('❌ Não reconhecido (distância acima de ${DISTANCE_THRESHOLD.toStringAsFixed(2)})');
       return null;
     } catch (e) {
       print('❌ Erro no reconhecimento: $e');
@@ -161,16 +166,24 @@ class FaceRecognitionService {
     }
   }
 
-  double _cosineSimilarity(List<double> a, List<double> b) {
-    if (a.length != b.length) throw Exception('Embeddings com tamanhos diferentes');
-    double dot = 0.0, na = 0.0, nb = 0.0;
-    for (int i = 0; i < a.length; i++) {
-      dot += a[i] * b[i];
-      na += a[i] * a[i];
-      nb += b[i] * b[i];
+  double _euclideanDistance(List<double> a, List<double> b) {
+    if (a.length != b.length) {
+      throw Exception('Embeddings com tamanhos diferentes');
     }
-    final den = math.sqrt(na) * math.sqrt(nb);
-    return den < 1e-12 ? 0.0 : dot / den;
+    double sum = 0.0;
+    for (int i = 0; i < a.length; i++) {
+      final double diff = a[i] - b[i];
+      sum += diff * diff;
+    }
+    return math.sqrt(sum);
+  }
+
+  List<double> _toDoubleList(dynamic raw) {
+    if (raw is List<double>) return raw;
+    if (raw is List) {
+      return raw.map((e) => (e as num).toDouble()).toList();
+    }
+    throw Exception('Embedding em formato inválido: ${raw.runtimeType}');
   }
 
   /// Salva embedding no SQLite (tabela embeddings)
