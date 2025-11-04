@@ -1,5 +1,6 @@
 // lib/screens/reconhecimento_facial_completo.dart
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
@@ -9,6 +10,9 @@ import 'package:embarqueellus/services/face_image_processor.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/auth_service.dart';
+import 'package:embarqueellus/services/face_detection_service.dart';
+import 'package:embarqueellus/services/face_validation_service.dart';
+import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 
 class ReconhecimentoFacialScreen extends StatefulWidget {
   const ReconhecimentoFacialScreen({super.key});
@@ -214,6 +218,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
   Future<String?> _abrirCameraTela({bool frontal = false}) async {
     try {
       final cameras = await availableCameras();
+      // 🎯 PADRÃO: Câmera traseira (melhor qualidade)
       final camera = cameras.firstWhere(
             (c) => frontal
             ? c.lensDirection == CameraLensDirection.front
@@ -224,7 +229,10 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       final imagePath = await Navigator.push<String>(
         context,
         MaterialPageRoute(
-          builder: (_) => CameraPreviewScreen(camera: camera),
+          builder: (_) => CameraPreviewScreen(
+            camera: camera,
+            autoCapture: true, // ✅ Captura automática ativada
+          ),
         ),
       );
 
@@ -877,7 +885,12 @@ class _SelecionarTipoAcessoDialog extends StatelessWidget {
 
 class CameraPreviewScreen extends StatefulWidget {
   final CameraDescription camera;
-  const CameraPreviewScreen({required this.camera});
+  final bool autoCapture;
+
+  const CameraPreviewScreen({
+    required this.camera,
+    this.autoCapture = false,
+  });
 
   @override
   State<CameraPreviewScreen> createState() => _CameraPreviewScreenState();
@@ -889,6 +902,16 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   bool _disposed = false;
   List<CameraDescription> _cameras = [];
   int _currentCameraIndex = 0;
+
+  // 🤖 Auto-capture state
+  Timer? _detectionTimer;
+  FaceValidationResult? _currentValidation;
+  int _stableFrameCount = 0;
+  int _countdown = 0;
+  bool _isAnalyzing = false;
+  DateTime? _autoCaptureTimeout;
+  final _faceDetection = FaceDetectionService.instance;
+  final _faceValidation = FaceValidationService.instance;
 
   @override
   void initState() {
@@ -907,6 +930,11 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       if (_currentCameraIndex == -1) _currentCameraIndex = 0;
 
       await _initializeCamera();
+
+      // ✅ Iniciar detecção automática se habilitado
+      if (widget.autoCapture) {
+        _startAutoCapture();
+      }
     } catch (e) {
       print('❌ Erro ao carregar câmeras: $e');
       if (mounted) {
@@ -921,8 +949,9 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
 
       controller = CameraController(
         _cameras[_currentCameraIndex],
-        ResolutionPreset.medium,
+        ResolutionPreset.high,
         enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.yuv420,
       );
 
       await controller!.initialize();
@@ -938,17 +967,114 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     }
   }
 
+  void _startAutoCapture() {
+    _autoCaptureTimeout = DateTime.now().add(const Duration(seconds: 15));
+    _detectionTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!_isAnalyzing && !_tirandoFoto) {
+        _analyzeFace();
+      }
+
+      // Timeout: após 15s, permite captura manual sem validação
+      if (DateTime.now().isAfter(_autoCaptureTimeout!)) {
+        if (mounted) {
+          setState(() {
+            _currentValidation = null;
+          });
+        }
+      }
+    });
+  }
+
+  Future<void> _analyzeFace() async {
+    if (_isAnalyzing || controller == null || !controller!.value.isInitialized) {
+      return;
+    }
+
+    _isAnalyzing = true;
+
+    try {
+      final image = await controller!.takePicture();
+      final inputImage = InputImage.fromFilePath(image.path);
+
+      final faces = await _faceDetection.detect(inputImage);
+
+      if (faces.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _currentValidation = null;
+            _stableFrameCount = 0;
+            _countdown = 0;
+          });
+        }
+      } else {
+        final face = faces.first;
+        final validation = _faceValidation.validate(
+          face,
+          controller!.value.previewSize!.width.toInt(),
+          controller!.value.previewSize!.height.toInt(),
+        );
+
+        if (mounted) {
+          setState(() {
+            _currentValidation = validation;
+          });
+        }
+
+        // ✅ Se a face está boa, incrementar contador de estabilidade
+        if (validation.isReadyForCapture) {
+          _stableFrameCount++;
+
+          // Exigir 3 frames estáveis (1.5s)
+          if (_stableFrameCount >= 3) {
+            // Iniciar countdown
+            if (_countdown == 0) {
+              _startCountdown(image.path);
+            }
+          }
+        } else {
+          _stableFrameCount = 0;
+          _countdown = 0;
+        }
+      }
+
+      // Limpar arquivo temporário
+      await File(image.path).delete();
+    } catch (e) {
+      print('❌ Erro ao analisar face: $e');
+    } finally {
+      _isAnalyzing = false;
+    }
+  }
+
+  Future<void> _startCountdown(String? lastGoodFrame) async {
+    for (int i = 2; i > 0; i--) {
+      if (!mounted) return;
+
+      setState(() => _countdown = i);
+      await Future.delayed(const Duration(milliseconds: 700));
+    }
+
+    if (mounted) {
+      await _tirarFoto();
+    }
+  }
+
   Future<void> _trocarCamera() async {
     if (_cameras.length < 2) return;
 
     setState(() => _tirandoFoto = true);
 
     try {
+      _detectionTimer?.cancel();
       await controller?.dispose();
 
       _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
 
       await _initializeCamera();
+
+      if (widget.autoCapture) {
+        _startAutoCapture();
+      }
 
       setState(() => _tirandoFoto = false);
     } catch (e) {
@@ -960,6 +1086,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   @override
   void dispose() {
     _disposed = true;
+    _detectionTimer?.cancel();
     controller?.dispose();
     super.dispose();
   }
@@ -968,6 +1095,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     if (_tirandoFoto || controller == null || !controller!.value.isInitialized) return;
 
     setState(() => _tirandoFoto = true);
+    _detectionTimer?.cancel();
 
     try {
       final image = await controller!.takePicture();
@@ -994,7 +1122,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
         backgroundColor: Colors.black,
         appBar: AppBar(
           title: const Text('Capturar Rosto'),
-          backgroundColor: Color(0xFF4C643C),
+          backgroundColor: const Color(0xFF4C643C),
         ),
         body: const Center(
           child: Column(
@@ -1012,10 +1140,42 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       );
     }
 
+    // 🎨 Cores baseadas na qualidade da detecção
+    Color frameColor = Colors.grey;
+    String statusMessage = '🔍 Procurando rosto...';
+    IconData statusIcon = Icons.face;
+
+    if (_countdown > 0) {
+      frameColor = Colors.green;
+      statusMessage = '📸 Capturando em $_countdown...';
+      statusIcon = Icons.camera_alt;
+    } else if (_currentValidation != null) {
+      if (_currentValidation!.isReadyForCapture) {
+        frameColor = Colors.green;
+        statusMessage = '✨ Perfeito! Aguarde...';
+        statusIcon = Icons.check_circle;
+      } else if (_currentValidation!.quality == FaceQuality.tooFar) {
+        frameColor = Colors.orange;
+        statusMessage = _currentValidation!.primaryMessage;
+        statusIcon = Icons.zoom_in;
+      } else if (_currentValidation!.quality == FaceQuality.tooClose) {
+        frameColor = Colors.orange;
+        statusMessage = _currentValidation!.primaryMessage;
+        statusIcon = Icons.zoom_out;
+      } else {
+        frameColor = Colors.red;
+        statusMessage = _currentValidation!.primaryMessage;
+        statusIcon = Icons.warning_amber;
+      }
+    }
+
     return Scaffold(
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: const Text('Capturar Rosto'),
-        backgroundColor: const Color(0xFF4C643C),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         actions: [
           if (_cameras.length > 1)
             IconButton(
@@ -1026,74 +1186,187 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
         ],
       ),
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          CameraPreview(controller!),
+          // 📸 CÂMERA EM TELA CHEIA
+          Positioned.fill(
+            child: CameraPreview(controller!),
+          ),
 
+          // 🔲 Moldura oval com cor dinâmica
           Center(
             child: Container(
-              width: 280,
-              height: 350,
+              width: 300,
+              height: 380,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(180),
+                borderRadius: BorderRadius.circular(190),
                 border: Border.all(
-                  color: Colors.greenAccent,
-                  width: 3,
+                  color: frameColor,
+                  width: 4,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: frameColor.withOpacity(0.5),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 💬 Feedback de status
+          Positioned(
+            top: 100,
+            left: 16,
+            right: 16,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: frameColor.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(25),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(statusIcon, color: Colors.white, size: 24),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        statusMessage,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
 
-          Positioned(
-            top: 60,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Card(
-                color: Colors.black54,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          // ℹ️ Info da câmera
+          if (_cameras.length > 1)
+            Positioned(
+              top: 160,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Text(
+                    _cameras[_currentCameraIndex].lensDirection == CameraLensDirection.front
+                        ? '📷 Câmera Frontal'
+                        : '📷 Câmera Traseira',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // 🔄 Overlay de processamento
+          if (_tirandoFoto)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black87,
+                child: const Center(
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
-                        'Posicione o rosto dentro da moldura',
+                      CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 3,
+                      ),
+                      SizedBox(height: 20),
+                      Text(
+                        '📸 Capturando foto...',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 16,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (_cameras.length > 1)
-                        const SizedBox(height: 4),
-                      if (_cameras.length > 1)
-                        Text(
-                          _cameras[_currentCameraIndex].lensDirection == CameraLensDirection.front
-                              ? '📷 Câmera Frontal'
-                              : '📷 Câmera Traseira',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
                     ],
                   ),
                 ),
               ),
             ),
-          ),
 
-          if (_tirandoFoto)
-            Container(
-              color: Colors.black54,
-              child: const Center(
+          // ⚡ Botão de captura manual (fallback)
+          if (!_tirandoFoto)
+            Positioned(
+              bottom: 40,
+              left: 0,
+              right: 0,
+              child: Center(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(color: Colors.white),
-                    SizedBox(height: 20),
-                    Text(
-                      'Processando imagem...',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    // Botão principal
+                    GestureDetector(
+                      onTap: _tirarFoto,
+                      child: Container(
+                        width: 75,
+                        height: 75,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          border: Border.all(
+                            color: frameColor,
+                            width: 5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: frameColor.withOpacity(0.5),
+                              blurRadius: 15,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.camera_alt,
+                          size: 35,
+                          color: frameColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        widget.autoCapture
+                            ? '⚡ Captura automática ou toque'
+                            : 'Toque para capturar',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -1101,14 +1374,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: _tirandoFoto ? Colors.grey : const Color(0xFF4C643C),
-        onPressed: _tirandoFoto ? null : _tirarFoto,
-        child: _tirandoFoto
-            ? const CircularProgressIndicator(color: Colors.white)
-            : const Icon(Icons.camera_alt),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
