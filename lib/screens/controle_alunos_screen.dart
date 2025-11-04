@@ -9,6 +9,8 @@ import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/face_image_processor.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
+import 'package:embarqueellus/services/face_detection_service.dart';
+import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ControleAlunosScreen extends StatefulWidget {
@@ -210,7 +212,41 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
       if (imagePath == null) return;
 
       setState(() => _processando = true);
-      _mostrarProgresso('Processando imagem...');
+      _mostrarProgresso('Validando rosto na imagem...');
+
+      // ✅ Validar que há um rosto na foto usando MLKit
+      final inputImage = InputImage.fromFilePath(imagePath);
+      final faces = await FaceDetectionService.instance.detect(inputImage);
+
+      if (faces.isEmpty) {
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        setState(() => _processando = false);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Nenhum rosto detectado na foto. Tente novamente.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
+      if (faces.length > 1) {
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        setState(() => _processando = false);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Múltiplos rostos detectados. Certifique-se de que apenas uma pessoa está na foto.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
+      _atualizarProgresso('Processando imagem...');
 
       final processedImage = await _processarImagemParaModelo(File(imagePath));
 
@@ -290,6 +326,32 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
         final imagePath = await _abrirCameraTela(frontal: true);
         if (imagePath == null) continue;
+
+        // ✅ Validar que há um rosto na foto usando MLKit
+        final inputImage = InputImage.fromFilePath(imagePath);
+        final detectedFaces = await FaceDetectionService.instance.detect(inputImage);
+
+        if (detectedFaces.isEmpty) {
+          if (Navigator.canPop(context)) Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Nenhum rosto detectado na captura $i. Tente novamente.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          continue; // Permitir nova tentativa
+        }
+
+        if (detectedFaces.length > 1) {
+          if (Navigator.canPop(context)) Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Múltiplos rostos detectados na captura $i. Tente novamente.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          continue; // Permitir nova tentativa
+        }
 
         final processedImage = await _processarImagemParaModelo(File(imagePath));
         faces.add(processedImage);
@@ -808,19 +870,16 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
         ],
       ),
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          CameraPreview(controller!),
-
-          Center(
-            child: Container(
-              width: 280,
-              height: 350,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(180),
-                border: Border.all(
-                  color: Colors.greenAccent,
-                  width: 3,
-                ),
+          // 📸 CÂMERA PREENCHENDO TODA A TELA (proporção correta, sem distorção)
+          Positioned.fill(
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: controller!.value.previewSize!.height,
+                height: controller!.value.previewSize!.width,
+                child: CameraPreview(controller!),
               ),
             ),
           ),
