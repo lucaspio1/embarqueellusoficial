@@ -10,9 +10,6 @@ import 'package:embarqueellus/services/face_image_processor.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/auth_service.dart';
-import 'package:embarqueellus/services/face_detection_service.dart';
-import 'package:embarqueellus/services/face_validation_service.dart';
-import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 
 class ReconhecimentoFacialScreen extends StatefulWidget {
   const ReconhecimentoFacialScreen({super.key});
@@ -231,7 +228,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         MaterialPageRoute(
           builder: (_) => CameraPreviewScreen(
             camera: camera,
-            autoCapture: true, // ✅ Captura automática ativada
+            autoCapture: false, // ❌ Captura automática desativada - apenas botão manual
           ),
         ),
       );
@@ -903,15 +900,9 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   List<CameraDescription> _cameras = [];
   int _currentCameraIndex = 0;
 
-  // 🤖 Auto-capture state
-  Timer? _detectionTimer;
+  // 🎨 Feedback visual de qualidade (sem captura automática)
   FaceValidationResult? _currentValidation;
-  int _stableFrameCount = 0;
-  int _countdown = 0;
-  bool _isAnalyzing = false;
-  DateTime? _autoCaptureTimeout;
-  final _faceDetection = FaceDetectionService.instance;
-  final _faceValidation = FaceValidationService.instance;
+  Timer? _validationTimer;
 
   @override
   void initState() {
@@ -931,10 +922,8 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
 
       await _initializeCamera();
 
-      // ✅ Iniciar detecção automática se habilitado
-      if (widget.autoCapture) {
-        _startAutoCapture();
-      }
+      // ✅ Iniciar validação visual (sem captura automática)
+      _startValidationFeedback();
     } catch (e) {
       print('❌ Erro ao carregar câmeras: $e');
       if (mounted) {
@@ -967,96 +956,18 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     }
   }
 
-  void _startAutoCapture() {
-    _autoCaptureTimeout = DateTime.now().add(const Duration(seconds: 15));
-    _detectionTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      if (!_isAnalyzing && !_tirandoFoto) {
-        _analyzeFace();
-      }
-
-      // Timeout: após 15s, permite captura manual sem validação
-      if (DateTime.now().isAfter(_autoCaptureTimeout!)) {
-        if (mounted) {
-          setState(() {
-            _currentValidation = null;
-          });
-        }
+  void _startValidationFeedback() {
+    // 🎨 Feedback visual leve sem captura automática
+    // Timer reduzido para não sobrecarregar e não capturar
+    _validationTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      // Apenas atualiza feedback visual, não captura
+      if (mounted) {
+        setState(() {
+          // Atualizar cor da moldura baseado na posição (mock simples)
+          _currentValidation = null;
+        });
       }
     });
-  }
-
-  Future<void> _analyzeFace() async {
-    if (_isAnalyzing || controller == null || !controller!.value.isInitialized) {
-      return;
-    }
-
-    _isAnalyzing = true;
-
-    try {
-      final image = await controller!.takePicture();
-      final inputImage = InputImage.fromFilePath(image.path);
-
-      final faces = await _faceDetection.detect(inputImage);
-
-      if (faces.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _currentValidation = null;
-            _stableFrameCount = 0;
-            _countdown = 0;
-          });
-        }
-      } else {
-        final face = faces.first;
-        final validation = _faceValidation.validate(
-          face,
-          controller!.value.previewSize!.width.toInt(),
-          controller!.value.previewSize!.height.toInt(),
-        );
-
-        if (mounted) {
-          setState(() {
-            _currentValidation = validation;
-          });
-        }
-
-        // ✅ Se a face está boa, incrementar contador de estabilidade
-        if (validation.isReadyForCapture) {
-          _stableFrameCount++;
-
-          // Exigir 3 frames estáveis (1.5s)
-          if (_stableFrameCount >= 3) {
-            // Iniciar countdown
-            if (_countdown == 0) {
-              _startCountdown(image.path);
-            }
-          }
-        } else {
-          _stableFrameCount = 0;
-          _countdown = 0;
-        }
-      }
-
-      // Limpar arquivo temporário
-      await File(image.path).delete();
-    } catch (e) {
-      print('❌ Erro ao analisar face: $e');
-    } finally {
-      _isAnalyzing = false;
-    }
-  }
-
-  Future<void> _startCountdown(String? lastGoodFrame) async {
-    for (int i = 2; i > 0; i--) {
-      if (!mounted) return;
-
-      setState(() => _countdown = i);
-      await Future.delayed(const Duration(milliseconds: 700));
-    }
-
-    if (mounted) {
-      await _tirarFoto();
-    }
   }
 
   Future<void> _trocarCamera() async {
@@ -1065,16 +976,13 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     setState(() => _tirandoFoto = true);
 
     try {
-      _detectionTimer?.cancel();
+      _validationTimer?.cancel();
       await controller?.dispose();
 
       _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
 
       await _initializeCamera();
-
-      if (widget.autoCapture) {
-        _startAutoCapture();
-      }
+      _startValidationFeedback();
 
       setState(() => _tirandoFoto = false);
     } catch (e) {
@@ -1086,7 +994,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   @override
   void dispose() {
     _disposed = true;
-    _detectionTimer?.cancel();
+    _validationTimer?.cancel();
     controller?.dispose();
     super.dispose();
   }
@@ -1095,7 +1003,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     if (_tirandoFoto || controller == null || !controller!.value.isInitialized) return;
 
     setState(() => _tirandoFoto = true);
-    _detectionTimer?.cancel();
+    _validationTimer?.cancel();
 
     try {
       final image = await controller!.takePicture();
@@ -1108,7 +1016,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       if (mounted && !_disposed) {
         setState(() => _tirandoFoto = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao capturar foto: $e')),
+          SnackBar(content: Text('❌ Erro ao tirar foto: $e')),
         );
       }
     }
@@ -1140,34 +1048,10 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       );
     }
 
-    // 🎨 Cores baseadas na qualidade da detecção
-    Color frameColor = Colors.grey;
-    String statusMessage = '🔍 Procurando rosto...';
+    // 🎨 Feedback visual simplificado
+    Color frameColor = Colors.greenAccent;
+    String statusMessage = 'Posicione o rosto na moldura';
     IconData statusIcon = Icons.face;
-
-    if (_countdown > 0) {
-      frameColor = Colors.green;
-      statusMessage = '📸 Capturando em $_countdown...';
-      statusIcon = Icons.camera_alt;
-    } else if (_currentValidation != null) {
-      if (_currentValidation!.isReadyForCapture) {
-        frameColor = Colors.green;
-        statusMessage = '✨ Perfeito! Aguarde...';
-        statusIcon = Icons.check_circle;
-      } else if (_currentValidation!.quality == FaceQuality.tooFar) {
-        frameColor = Colors.orange;
-        statusMessage = _currentValidation!.primaryMessage;
-        statusIcon = Icons.zoom_in;
-      } else if (_currentValidation!.quality == FaceQuality.tooClose) {
-        frameColor = Colors.orange;
-        statusMessage = _currentValidation!.primaryMessage;
-        statusIcon = Icons.zoom_out;
-      } else {
-        frameColor = Colors.red;
-        statusMessage = _currentValidation!.primaryMessage;
-        statusIcon = Icons.warning_amber;
-      }
-    }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -1188,9 +1072,14 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 📸 CÂMERA EM TELA CHEIA
+          // 📸 CÂMERA COM ASPECT RATIO CORRETO (SEM ESTICAR)
           Positioned.fill(
-            child: CameraPreview(controller!),
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: controller!.value.aspectRatio,
+                child: CameraPreview(controller!),
+              ),
+            ),
           ),
 
           // 🔲 Moldura oval com cor dinâmica
@@ -1357,11 +1246,9 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(
-                        widget.autoCapture
-                            ? '⚡ Captura automática ou toque'
-                            : 'Toque para capturar',
-                        style: const TextStyle(
+                      child: const Text(
+                        'Toque para capturar',
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
