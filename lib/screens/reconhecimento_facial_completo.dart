@@ -1047,34 +1047,14 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 📸 CÂMERA COM ASPECT RATIO CORRETO (SEM ESTICAR)
+          // 📸 CÂMERA PREENCHENDO TODA A TELA (proporção correta, sem distorção)
           Positioned.fill(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: controller!.value.aspectRatio,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: controller!.value.previewSize!.height,
+                height: controller!.value.previewSize!.width,
                 child: CameraPreview(controller!),
-              ),
-            ),
-          ),
-
-          // 🔲 Moldura oval com cor dinâmica
-          Center(
-            child: Container(
-              width: 300,
-              height: 380,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(190),
-                border: Border.all(
-                  color: frameColor,
-                  width: 4,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: frameColor.withOpacity(0.5),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                  ),
-                ],
               ),
             ),
           ),
