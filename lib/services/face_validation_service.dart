@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show Point;
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 /// Serviço de validação de qualidade facial com landmarks e head pose
@@ -205,9 +206,9 @@ class FaceValidationService {
     );
   }
 
-  double _calculateDistance(FacePoint p1, FacePoint p2) {
-    final dx = p1.x - p2.x;
-    final dy = p1.y - p2.y;
+  double _calculateDistance(Point<int> p1, Point<int> p2) {
+    final dx = (p1.x - p2.x).toDouble();
+    final dy = (p1.y - p2.y).toDouble();
     return math.sqrt(dx * dx + dy * dy);
   }
 
