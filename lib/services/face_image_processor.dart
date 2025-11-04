@@ -11,6 +11,7 @@ import 'package:image/image.dart' as img;
 
 import 'face_detection_service.dart';
 import 'yuv_converter.dart';
+import 'face_validation_service.dart';
 
 /// Responsável por preparar imagens para a extração de embeddings:
 ///  * Detecta rostos via MLKit.
@@ -78,14 +79,18 @@ class FaceImageProcessor {
   img.Image _cropFace(img.Image image, List<Face> faces,
       {required int outputSize}) {
     final Face target = _selectPrimaryFace(faces);
+
+    // 🔧 Alinhamento automático baseado em landmarks dos olhos
+    final alignedImage = _alignFace(image, target);
+
     final RectBounds bounds = _expandBoundingBox(
       target.boundingBox,
-      image.width,
-      image.height,
+      alignedImage.width,
+      alignedImage.height,
     );
 
     final img.Image cropped = img.copyCrop(
-      image,
+      alignedImage,
       x: bounds.left,
       y: bounds.top,
       width: bounds.width,
@@ -98,6 +103,30 @@ class FaceImageProcessor {
     );
 
     return _ensureRgb(square);
+  }
+
+  /// Alinha a face automaticamente baseado nos landmarks dos olhos
+  img.Image _alignFace(img.Image image, Face face) {
+    final leftEye = face.landmarks[FaceLandmarkType.leftEye];
+    final rightEye = face.landmarks[FaceLandmarkType.rightEye];
+
+    // Se não tiver landmarks dos olhos, retorna imagem original
+    if (leftEye == null || rightEye == null) {
+      return image;
+    }
+
+    // Calcular ângulo de rotação necessário para alinhar os olhos horizontalmente
+    final dx = rightEye.position.x - leftEye.position.x;
+    final dy = rightEye.position.y - leftEye.position.y;
+    final angle = math.atan2(dy, dx) * 180 / math.pi;
+
+    // Só rotacionar se o ângulo for significativo (> 2°)
+    if (angle.abs() < 2.0) {
+      return image;
+    }
+
+    // Rotacionar a imagem para alinhar os olhos
+    return img.copyRotate(image, angle: -angle);
   }
 
   Face _selectPrimaryFace(List<Face> faces) {

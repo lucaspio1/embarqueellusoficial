@@ -33,6 +33,7 @@ class _FaceCameraViewState extends State<FaceCameraView> {
     try {
       final cameras = await availableCameras();
 
+      // 🎯 Priorizar câmera traseira por padrão (melhor qualidade)
       final selectedCamera = widget.useFrontCamera
           ? cameras.firstWhere(
             (c) => c.lensDirection == CameraLensDirection.front,
@@ -47,7 +48,7 @@ class _FaceCameraViewState extends State<FaceCameraView> {
         selectedCamera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.bgra8888,
+        imageFormatGroup: ImageFormatGroup.yuv420,
       );
 
       await _cameraController!.initialize();
@@ -111,41 +112,68 @@ class _FaceCameraViewState extends State<FaceCameraView> {
     }
 
     return Stack(
-      alignment: Alignment.center,
+      fit: StackFit.expand,
       children: [
-        // Preview da câmera
-        CameraPreview(_cameraController!),
+        // 📸 Preview da câmera em TELA CHEIA
+        Positioned.fill(
+          child: CameraPreview(_cameraController!),
+        ),
 
         // Moldura oval para o rosto
         Center(
           child: Container(
-            width: 280,
-            height: 350,
+            width: 300,
+            height: 380,
             decoration: BoxDecoration(
               shape: BoxShape.rectangle,
-              borderRadius: BorderRadius.circular(180),
+              borderRadius: BorderRadius.circular(190),
               border: Border.all(
                 color: Colors.greenAccent,
-                width: 3,
+                width: 4,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.greenAccent.withOpacity(0.5),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
             ),
           ),
         ),
 
         // Instruções
-        const Positioned(
-          top: 60,
-          child: Card(
-            color: Colors.black54,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                'Posicione o rosto dentro da moldura',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+        Positioned(
+          top: 100,
+          left: 16,
+          right: 16,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(25),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.face, color: Colors.white, size: 24),
+                  SizedBox(width: 12),
+                  Text(
+                    'Posicione o rosto na moldura',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -154,62 +182,71 @@ class _FaceCameraViewState extends State<FaceCameraView> {
         // Botão de captura
         Positioned(
           bottom: 40,
-          child: Column(
-            children: [
-              // Botão principal de captura
-              GestureDetector(
-                onTap: _isCapturing ? null : _capturePhoto,
-                child: Container(
-                  width: 80,
-                  height: 80,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Column(
+              children: [
+                // Botão principal de captura
+                GestureDetector(
+                  onTap: _isCapturing ? null : _capturePhoto,
+                  child: Container(
+                    width: 75,
+                    height: 75,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isCapturing ? Colors.grey : Colors.white,
+                      border: Border.all(
+                        color: const Color(0xFF4C643C),
+                        width: 5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF4C643C).withOpacity(0.5),
+                          blurRadius: 15,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: _isCapturing
+                        ? const Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF4C643C),
+                              strokeWidth: 3,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.camera_alt,
+                            size: 35,
+                            color: Color(0xFF4C643C),
+                          ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Texto do botão
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _isCapturing
-                        ? Colors.grey
-                        : Colors.white,
-                    border: Border.all(
-                      color: const Color(0xFF4C643C),
-                      width: 4,
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _isCapturing ? 'Capturando...' : 'Toque para capturar',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  child: _isCapturing
-                      ? const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF4C643C),
-                      strokeWidth: 3,
-                    ),
-                  )
-                      : const Icon(
-                    Icons.camera_alt,
-                    size: 40,
-                    color: Color(0xFF4C643C),
-                  ),
                 ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Texto do botão
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  _isCapturing ? 'Capturando...' : 'Toque para capturar',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
