@@ -25,9 +25,6 @@ class YuvConverter {
       case ImageFormatGroup.bgra8888:
         return _bgraToRgba(image);
       case ImageFormatGroup.yuv420:
-      case ImageFormatGroup.yuv422:
-      case ImageFormatGroup.yuv440:
-      case ImageFormatGroup.yuv420sp:
         return _yuv420ToRgba(image);
       default:
         // Fallback genérico: tenta aplicar conversão YUV padrão.

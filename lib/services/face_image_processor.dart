@@ -53,7 +53,7 @@ class FaceImageProcessor {
     img.Image base = img.Image.fromBytes(
       width: image.width,
       height: image.height,
-      bytes: rgba,
+      bytes: rgba.buffer,
       numChannels: 4,
       order: img.ChannelOrder.rgba,
     );
@@ -150,8 +150,8 @@ class FaceImageProcessor {
 
     for (int y = 0; y < source.height; y++) {
       for (int x = 0; x < source.width; x++) {
-        final int pixel = source.getPixel(x, y);
-        rgb.setPixelRgb(x, y, pixel.r, pixel.g, pixel.b);
+        final pixel = source.getPixel(x, y);
+        rgb.setPixelRgb(x, y, pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt());
       }
     }
     return rgb;
