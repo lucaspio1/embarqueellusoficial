@@ -900,10 +900,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   List<CameraDescription> _cameras = [];
   int _currentCameraIndex = 0;
 
-  // 🎨 Feedback visual de qualidade (sem captura automática)
-  FaceValidationResult? _currentValidation;
-  Timer? _validationTimer;
-
   @override
   void initState() {
     super.initState();
@@ -921,9 +917,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       if (_currentCameraIndex == -1) _currentCameraIndex = 0;
 
       await _initializeCamera();
-
-      // ✅ Iniciar validação visual (sem captura automática)
-      _startValidationFeedback();
     } catch (e) {
       print('❌ Erro ao carregar câmeras: $e');
       if (mounted) {
@@ -956,33 +949,17 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     }
   }
 
-  void _startValidationFeedback() {
-    // 🎨 Feedback visual leve sem captura automática
-    // Timer reduzido para não sobrecarregar e não capturar
-    _validationTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      // Apenas atualiza feedback visual, não captura
-      if (mounted) {
-        setState(() {
-          // Atualizar cor da moldura baseado na posição (mock simples)
-          _currentValidation = null;
-        });
-      }
-    });
-  }
-
   Future<void> _trocarCamera() async {
     if (_cameras.length < 2) return;
 
     setState(() => _tirandoFoto = true);
 
     try {
-      _validationTimer?.cancel();
       await controller?.dispose();
 
       _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
 
       await _initializeCamera();
-      _startValidationFeedback();
 
       setState(() => _tirandoFoto = false);
     } catch (e) {
@@ -994,7 +971,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   @override
   void dispose() {
     _disposed = true;
-    _validationTimer?.cancel();
     controller?.dispose();
     super.dispose();
   }
@@ -1003,7 +979,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     if (_tirandoFoto || controller == null || !controller!.value.isInitialized) return;
 
     setState(() => _tirandoFoto = true);
-    _validationTimer?.cancel();
 
     try {
       final image = await controller!.takePicture();
