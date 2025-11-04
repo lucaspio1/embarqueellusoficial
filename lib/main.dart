@@ -51,7 +51,7 @@ void main() async {
       await FaceRecognitionService.instance.init();
       print('✅ Modelo ArcFace carregado!');
       print('   - Pronto para reconhecimento offline');
-      print('   - Limiar de similaridade: ${(FaceRecognitionService.SIMILARITY_THRESHOLD * 100).toStringAsFixed(0)}%');
+      print('   - Limiar L2: ${FaceRecognitionService.DISTANCE_THRESHOLD.toStringAsFixed(2)}');
     } catch (e) {
       print('⚠️  Aviso: Modelo ArcFace não encontrado');
       print('   Certifique-se que o arquivo existe em:');
