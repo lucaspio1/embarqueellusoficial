@@ -96,26 +96,10 @@ class DataService {
       }
       print('💾 [DataService] ${lista.length} passageiros salvos (SharedPreferences + SQLite)');
 
-      // Também sincronizar para tabela alunos com tem_qr='SIM'
-      for (final passageiro in lista) {
-        final cpf = passageiro.cpf;
-        if (cpf != null && cpf.isNotEmpty) {
-          final alunoExistente = await db.getAlunoByCpf(cpf);
-          final statusFacial = alunoExistente?['facial'] ??
-              (facialLiberada ? 'NAO' : 'BLOQUEADA');
-
-          await db.upsertAluno({
-            'cpf': cpf,
-            'nome': passageiro.nome,
-            'email': alunoExistente?['email'] ?? '',
-            'telefone': alunoExistente?['telefone'] ?? '',
-            'turma': passageiro.turma ?? alunoExistente?['turma'] ?? '',
-            'facial': statusFacial,
-            'tem_qr': facialLiberada ? 'SIM' : 'NAO',
-          });
-        }
-      }
-      print('✅ [DataService] Passageiros sincronizados para tabela alunos');
+      // 🔧 CORREÇÃO: Removida sincronização de passageiros para tabela alunos
+      // A tabela 'alunos' deve conter APENAS dados da aba "Alunos" do Google Sheets
+      // A tabela 'passageiros' deve conter APENAS dados da lista de embarque
+      // Essas duas tabelas devem permanecer SEPARADAS
     } catch (e) {
       print('❌ [DataService] Erro ao salvar no SQLite: $e');
     }

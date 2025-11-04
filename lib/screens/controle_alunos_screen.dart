@@ -65,34 +65,15 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
   Future<void> _carregarAlunos() async {
     setState(() => _carregando = true);
     try {
-      // Buscar TODOS os passageiros da tabela passageiros (carregados pelo QR Code)
-      final todosPassageiros = await _db.getPassageiros();
+      // 🔧 CORREÇÃO: Buscar APENAS da tabela alunos (sincronizada da aba "Alunos")
+      // A tabela 'alunos' deve vir EXCLUSIVAMENTE da aba "Alunos" do Google Sheets
+      // NÃO criar registros de alunos a partir de passageiros
 
       final prefs = await SharedPreferences.getInstance();
       final facialLiberada =
           (prefs.getString('pulseira') ?? '').toUpperCase() == 'SIM';
 
-      // Garantir que esses passageiros existam na tabela alunos para facial
-      for (final passageiro in todosPassageiros) {
-        final cpf = passageiro.cpf;
-        if (cpf == null || cpf.isEmpty) continue; // Pular se CPF for null ou vazio
-
-        final alunoExistente = await _db.getAlunoByCpf(cpf);
-        if (alunoExistente == null) {
-          // Criar registro na tabela alunos
-          await _db.upsertAluno({
-            'cpf': cpf,
-            'nome': passageiro.nome,
-            'email': '',
-            'telefone': '',
-            'turma': passageiro.turma ?? '',
-            'facial': facialLiberada ? 'NAO' : 'BLOQUEADA',
-            'tem_qr': facialLiberada ? 'SIM' : 'NAO',
-          });
-        }
-      }
-
-      // Agora buscar os alunos da tabela alunos com tem_qr='SIM'
+      // Buscar os alunos da tabela alunos com tem_qr='SIM'
       final alunos = await _db.getAlunosEmbarcadosParaCadastro();
 
       setState(() {
