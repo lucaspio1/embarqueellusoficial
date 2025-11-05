@@ -236,6 +236,8 @@ class AlunosSyncService {
                 'turma': pessoa['turma'] ?? '',
                 'embedding': jsonEncode(embedding),
                 'facial_status': 'CADASTRADA',
+                'movimentacao':
+                    (pessoa['movimentacao'] ?? '').toString().toUpperCase(),
               });
 
               countPessoas++;
