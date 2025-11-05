@@ -39,6 +39,8 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
     try {
       final logs = await _db.getAllLogs();
 
+      print('🔍 [DEBUG] Total de logs carregados: ${logs.length}');
+
       // Ordenar logs por timestamp (mais recentes primeiro)
       logs.sort((a, b) {
         final timestampA = a['timestamp']?.toString() ?? '';
@@ -51,6 +53,8 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
         _logsFiltrados = logs;
         _carregando = false;
       });
+
+      print('✅ [DEBUG] Logs carregados e estado atualizado. _logsFiltrados.length = ${_logsFiltrados.length}');
     } catch (e) {
       print('❌ Erro ao carregar logs: $e');
       setState(() => _carregando = false);
@@ -127,6 +131,7 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    print('🎨 [DEBUG] Build chamado - Carregando: $_carregando, Logs Filtrados: ${_logsFiltrados.length}');
     return Scaffold(
       appBar: AppBar(
         title: const Text('Logs de Reconhecimento'),
@@ -250,9 +255,13 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
                     : ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: _logsFiltrados.length,
+                        physics: const AlwaysScrollableScrollPhysics(),
                         itemBuilder: (context, index) {
+                          print('🏗️ [DEBUG] Construindo card para log index $index de ${_logsFiltrados.length}');
                           final log = _logsFiltrados[index];
-                          return _buildLogCard(log);
+                          final card = _buildLogCard(log);
+                          print('✅ [DEBUG] Card construído para index $index');
+                          return card;
                         },
                       ),
           ),
@@ -262,12 +271,15 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
   }
 
   Widget _buildLogCard(Map<String, dynamic> log) {
+    print('📋 [DEBUG] Construindo card para: ${log['person_name']} - Tipo: ${log['tipo']}');
     final nome = log['person_name'] ?? 'Sem nome';
     final cpf = log['cpf'] ?? 'Sem CPF';
     final timestamp = log['timestamp']?.toString() ?? '';
     final confidence = (log['confidence'] ?? 0.0).toDouble();
     final tipo = log['tipo'] ?? 'FACIAL';
     final operadorNome = log['operador_nome'] ?? 'Não registrado';
+
+    print('📊 [DEBUG] Dados do log - Nome: $nome, CPF: $cpf, Tipo: $tipo, Timestamp: $timestamp');
 
     // Definir cor baseada no tipo
     Color tipoColor;
@@ -289,9 +301,12 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
         break;
     }
 
-    return Card(
+    return Container(
+      constraints: const BoxConstraints(minHeight: 100),
+      child: Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
+      color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -362,6 +377,7 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 
