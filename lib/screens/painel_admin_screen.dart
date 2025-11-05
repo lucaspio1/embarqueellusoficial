@@ -381,25 +381,8 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
                     child: Text(
                       'Use essas ações com cuidado. Todas as operações são irreversíveis.',
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Converter entries para lista modificável
-                    ...List<MapEntry<String, int>>.from(_contagemPorLocal.entries).map(
-                      (entry) => Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.place),
-                          title: Text(_formatarLocal(entry.key)),
-                          trailing: Text(
-                            entry.value.toString(),
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
+                        fontSize: 12,
+                        color: Colors.orange.shade900,
                       ),
                     ),
                   ),
