@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -30,6 +30,15 @@ class DatabaseHelper {
       // Adicionar coluna operador_nome à tabela logs
       await db.execute('ALTER TABLE logs ADD COLUMN operador_nome TEXT');
       print('✅ [DB] Migração v1 -> v2: Adicionado campo operador_nome na tabela logs');
+    }
+    if (oldVersion < 3) {
+      // Garantir coluna de movimentação em pessoas_facial
+      try {
+        await db.execute("ALTER TABLE pessoas_facial ADD COLUMN movimentacao TEXT");
+        print('✅ [DB] Migração v2 -> v3: Adicionada coluna movimentacao na tabela pessoas_facial');
+      } catch (e) {
+        print('⚠️ [DB] Coluna movimentacao já existia: $e');
+      }
     }
   }
 
@@ -82,6 +91,7 @@ class DatabaseHelper {
         turma TEXT,
         embedding TEXT,
         facial_status TEXT DEFAULT 'CADASTRADA',
+        movimentacao TEXT,
         created_at TEXT,
         updated_at TEXT
       )
@@ -390,7 +400,7 @@ class DatabaseHelper {
     // ✅ CORREÇÃO: Buscar APENAS da tabela pessoas_facial (fonte única da verdade)
     // Removido UNION desnecessário - pessoas_facial já contém tudo
     final List<Map<String, dynamic>> pessoasComFacial = await db.rawQuery('''
-      SELECT cpf, nome, email, telefone, turma, embedding
+      SELECT cpf, nome, email, telefone, turma, embedding, movimentacao
       FROM pessoas_facial
       WHERE facial_status = 'CADASTRADA' AND embedding IS NOT NULL
     ''');
@@ -401,6 +411,39 @@ class DatabaseHelper {
         'embedding': jsonDecode(pessoa['embedding']),
       };
     }).toList();
+  }
+
+  Future<void> updatePessoaMovimentacao(
+      String cpf, String movimentacao) async {
+    if (cpf.isEmpty) return;
+    final db = await database;
+    await db.update(
+      'pessoas_facial',
+      {
+        'movimentacao': movimentacao,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'cpf = ?',
+      whereArgs: [cpf],
+    );
+  }
+
+  Future<Map<String, int>> getContagemPorMovimentacao() async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT COALESCE(NULLIF(TRIM(movimentacao), ''), 'SEM REGISTRO') AS movimentacao,
+             COUNT(*) AS total
+      FROM pessoas_facial
+      GROUP BY movimentacao
+      ORDER BY movimentacao
+    ''');
+
+    final mapa = <String, int>{};
+    for (final row in result) {
+      final chave = (row['movimentacao'] as String?) ?? 'SEM REGISTRO';
+      mapa[chave] = (row['total'] as int?) ?? 0;
+    }
+    return mapa;
   }
 
   // ✅ CORREÇÃO: Método insertLog sem parâmetro timestamp
@@ -422,6 +465,13 @@ class DatabaseHelper {
       'operador_nome': operadorNome,
       'created_at': DateTime.now().toIso8601String(),
     });
+
+    final tipoNormalizado = tipo.trim().toUpperCase();
+    if (tipoNormalizado.isNotEmpty &&
+        tipoNormalizado != 'RECONHECIMENTO' &&
+        tipoNormalizado != 'FACIAL') {
+      await updatePessoaMovimentacao(cpf, tipoNormalizado);
+    }
   }
 
   Future<List<Map<String, dynamic>>> getLogsHoje() async {
@@ -535,13 +585,29 @@ class DatabaseHelper {
   /// Insere ou atualiza uma pessoa com facial cadastrada
   Future<void> upsertPessoaFacial(Map<String, dynamic> pessoa) async {
     final db = await database;
+    final data = Map<String, dynamic>.from(pessoa);
+    data['updated_at'] = DateTime.now().toIso8601String();
+    data['created_at'] =
+        pessoa['created_at'] ?? DateTime.now().toIso8601String();
+
+    if (!data.containsKey('movimentacao')) {
+      final existente = await db.query(
+        'pessoas_facial',
+        columns: ['movimentacao'],
+        where: 'cpf = ?',
+        whereArgs: [data['cpf']],
+        limit: 1,
+      );
+      if (existente.isNotEmpty) {
+        data['movimentacao'] = existente.first['movimentacao'];
+      } else {
+        data['movimentacao'] = '';
+      }
+    }
+
     await db.insert(
       'pessoas_facial',
-      {
-        ...pessoa,
-        'updated_at': DateTime.now().toIso8601String(),
-        'created_at': pessoa['created_at'] ?? DateTime.now().toIso8601String(),
-      },
+      data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }

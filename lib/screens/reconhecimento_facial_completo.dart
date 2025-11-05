@@ -162,6 +162,11 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         operadorNome: operadorNome,
       );
 
+      await _db.updatePessoaMovimentacao(
+        (aluno['cpf'] as String? ?? '').trim(),
+        tipo.toString().toUpperCase(),
+      );
+
       // 🔄 Sincronizar embeddings em segundo plano após envio da movimentação
       print('🔄 [Reconhecimento] Iniciando sincronização em segundo plano...');
       AlunosSyncService.instance.syncPessoasFromSheets().then((result) {
