@@ -7,6 +7,8 @@ import 'package:embarqueellus/services/logs_sync_service.dart';
 import 'package:embarqueellus/services/user_sync_service.dart';
 import 'package:embarqueellus/screens/lista_alunos_screen.dart';
 import 'package:embarqueellus/screens/lista_logs_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 import 'package:embarqueellus/screens/lista_por_local_screen.dart';
 
 class PainelAdminScreen extends StatefulWidget {
@@ -31,11 +33,13 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
   Map<String, dynamic>? _usuario;
   Map<String, int> _contagemPorLocal = {};
   Timer? _syncTimer;
+  DateTime? _ultimaAtualizacao;
 
   @override
   void initState() {
     super.initState();
-    _inicializar();
+    _carregarDados();
+    _carregarUltimaAtualizacao();
     _iniciarSyncAutomatico();
   }
 
@@ -45,12 +49,33 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     super.dispose();
   }
 
-  /// Inicializa o painel com sincronização inicial
-  Future<void> _inicializar() async {
-    // Sincronizar todas as tabelas no primeiro acesso
-    await _sincronizarTodasTabelas();
-    // Carregar dados locais
-    await _carregarDados();
+  /// Carrega horário da última atualização do SharedPreferences
+  Future<void> _carregarUltimaAtualizacao() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final timestamp = prefs.getString('ultima_sincronizacao');
+      if (timestamp != null) {
+        setState(() {
+          _ultimaAtualizacao = DateTime.parse(timestamp);
+        });
+      }
+    } catch (e) {
+      print('❌ Erro ao carregar última atualização: $e');
+    }
+  }
+
+  /// Salva horário da última atualização no SharedPreferences
+  Future<void> _salvarUltimaAtualizacao() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final agora = DateTime.now();
+      await prefs.setString('ultima_sincronizacao', agora.toIso8601String());
+      setState(() {
+        _ultimaAtualizacao = agora;
+      });
+    } catch (e) {
+      print('❌ Erro ao salvar última atualização: $e');
+    }
   }
 
   /// Inicia sincronização automática a cada 10 minutos
@@ -82,10 +107,32 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
 
       print('✅ [PainelAdmin] Todas as tabelas sincronizadas com sucesso');
 
+      // Salvar horário da última atualização
+      await _salvarUltimaAtualizacao();
+
       // Recarregar dados após sincronização
       await _carregarDados();
+
+      // Mostrar mensagem de sucesso
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Dados atualizados com sucesso!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       print('❌ Erro ao sincronizar tabelas: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erro ao atualizar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _sincronizando = false);
@@ -189,26 +236,6 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       appBar: AppBar(
         title: const Text('Painel Administrativo'),
         backgroundColor: const Color(0xFF4C643C),
-        actions: [
-          if (_sincronizando)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _sincronizarTodasTabelas,
-              tooltip: 'Sincronizar todas as tabelas',
-            ),
-        ],
       ),
       body: _carregando
           ? const Center(child: CircularProgressIndicator())
@@ -252,6 +279,11 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
                 ),
               ),
             ),
+
+            const SizedBox(height: 24),
+
+            // Card de Atualização
+            _buildAtualizacaoCard(),
 
             const SizedBox(height: 24),
 
@@ -409,6 +441,98 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => const ListaLogsScreen(),
+      ),
+    );
+  }
+
+  Widget _buildAtualizacaoCard() {
+    final dataFormatada = _ultimaAtualizacao != null
+        ? DateFormat('dd/MM/yyyy HH:mm').format(_ultimaAtualizacao!)
+        : 'Nunca';
+
+    return Card(
+      elevation: 4,
+      color: const Color(0xFF4C643C),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.sync,
+                  color: Colors.white,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Sincronização de Dados',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Última atualização: $dataFormatada',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: _sincronizando ? null : _sincronizarTodasTabelas,
+                icon: _sincronizando
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF4C643C),
+                        ),
+                      )
+                    : const Icon(Icons.cloud_download),
+                label: Text(
+                  _sincronizando ? 'Atualizando...' : 'ATUALIZAR DADOS',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF4C643C),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Sincroniza: Usuários, Alunos e Logs',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.8),
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
