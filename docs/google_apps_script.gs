@@ -12,6 +12,71 @@
 const SPREADSHEET_ID = '1xl2wJdaqzIkTA3gjBQws5j6XrOw3AR5RC7_CrDR1M0U';
 const MOVIMENTACAO_COLUMN_INDEX = 8; // Coluna H
 
+function createResponse(success, message, data = {}) {
+  const response = {
+    success: success,
+    message: message,
+    timestamp: new Date().toISOString(),
+    ...data,
+  };
+
+  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(
+    ContentService.MimeType.JSON,
+  );
+}
+
+function garantirColunaMovimentacao(pessoasSheet) {
+  const lastColumn = pessoasSheet.getLastColumn();
+  if (lastColumn < MOVIMENTACAO_COLUMN_INDEX) {
+    pessoasSheet.insertColumnsAfter(
+      lastColumn,
+      MOVIMENTACAO_COLUMN_INDEX - lastColumn,
+    );
+  }
+
+  const headerCell = pessoasSheet.getRange(1, MOVIMENTACAO_COLUMN_INDEX);
+  if (headerCell.getValue() !== 'MOVIMENTAÇÃO') {
+    headerCell.setValue('MOVIMENTAÇÃO');
+  }
+}
+
+function atualizarMovimentacaoPessoa(cpf, movimentacao) {
+  if (!cpf || !movimentacao) {
+    return;
+  }
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const pessoasSheet = ss.getSheetByName('PESSOAS');
+
+  if (!pessoasSheet) {
+    console.error('❌ Aba PESSOAS não encontrada ao atualizar movimentação');
+    return;
+  }
+
+  garantirColunaMovimentacao(pessoasSheet);
+
+  const lastRow = pessoasSheet.getLastRow();
+  if (lastRow < 2) {
+    return;
+  }
+
+  const cpfRange = pessoasSheet.getRange(2, 2, lastRow - 1, 1);
+  const cpfValues = cpfRange.getValues();
+
+  for (let i = 0; i < cpfValues.length; i++) {
+    const cpfSheet = String(cpfValues[i][0] || '').trim();
+    if (cpfSheet === cpf) {
+      pessoasSheet
+        .getRange(i + 2, MOVIMENTACAO_COLUMN_INDEX)
+        .setValue(movimentacao);
+      console.log(`🔄 Atualizada movimentação de ${cpf} para ${movimentacao}`);
+      return;
+    }
+  }
+
+  console.log(`⚠️ CPF ${cpf} não encontrado para atualizar movimentação`);
+}
+
 function doPost(e) {
   try {
     console.log('📥 Requisição recebida');
@@ -363,6 +428,10 @@ function addPessoa(data) {
     const telefone = data.telefone || '';
     const embedding = data.embedding;
     const personId = data.personId || cpf;
+    const movimentacaoValor = (data.movimentacao || '')
+      .toString()
+      .trim()
+      .toUpperCase();
 
     console.log('📥 [addPessoa] Cadastrando pessoa:', nome, 'CPF:', cpf);
 
@@ -398,6 +467,11 @@ function addPessoa(data) {
         pessoasSheet.getRange(i + 1, 5).setValue(telefone);
         pessoasSheet.getRange(i + 1, 6).setValue(embeddingJson);
         pessoasSheet.getRange(i + 1, 7).setValue(dataCadastro);
+        if (movimentacaoValor) {
+          pessoasSheet
+            .getRange(i + 1, MOVIMENTACAO_COLUMN_INDEX)
+            .setValue(movimentacaoValor);
+        }
         console.log('✅ [addPessoa] Pessoa atualizada com sucesso');
         return createResponse(true, 'Pessoa atualizada com sucesso');
       }
@@ -412,7 +486,7 @@ function addPessoa(data) {
       telefone,
       embeddingJson,
       dataCadastro,
-      ''
+      movimentacaoValor
     ];
 
     pessoasSheet.appendRow(newRow);
@@ -455,6 +529,13 @@ function addMovementLog(data) {
       const personName = person.personName || person.nome || '';
       const confidence = person.confidence || 0;
       const tipo = (person.tipo || 'RECONHECIMENTO').toString().toUpperCase();
+      const movimentacaoRecebida = (
+        person.movimentacao ||
+        person.movimento ||
+        ''
+      )
+        .toString()
+        .trim();
       const personId = person.personId || cpf;
       const operadorNome = person.operadorNome || 'Sistema';
 
@@ -468,8 +549,16 @@ function addMovementLog(data) {
         operadorNome
       ]);
 
-      if (cpf && tipo !== 'RECONHECIMENTO' && tipo !== 'FACIAL') {
-        atualizarMovimentacaoPessoa(cpf, tipo);
+      let movimentacao = movimentacaoRecebida;
+      if (!movimentacao) {
+        const tipoNormalizado = tipo.trim();
+        if (tipoNormalizado !== 'RECONHECIMENTO' && tipoNormalizado !== 'FACIAL') {
+          movimentacao = tipoNormalizado;
+        }
+      }
+
+      if (cpf && movimentacao) {
+        atualizarMovimentacaoPessoa(cpf, movimentacao.toUpperCase());
       }
 
       count++;
@@ -554,6 +643,7 @@ function registrarLog(data) {
       personName: data.nome,
       confidence: data.confidence || 0,
       tipo: data.tipo || 'reconhecimento',
+      movimentacao: data.movimentacao || data.tipo || '',
       timestamp: new Date().toISOString()
     }]
   });
@@ -609,60 +699,3 @@ function getAllLogs() {
   }
 }
 
-// ============================================================================
-// FUNÇÕES AUXILIARES
-// ============================================================================
-function atualizarMovimentacaoPessoa(cpf, movimentacao) {
-  if (!cpf) return;
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const pessoasSheet = ss.getSheetByName('PESSOAS');
-
-  if (!pessoasSheet) {
-    console.error('❌ Aba PESSOAS não encontrada ao atualizar movimentação');
-    return;
-  }
-
-  garantirColunaMovimentacao(pessoasSheet);
-
-  const lastRow = pessoasSheet.getLastRow();
-  if (lastRow < 2) return;
-
-  const cpfRange = pessoasSheet.getRange(2, 2, lastRow - 1, 1);
-  const cpfValues = cpfRange.getValues();
-
-  for (let i = 0; i < cpfValues.length; i++) {
-    const cpfSheet = String(cpfValues[i][0] || '').trim();
-    if (cpfSheet === cpf) {
-      pessoasSheet.getRange(i + 2, MOVIMENTACAO_COLUMN_INDEX).setValue(movimentacao);
-      console.log(`🔄 Atualizada movimentação de ${cpf} para ${movimentacao}`);
-      return;
-    }
-  }
-
-  console.log(`⚠️ CPF ${cpf} não encontrado para atualizar movimentação`);
-}
-
-function garantirColunaMovimentacao(pessoasSheet) {
-  const lastColumn = pessoasSheet.getLastColumn();
-  if (lastColumn < MOVIMENTACAO_COLUMN_INDEX) {
-    pessoasSheet.insertColumnsAfter(lastColumn, MOVIMENTACAO_COLUMN_INDEX - lastColumn);
-  }
-
-  const headerCell = pessoasSheet.getRange(1, MOVIMENTACAO_COLUMN_INDEX);
-  if (headerCell.getValue() !== 'MOVIMENTAÇÃO') {
-    headerCell.setValue('MOVIMENTAÇÃO');
-  }
-}
-
-function createResponse(success, message, data = {}) {
-  const response = {
-    success: success,
-    message: message,
-    timestamp: new Date().toISOString(),
-    ...data
-  };
-
-  return ContentService
-    .createTextOutput(JSON.stringify(response))
-    .setMimeType(ContentService.MimeType.JSON);
-}
