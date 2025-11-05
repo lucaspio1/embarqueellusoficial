@@ -80,9 +80,10 @@ class OfflineSyncService {
       'telefone': telefone,
       'embedding': embedding,
       'personId': personId,
+      'movimentacao': 'QUARTO', // ✅ JÁ ENVIA COM MOVIMENTAÇÃO INICIAL
     });
 
-    print('📝 [OfflineSync] Cadastro facial enfileirado: $nome');
+    print('📝 [OfflineSync] Cadastro facial enfileirado: $nome (Local inicial: QUARTO)');
   }
 
   Future<bool> _hasInternet() async {
@@ -251,6 +252,7 @@ class OfflineSyncService {
       'telefone': copy['telefone'] ?? '',
       'embedding': copy['embedding'],
       'personId': copy['personId'] ?? copy['cpf'],
+      'movimentacao': copy['movimentacao'] ?? 'QUARTO', // ✅ GARANTE QUE SEMPRE VAI COM QUARTO
     };
     return _postWithRetriesAndSuccess(body);
   }

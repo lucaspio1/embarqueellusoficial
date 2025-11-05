@@ -10,6 +10,7 @@ import 'package:embarqueellus/services/face_image_processor.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
 import 'package:embarqueellus/services/face_detection_service.dart';
+import 'package:embarqueellus/services/data_service.dart';
 import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,8 +28,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
   final TextEditingController _nomeController = TextEditingController();
 
   List<Map<String, dynamic>> _todosAlunos = [];
-  List<Map<String, dynamic>> _alunos = [];
   List<Map<String, dynamic>> _alunosFiltrados = [];
+  Map<String, bool> _alunosComFacial = {}; // Mapa CPF -> tem facial
   bool _carregando = true;
   bool _processando = false;
   bool _sincronizando = false;
@@ -51,39 +52,50 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
   Future<void> _inicializar() async {
     setState(() => _carregando = true);
-
-    final temAlunos = await _syncService.temAlunosLocais();
-
-    if (!temAlunos) {
-      print('📥 [ControleAlunos] Nenhum aluno local, tentando sincronizar...');
-      await _sincronizarAlunos(mostrarMensagem: false);
-    }
-
     await _carregarAlunos();
   }
 
   Future<void> _carregarAlunos() async {
     setState(() => _carregando = true);
     try {
-      // 🔧 CORREÇÃO: Buscar APENAS da tabela alunos (sincronizada da aba "Alunos")
-      // A tabela 'alunos' deve vir EXCLUSIVAMENTE da aba "Alunos" do Google Sheets
-      // NÃO criar registros de alunos a partir de passageiros
+      // ✅ CORREÇÃO: Carregar TODOS os passageiros da lista de embarque
+      await DataService().loadLocalData(
+        (await SharedPreferences.getInstance()).getString('nome_aba') ?? '',
+        (await SharedPreferences.getInstance()).getString('numero_onibus') ?? '',
+      );
 
-      final prefs = await SharedPreferences.getInstance();
-      final facialLiberada =
-          (prefs.getString('pulseira') ?? '').toUpperCase() == 'SIM';
+      final passageiros = DataService().passageirosEmbarque.value;
 
-      // Buscar os alunos da tabela alunos com tem_qr='SIM'
-      final alunos = await _db.getAlunosParaCadastroFacial();
+      // ✅ Verificar quais alunos JÁ TÊM facial cadastrada
+      final pessoasComFacial = await _db.getAllPessoasFacial();
+      final cpfsComFacial = <String, bool>{};
+      for (final pessoa in pessoasComFacial) {
+        final cpf = pessoa['cpf']?.toString() ?? '';
+        if (cpf.isNotEmpty) {
+          cpfsComFacial[cpf] = true;
+        }
+      }
+
+      // ✅ Converter passageiros para formato de alunos
+      final alunos = passageiros.map((p) {
+        return {
+          'cpf': p.cpf ?? '',
+          'nome': p.nome,
+          'turma': p.turma,
+          'email': '', // Passageiros não têm email, mas mantemos a estrutura
+          'telefone': '',
+        };
+      }).where((a) => a['cpf']?.toString().isNotEmpty ?? false).toList();
 
       setState(() {
-        _alunos = alunos;
-        _alunosFiltrados = alunos;
         _todosAlunos = alunos;
+        _alunosFiltrados = alunos;
+        _alunosComFacial = cpfsComFacial;
         _carregando = false;
       });
 
-      print('📋 ${_alunos.length} alunos carregados para cadastro facial');
+      print('📋 ${_todosAlunos.length} alunos carregados da lista de embarque');
+      print('✅ ${cpfsComFacial.length} alunos com facial cadastrada');
     } catch (e) {
       print('❌ Erro ao carregar alunos: $e');
       setState(() => _carregando = false);
@@ -108,7 +120,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
                   ),
                 ),
                 SizedBox(width: 16),
-                Text('Sincronizando alunos...'),
+                Text('Sincronizando lista de embarque...'),
               ],
             ),
             duration: Duration(seconds: 30),
@@ -116,16 +128,20 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         );
       }
 
-      final result = await _syncService.syncAlunosFromSheets();
+      // Recarrega a lista de embarque do servidor
+      final prefs = await SharedPreferences.getInstance();
+      final nomeAba = prefs.getString('nome_aba') ?? '';
+      final numeroOnibus = prefs.getString('numero_onibus') ?? '';
 
-      if (result.success) {
+      if (nomeAba.isNotEmpty && numeroOnibus.isNotEmpty) {
+        await DataService().fetchData(nomeAba, onibus: numeroOnibus);
         await _carregarAlunos();
 
         if (mounted && mostrarMensagem) {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ ${result.message}'),
+              content: Text('✅ ${_todosAlunos.length} alunos sincronizados'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 3),
             ),
@@ -135,10 +151,10 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         if (mounted && mostrarMensagem) {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ ${result.message}'),
+            const SnackBar(
+              content: Text('❌ Nenhuma lista de embarque carregada'),
               backgroundColor: Colors.red,
-              duration: const Duration(seconds: 5),
+              duration: Duration(seconds: 3),
             ),
           );
         }
@@ -195,7 +211,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
       setState(() => _processando = true);
       _mostrarProgresso('Validando rosto na imagem...');
 
-      // ✅ Validar que há um rosto na foto usando MLKit
       final inputImage = InputImage.fromFilePath(imagePath);
       final faces = await FaceDetectionService.instance.detect(inputImage);
 
@@ -233,12 +248,10 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       _atualizarProgresso('Extraindo características faciais...');
 
-      // ✅ CORREÇÃO: Extrair embedding diretamente (SEM salvar em 'embeddings')
       final embedding = await _faceService.extractEmbedding(processedImage);
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
-      // ✅ Salvar APENAS na tabela pessoas_facial (fonte única da verdade)
       await _db.upsertPessoaFacial({
         'cpf': aluno['cpf'],
         'nome': aluno['nome'],
@@ -247,9 +260,10 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         'turma': aluno['turma'] ?? '',
         'embedding': jsonEncode(embedding),
         'facial_status': 'CADASTRADA',
+        'movimentacao': 'QUARTO',
       });
 
-      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial');
+      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial com movimentação QUARTO');
 
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
@@ -262,11 +276,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('✅ [CadastroFacial] Embedding enfileirado para sincronização com aba Pessoas');
 
-      // Sincronizar em background (não bloqueia a UI)
       OfflineSyncService.instance.trySyncInBackground();
       print('🔄 [CadastroFacial] Sincronização em background iniciada');
-
-      await _db.updateAlunoFacial(aluno['cpf'], 'CADASTRADA');
 
       if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);
@@ -281,6 +292,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
             children: [
               Text('✅ Facial cadastrada: ${aluno['nome']}',
                   style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('🏠 Local inicial: QUARTO'),
               Text('☁️ Sincronizando em segundo plano...'),
             ],
           ),
@@ -308,7 +320,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         final imagePath = await _abrirCameraTela(frontal: true);
         if (imagePath == null) continue;
 
-        // ✅ Validar que há um rosto na foto usando MLKit
         final inputImage = InputImage.fromFilePath(imagePath);
         final detectedFaces = await FaceDetectionService.instance.detect(inputImage);
 
@@ -320,7 +331,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
               backgroundColor: Colors.red,
             ),
           );
-          continue; // Permitir nova tentativa
+          continue;
         }
 
         if (detectedFaces.length > 1) {
@@ -331,7 +342,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
               backgroundColor: Colors.orange,
             ),
           );
-          continue; // Permitir nova tentativa
+          continue;
         }
 
         final processedImage = await _processarImagemParaModelo(File(imagePath));
@@ -348,15 +359,12 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       _atualizarProgresso('Processando ${faces.length} imagens...');
 
-      // ✅ CORREÇÃO: Extrair embedding avançado diretamente (SEM salvar em 'embeddings')
-      // Calcular média dos embeddings das múltiplas fotos
       final embeddings = <List<double>>[];
       for (final face in faces) {
         final emb = await _faceService.extractEmbedding(face);
         embeddings.add(emb);
       }
 
-      // Média dos embeddings para melhor precisão
       final embedding = List<double>.filled(embeddings[0].length, 0.0);
       for (final emb in embeddings) {
         for (int i = 0; i < emb.length; i++) {
@@ -366,7 +374,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('📤 [CadastroFacialAvançado] Embedding extraído de ${faces.length} fotos: ${embedding.length} dimensões');
 
-      // ✅ Salvar APENAS na tabela pessoas_facial (fonte única da verdade)
       await _db.upsertPessoaFacial({
         'cpf': aluno['cpf'],
         'nome': aluno['nome'],
@@ -375,9 +382,10 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         'turma': aluno['turma'] ?? '',
         'embedding': jsonEncode(embedding),
         'facial_status': 'CADASTRADA',
+        'movimentacao': 'QUARTO',
       });
 
-      print('✅ [CadastroFacialAvançado] Salvo na tabela pessoas_facial');
+      print('✅ [CadastroFacialAvançado] Salvo na tabela pessoas_facial com movimentação QUARTO');
 
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
@@ -390,11 +398,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('✅ [CadastroFacialAvançado] Embedding enfileirado para sincronização com aba Pessoas');
 
-      // Sincronizar em background (não bloqueia a UI)
       OfflineSyncService.instance.trySyncInBackground();
       print('🔄 [CadastroFacialAvançado] Sincronização em background iniciada');
-
-      await _db.updateAlunoFacial(aluno['cpf'], 'CADASTRADA');
 
       if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);
@@ -410,6 +415,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
               Text('✅ Facial cadastrada com alta precisão!',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               Text('${aluno['nome']} - ${faces.length} imagens processadas'),
+              Text('🏠 Local inicial: QUARTO'),
               Text('☁️ Sincronizando em segundo plano...'),
             ],
           ),
@@ -438,8 +444,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
       return a['nome'].toLowerCase().contains(filtro);
     }).toList();
 
-    final totalComFacial =
-        _todosAlunos.where((a) => a['facial'] == 'CADASTRADA').length;
+    final totalComFacial = _alunosComFacial.length;
 
     return Scaffold(
       appBar: AppBar(
@@ -462,28 +467,12 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
             IconButton(
               icon: const Icon(Icons.cloud_download),
               onPressed: _sincronizarAlunos,
-              tooltip: 'Sincronizar com planilha',
+              tooltip: 'Sincronizar lista de embarque',
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _carregarAlunos,
             tooltip: 'Atualizar',
-          ),
-          IconButton(
-            icon: const Icon(Icons.cloud_upload),
-            onPressed: () async {
-              // Sincronizar em background
-              OfflineSyncService.instance.trySyncInBackground();
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('☁️ Sincronização iniciada em segundo plano'),
-                  backgroundColor: Colors.blue,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            tooltip: 'Sincronizar embeddings',
           ),
         ],
       ),
@@ -513,7 +502,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Sincronize com a planilha para carregar os alunos',
+                    'Carregue a lista de embarque primeiro',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey),
                   ),
@@ -551,7 +540,9 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
                 itemCount: alunosFiltrados.length,
                 itemBuilder: (context, index) {
                   final aluno = alunosFiltrados[index];
-                  final temFacial = aluno['facial'] == 'CADASTRADA';
+                  final cpf = aluno['cpf']?.toString() ?? '';
+                  final temFacial = _alunosComFacial[cpf] ?? false;
+
                   return Card(
                     margin: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 6),
@@ -559,23 +550,47 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
                       leading: CircleAvatar(
                         backgroundColor: temFacial
                             ? Colors.green.shade100
-                            : Colors.red.shade50,
+                            : Colors.grey.shade200,
                         child: Icon(
                           temFacial
                               ? Icons.verified_user
                               : Icons.face_retouching_off,
                           color: temFacial
                               ? Colors.green.shade700
-                              : Colors.red.shade400,
+                              : Colors.grey.shade600,
                         ),
                       ),
                       title: Text(aluno['nome'] ?? 'Sem nome'),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('CPF: ${aluno['cpf'] ?? '--'}'),
-                          if (aluno['turma'] != null && aluno['turma'].toString().isNotEmpty)
+                          Text('CPF: ${cpf.isEmpty ? "--" : cpf}'),
+                          if (aluno['turma'] != null &&
+                              aluno['turma'].toString().isNotEmpty)
                             Text('Turma: ${aluno['turma']}'),
+                          if (temFacial)
+                            Container(
+                              margin: const EdgeInsets.only(top: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: Colors.green.shade200,
+                                ),
+                              ),
+                              child: Text(
+                                '✅ Facial cadastrada',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                       trailing: PopupMenuButton<String>(
@@ -593,7 +608,9 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
                               children: [
                                 Icon(Icons.face, color: Colors.grey),
                                 SizedBox(width: 8),
-                                Text('Cadastro Simples'),
+                                Text(temFacial
+                                    ? 'Refazer Simples'
+                                    : 'Cadastro Simples'),
                               ],
                             ),
                           ),
@@ -601,9 +618,12 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
                             value: 'avancado',
                             child: Row(
                               children: [
-                                Icon(Icons.verified_user, color: Colors.green),
+                                Icon(Icons.verified_user,
+                                    color: Colors.green),
                                 SizedBox(width: 8),
-                                Text('Cadastro Avançado (3 fotos)'),
+                                Text(temFacial
+                                    ? 'Refazer Avançado'
+                                    : 'Cadastro Avançado (3 fotos)'),
                               ],
                             ),
                           ),
@@ -611,7 +631,9 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
                         child: ElevatedButton(
                           onPressed: () => _cadastrarFacial(aluno),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4C643C),
+                            backgroundColor: temFacial
+                                ? Colors.orange
+                                : const Color(0xFF4C643C),
                             foregroundColor: Colors.white,
                           ),
                           child: Text(temFacial ? 'Refazer' : 'Cadastrar'),
@@ -708,8 +730,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
       builder: (context) => WillPopScope(
         onWillPop: () async => false,
         child: AlertDialog(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -728,6 +749,10 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
     _mostrarProgresso(mensagem);
   }
 }
+
+// ============================================================================
+// CAMERA PREVIEW SCREEN
+// ============================================================================
 
 class CameraPreviewScreen extends StatefulWidget {
   final CameraDescription camera;
@@ -755,7 +780,7 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       _cameras = await availableCameras();
 
       _currentCameraIndex = _cameras.indexWhere(
-        (c) => c.lensDirection == widget.camera.lensDirection,
+            (c) => c.lensDirection == widget.camera.lensDirection,
       );
       if (_currentCameraIndex == -1) _currentCameraIndex = 0;
 
@@ -853,7 +878,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 📸 CÂMERA PREENCHENDO TODA A TELA (proporção correta, sem distorção)
           Positioned.fill(
             child: FittedBox(
               fit: BoxFit.cover,
@@ -864,8 +888,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
               ),
             ),
           ),
-
-          // 🎯 Moldura de guia sutil (apenas borda, sem obstruir visão)
           Center(
             child: Container(
               width: 280,
@@ -880,7 +902,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
               ),
             ),
           ),
-
           Positioned(
             top: 60,
             left: 0,
@@ -901,11 +922,11 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (_cameras.length > 1)
-                        const SizedBox(height: 4),
+                      if (_cameras.length > 1) const SizedBox(height: 4),
                       if (_cameras.length > 1)
                         Text(
-                          _cameras[_currentCameraIndex].lensDirection == CameraLensDirection.front
+                          _cameras[_currentCameraIndex].lensDirection ==
+                              CameraLensDirection.front
                               ? '📷 Câmera Frontal'
                               : '📷 Câmera Traseira',
                           style: const TextStyle(
@@ -919,7 +940,6 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
               ),
             ),
           ),
-
           if (_tirandoFoto)
             Container(
               color: Colors.black54,
@@ -941,7 +961,9 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: _tirandoFoto ? Colors.grey : const Color(0xFF4C643C),
-        onPressed: _tirandoFoto ? null : () async {
+        onPressed: _tirandoFoto
+            ? null
+            : () async {
           setState(() => _tirandoFoto = true);
           final image = await controller!.takePicture();
 

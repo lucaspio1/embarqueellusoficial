@@ -263,12 +263,11 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
 
       _atualizarProgresso('Extraindo características faciais...');
 
-      // ✅ CORREÇÃO: Extrair embedding diretamente (SEM salvar em 'embeddings')
       final embedding = await _faceService.extractEmbedding(processedImage);
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
-      // ✅ Salvar APENAS na tabela pessoas_facial (fonte única da verdade)
+      // ✅ NOVA LÓGICA: Salvar com movimentação inicial "QUARTO"
       await _db.upsertPessoaFacial({
         'cpf': aluno['cpf'],
         'nome': aluno['nome'],
@@ -277,9 +276,10 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
         'turma': aluno['turma'] ?? '',
         'embedding': jsonEncode(embedding),
         'facial_status': 'CADASTRADA',
+        'movimentacao': 'QUARTO', // ✅ JÁ INICIA NO QUARTO
       });
 
-      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial');
+      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial com movimentação QUARTO');
 
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
@@ -292,7 +292,6 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
 
       print('✅ [CadastroFacial] Embedding enfileirado para sincronização com aba Pessoas');
 
-      // Sincronizar em background
       OfflineSyncService.instance.trySyncInBackground();
       print('🔄 [CadastroFacial] Sincronização em background iniciada');
 
@@ -312,6 +311,7 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
               children: [
                 Text('✅ Facial cadastrada: ${aluno['nome']}',
                     style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('🏠 Local inicial: QUARTO'),
                 Text('☁️ Sincronizando em segundo plano...'),
               ],
             ),
