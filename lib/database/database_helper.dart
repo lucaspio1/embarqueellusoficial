@@ -444,19 +444,36 @@ class DatabaseHelper {
 
   Future<Map<String, int>> getContagemPorMovimentacao() async {
     final db = await database;
-    final result = await db.rawQuery('''
-      SELECT COALESCE(NULLIF(TRIM(movimentacao), ''), 'SEM REGISTRO') AS movimentacao,
-             COUNT(*) AS total
-      FROM pessoas_facial
-      GROUP BY movimentacao
-      ORDER BY movimentacao
-    ''');
 
-    final mapa = <String, int>{};
+    // ✅ Buscar apenas dos 3 locais específicos: QUARTO, PISCINA, BALADA
+    final result = await db.rawQuery('''
+    SELECT TRIM(UPPER(tipo)) AS tipo,
+           COUNT(DISTINCT cpf) AS total
+    FROM logs
+    WHERE UPPER(TRIM(tipo)) IN ('QUARTO', 'PISCINA', 'BALADA')
+    GROUP BY TRIM(UPPER(tipo))
+    ORDER BY 
+      CASE TRIM(UPPER(tipo))
+        WHEN 'QUARTO' THEN 1
+        WHEN 'PISCINA' THEN 2
+        WHEN 'BALADA' THEN 3
+        ELSE 4
+      END
+  ''');
+
+    final mapa = <String, int>{
+      'QUARTO': 0,
+      'PISCINA': 0,
+      'BALADA': 0,
+    };
+
     for (final row in result) {
-      final chave = (row['movimentacao'] as String?) ?? 'SEM REGISTRO';
-      mapa[chave] = (row['total'] as int?) ?? 0;
+      final chave = (row['tipo'] as String?) ?? '';
+      if (chave.isNotEmpty && mapa.containsKey(chave)) {
+        mapa[chave] = (row['total'] as int?) ?? 0;
+      }
     }
+
     return mapa;
   }
 
