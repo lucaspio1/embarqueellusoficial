@@ -20,11 +20,24 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
   int _totalFaciais = 0;
   int _totalLogs = 0;
   Map<String, dynamic>? _usuario;
+  Map<String, int> _contagemPorLocal = {};
 
   @override
   void initState() {
     super.initState();
     _carregarDados();
+  }
+
+  String _formatarLocal(String valor) {
+    final texto = valor.toLowerCase();
+    if (texto == 'sem registro') {
+      return 'Sem registro';
+    }
+    return texto
+        .split(' ')
+        .map((palavra) =>
+            palavra.isEmpty ? palavra : '${palavra[0].toUpperCase()}${palavra.substring(1)}')
+        .join(' ');
   }
 
   Future<void> _carregarDados() async {
@@ -34,6 +47,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       final alunos = await _db.getAllAlunos();
       final alunosComFacial = await _db.getTodosAlunosComFacial();
       final logs = await _db.getAllLogs();
+      final contagemPorLocal = await _db.getContagemPorMovimentacao();
       final usuario = await _authService.getUsuarioLogado();
 
       setState(() {
@@ -41,6 +55,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
         _totalFaciais = alunosComFacial.length;
         _totalLogs = logs.length;
         _usuario = usuario;
+        _contagemPorLocal = contagemPorLocal;
         _carregando = false;
       });
     } catch (e) {
@@ -205,7 +220,39 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
                     onTap: _abrirListaLogs,
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
+
+                  if (_contagemPorLocal.isNotEmpty) ...[
+                    const Text(
+                      'Distribuição por Local',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ..._contagemPorLocal.entries.map(
+                      (entry) => Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.place),
+                          title: Text(_formatarLocal(entry.key)),
+                          trailing: Text(
+                            entry.value.toString(),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  if (_contagemPorLocal.isEmpty)
+                    const SizedBox(height: 32)
+                  else
+                    const SizedBox(height: 8),
 
                   // Ações administrativas
                   const Text(
