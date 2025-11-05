@@ -37,9 +37,12 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
     setState(() => _carregando = true);
 
     try {
-      final logs = await _db.getAllLogs();
+      final logsFromDb = await _db.getAllLogs();
 
-      print('🔍 [DEBUG] Total de logs carregados: ${logs.length}');
+      print('🔍 [DEBUG] Total de logs carregados: ${logsFromDb.length}');
+
+      // Criar uma cópia modificável da lista para poder ordenar
+      final logs = List<Map<String, dynamic>>.from(logsFromDb);
 
       // Ordenar logs por timestamp (mais recentes primeiro)
       logs.sort((a, b) {
