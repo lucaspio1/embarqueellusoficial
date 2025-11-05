@@ -342,11 +342,25 @@ class DatabaseHelper {
     return await db.query('alunos');
   }
 
-  Future<List<Map<String, dynamic>>> getAlunosEmbarcadosParaCadastro() async {
+  // ========================================================================
+  // AQUI ESTÁ A CORREÇÃO
+  // ========================================================================
+
+  /// Busca alunos que precisam de cadastro facial (facial = 'NAO' ou NULL)
+  Future<List<Map<String, dynamic>>> getAlunosParaCadastroFacial() async {
     final db = await database;
-    // Retorna apenas alunos que tem QR/pulseira cadastrada (embarcados)
-    return await db.query('alunos', where: 'tem_qr = ?', whereArgs: ['SIM']);
+    // Retorna alunos que AINDA NÃO têm facial (baseado no campo 'facial')
+    return await db.query(
+        'alunos',
+        where: 'facial = ? OR facial IS NULL',
+        whereArgs: ['NAO']
+    );
   }
+
+  // ========================================================================
+  // FIM DA CORREÇÃO
+  // ========================================================================
+
 
   Future<Map<String, dynamic>?> getAlunoByCpf(String cpf) async {
     final db = await database;

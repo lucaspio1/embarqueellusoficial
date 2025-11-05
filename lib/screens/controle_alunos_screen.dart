@@ -74,7 +74,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           (prefs.getString('pulseira') ?? '').toUpperCase() == 'SIM';
 
       // Buscar os alunos da tabela alunos com tem_qr='SIM'
-      final alunos = await _db.getAlunosEmbarcadosParaCadastro();
+      final alunos = await _db.getAlunosParaCadastroFacial();
 
       setState(() {
         _alunos = alunos;
