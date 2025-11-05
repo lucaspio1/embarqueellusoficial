@@ -1,6 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/auth_service.dart';
+import 'package:embarqueellus/services/alunos_sync_service.dart';
+import 'package:embarqueellus/services/logs_sync_service.dart';
+import 'package:embarqueellus/services/user_sync_service.dart';
 import 'package:embarqueellus/screens/lista_alunos_screen.dart';
 import 'package:embarqueellus/screens/lista_logs_screen.dart';
 
@@ -14,18 +18,78 @@ class PainelAdminScreen extends StatefulWidget {
 class _PainelAdminScreenState extends State<PainelAdminScreen> {
   final _db = DatabaseHelper.instance;
   final _authService = AuthService.instance;
+  final _alunosSync = AlunosSyncService.instance;
+  final _logsSync = LogsSyncService.instance;
+  final _userSync = UserSyncService.instance;
 
   bool _carregando = true;
+  bool _sincronizando = false;
   int _totalAlunos = 0;
   int _totalFaciais = 0;
   int _totalLogs = 0;
   Map<String, dynamic>? _usuario;
   Map<String, int> _contagemPorLocal = {};
+  Timer? _syncTimer;
 
   @override
   void initState() {
     super.initState();
-    _carregarDados();
+    _inicializar();
+    _iniciarSyncAutomatico();
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Inicializa o painel com sincronização inicial
+  Future<void> _inicializar() async {
+    // Sincronizar todas as tabelas no primeiro acesso
+    await _sincronizarTodasTabelas();
+    // Carregar dados locais
+    await _carregarDados();
+  }
+
+  /// Inicia sincronização automática a cada 10 minutos
+  void _iniciarSyncAutomatico() {
+    _syncTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
+      if (mounted) {
+        _sincronizarTodasTabelas();
+      }
+    });
+  }
+
+  /// Sincroniza todas as tabelas do Google Sheets
+  Future<void> _sincronizarTodasTabelas() async {
+    if (_sincronizando) return;
+
+    setState(() => _sincronizando = true);
+
+    try {
+      print('🔄 [PainelAdmin] Iniciando sincronização de todas as tabelas...');
+
+      // Sincronizar usuários
+      await _userSync.syncUsuariosFromSheets();
+
+      // Sincronizar alunos
+      await _alunosSync.syncAlunosFromSheets();
+
+      // Sincronizar logs
+      await _logsSync.syncLogsFromSheets();
+
+      print('✅ [PainelAdmin] Todas as tabelas sincronizadas com sucesso');
+
+      // Recarregar dados após sincronização
+      await _carregarDados();
+    } catch (e) {
+      print('❌ Erro ao sincronizar tabelas: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _sincronizando = false);
+      }
+    }
   }
 
   String _formatarLocal(String valor) {
@@ -125,11 +189,24 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
         title: const Text('Painel Administrativo'),
         backgroundColor: const Color(0xFF4C643C),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _carregarDados,
-            tooltip: 'Atualizar',
-          ),
+          if (_sincronizando)
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _sincronizarTodasTabelas,
+              tooltip: 'Sincronizar todas as tabelas',
+            ),
         ],
       ),
       body: _carregando
@@ -231,7 +308,8 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    ..._contagemPorLocal.entries.map(
+                    // Converter entries para lista modificável
+                    ...List<MapEntry<String, int>>.from(_contagemPorLocal.entries).map(
                       (entry) => Card(
                         child: ListTile(
                           leading: const Icon(Icons.place),
