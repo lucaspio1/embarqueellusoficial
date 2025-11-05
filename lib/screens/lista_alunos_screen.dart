@@ -507,7 +507,7 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
             if (telefone.isNotEmpty)
               _buildInfoRow(Icons.phone, 'Telefone', telefone),
 
-            // Botão de cadastro facial
+// Botão de cadastro facial
             if (!hasFacial) ...[
               const SizedBox(height: 12),
               SizedBox(
@@ -515,7 +515,8 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
                 child: ElevatedButton.icon(
                   onPressed: _processando ? null : () => _cadastrarFacial(aluno),
                   icon: const Icon(Icons.face_retouching_natural, size: 20),
-                  label: const Text('Cadastrar Facial'),
+                  // [MODIFICADO] O texto muda se o aluno já tiver facial
+                  label: Text(hasFacial ? 'Refazer Facial' : 'Cadastrar Facial'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF4C643C),
                     foregroundColor: Colors.white,
