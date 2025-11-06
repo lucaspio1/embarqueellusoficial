@@ -166,6 +166,16 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
   // AÇÕES CRÍTICAS
   // =========================================================================
 
+  /// Formata data ISO para formato DD/MM/YYYY
+  String _formatarData(String dataIso) {
+    try {
+      final dateTime = DateTime.parse(dataIso);
+      return DateFormat('dd/MM/yyyy').format(dateTime);
+    } catch (e) {
+      return dataIso; // Retorna original se não conseguir parsear
+    }
+  }
+
   /// Dialog para selecionar qual viagem encerrar
   Future<Map<String, String>?> _mostrarDialogSelecionarViagem() async {
     // Buscar viagens disponíveis
@@ -214,7 +224,9 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
               ...viagens.map((viagem) {
                 final inicio = viagem['inicio_viagem'] ?? '';
                 final fim = viagem['fim_viagem'] ?? '';
-                final label = '$inicio a $fim';
+                final inicioFormatado = _formatarData(inicio);
+                final fimFormatado = _formatarData(fim);
+                final label = '$inicioFormatado a $fimFormatado';
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
@@ -318,7 +330,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
 
     final String mensagemViagem = todasViagens
         ? 'TODAS AS VIAGENS'
-        : '$inicioViagem a $fimViagem';
+        : '${_formatarData(inicioViagem ?? '')} a ${_formatarData(fimViagem ?? '')}';
 
     // Confirmação 2: Dialog de aviso (atualizado com viagem selecionada)
     final confirmacao1 = await showDialog<bool>(
