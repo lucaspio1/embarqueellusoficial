@@ -153,40 +153,96 @@ class AcoesCriticasService {
       final client = http.Client();
 
       try {
-        final headers = {'Content-Type': 'application/json'};
-        final request = http.Request('POST', Uri.parse(_googleAppsScriptUrl));
-        request.body = jsonEncode({'action': 'listarViagens'});
-        request.headers.addAll(headers);
-        request.followRedirects = true;
-        request.maxRedirects = 5;
+        final request = http.Request('POST', Uri.parse(_googleAppsScriptUrl))
+          ..followRedirects = false
+          ..headers['Content-Type'] = 'application/json; charset=utf-8'
+          ..headers['Accept'] = 'application/json'
+          ..headers['X-Requested-With'] = 'XMLHttpRequest'
+          ..headers['User-Agent'] = 'PostmanRuntime/7.32.3'
+          ..body = jsonEncode({'action': 'listarViagens'});
 
-        final streamedResponse =
-            await client.send(request).timeout(const Duration(seconds: 60));
-        final responseBody = await streamedResponse.stream.bytesToString();
+        final streamedResponse = await client.send(request);
+        final response = await http.Response.fromStream(streamedResponse);
 
-        if (streamedResponse.statusCode == 200 || streamedResponse.statusCode == 302) {
-          final resultado = jsonDecode(responseBody);
+        print('📡 [ListarViagens] Status: ${response.statusCode}');
 
-          if (resultado['success'] == true) {
-            final viagens = resultado['viagens'] as List? ?? [];
-            print('✅ ${viagens.length} viagem(ns) encontrada(s)');
+        // Se recebeu 302, seguir o redirect manualmente com GET
+        if (response.statusCode == 302 && response.headers['location'] != null) {
+          final redirectedUrl = response.headers['location']!;
+          print('🔁 [ListarViagens] Redirecionando para: $redirectedUrl');
 
-            return viagens
-                .map((v) => {
-                      'inicio_viagem': v['inicio_viagem']?.toString() ?? '',
-                      'fim_viagem': v['fim_viagem']?.toString() ?? '',
-                    })
-                .toList();
+          http.Response redirectedResponse;
+
+          try {
+            redirectedResponse = await http.post(
+              Uri.parse(redirectedUrl),
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'User-Agent': 'PostmanRuntime/7.32.3',
+              },
+              body: jsonEncode({'action': 'listarViagens'}),
+            );
+
+            if (redirectedResponse.statusCode == 405) {
+              print('⚠️ [Redirected] POST não permitido, tentando GET...');
+              redirectedResponse = await http.get(
+                Uri.parse(redirectedUrl),
+                headers: {
+                  'Accept': 'application/json',
+                  'User-Agent': 'PostmanRuntime/7.32.3',
+                  'X-Requested-With': 'XMLHttpRequest',
+                },
+              );
+            }
+          } catch (e) {
+            print('❌ [Redirected] Erro ao seguir redirect: $e');
+            return [];
           }
+
+          print('📡 [Redirected] Status: ${redirectedResponse.statusCode}');
+          return _processarRespostaViagens(redirectedResponse);
         }
 
-        print('⚠️ Nenhuma viagem encontrada');
+        if (response.statusCode == 200) {
+          return _processarRespostaViagens(response);
+        }
+
+        print('⚠️ Nenhuma viagem encontrada (status: ${response.statusCode})');
         return [];
       } finally {
         client.close();
       }
     } catch (e) {
       print('❌ Erro ao listar viagens: $e');
+      return [];
+    }
+  }
+
+  /// Processa a resposta da requisição de listarViagens
+  List<Map<String, String>> _processarRespostaViagens(http.Response response) {
+    try {
+      final resultado = jsonDecode(response.body);
+
+      if (resultado['success'] == true) {
+        final data = resultado['data'] ?? {};
+        final viagens = data['viagens'] as List? ?? [];
+        print('✅ ${viagens.length} viagem(ns) encontrada(s)');
+
+        return viagens
+            .map((v) => {
+                  'inicio_viagem': v['inicio_viagem']?.toString() ?? '',
+                  'fim_viagem': v['fim_viagem']?.toString() ?? '',
+                })
+            .toList();
+      }
+
+      print('⚠️ Resposta sem sucesso: ${resultado['message'] ?? 'erro desconhecido'}');
+      return [];
+    } catch (e) {
+      print('❌ Erro ao processar resposta: $e');
+      print('📦 Response body: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
       return [];
     }
   }
