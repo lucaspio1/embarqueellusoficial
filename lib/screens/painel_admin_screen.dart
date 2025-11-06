@@ -220,8 +220,13 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
                 style: TextStyle(fontSize: 14, color: Colors.black87),
               ),
               const SizedBox(height: 16),
-              // Lista de viagens
-              ...viagens.map((viagem) {
+              // Lista de viagens com scroll
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ...viagens.map((viagem) {
                 final inicio = viagem['inicio_viagem'] ?? '';
                 final fim = viagem['fim_viagem'] ?? '';
                 final inicioFormatado = _formatarData(inicio);
@@ -259,10 +264,10 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
                     ),
                   ),
                 );
-              }),
-              const Divider(height: 24),
-              // Opção: Todas as viagens
-              ElevatedButton(
+                      }),
+                      const Divider(height: 24),
+                      // Opção: Todas as viagens
+                      ElevatedButton(
                 onPressed: () => Navigator.pop(context, {'todas': 'sim'}),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red.shade50,
@@ -286,8 +291,12 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
                         ),
                       ),
                     ),
-                    Icon(Icons.warning_amber, size: 20),
-                  ],
+                        Icon(Icons.warning_amber, size: 20),
+                      ],
+                    ),
+                  ),
+                    ],
+                  ),
                 ),
               ),
             ],

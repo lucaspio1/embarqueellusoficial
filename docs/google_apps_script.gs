@@ -913,19 +913,48 @@ function encerrarViagem(data) {
 function limparAbaFiltrada(sheet, inicioViagem, fimViagem, colunaInicio, colunaFim) {
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) {
+    console.log('⚠️ Aba', sheet.getName(), 'vazia ou só com header');
     return 0;
   }
 
   const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
   const linhasParaRemover = [];
 
+  console.log('🔍 [limparAbaFiltrada] Aba:', sheet.getName());
+  console.log('🔍 Buscando viagem:', inicioViagem, 'a', fimViagem);
+  console.log('🔍 Colunas:', colunaInicio, 'e', colunaFim);
+
   // Identificar linhas que correspondem à viagem
   for (let i = 0; i < values.length; i++) {
     const row = values[i];
-    const inicio = row[colunaInicio - 1] || '';
-    const fim = row[colunaFim - 1] || '';
+    let inicio = row[colunaInicio - 1];
+    let fim = row[colunaFim - 1];
 
-    if (inicio === inicioViagem && fim === fimViagem) {
+    // Converter Date objects para ISO string se necessário
+    if (inicio instanceof Date) {
+      inicio = inicio.toISOString();
+    } else if (inicio) {
+      inicio = inicio.toString();
+    } else {
+      inicio = '';
+    }
+
+    if (fim instanceof Date) {
+      fim = fim.toISOString();
+    } else if (fim) {
+      fim = fim.toString();
+    } else {
+      fim = '';
+    }
+
+    // Comparar datas
+    const match = inicio === inicioViagem && fim === fimViagem;
+
+    if (i < 3) { // Log primeiras 3 linhas para debug
+      console.log('📋 Linha', i + 2, '- Inicio:', inicio, 'Fim:', fim, 'Match:', match);
+    }
+
+    if (match) {
       linhasParaRemover.push(i + 2); // +2 porque arrays começam em 0 e pulamos o header
     }
   }
