@@ -123,10 +123,11 @@ class LogsSyncService {
           }
 
           final personName = log['person_name'] ?? log['nome'] ?? '';
-          print('💾 [LogsSync] Salvando log: $personName (${log['cpf']}) - ${log['tipo']}');
+          final cpf = (log['cpf'] ?? log['person_id'] ?? '').toString();
+          print('💾 [LogsSync] Salvando log: $personName ($cpf) - ${log['tipo']}');
 
           await _db.insertLog(
-            cpf: log['cpf'] ?? '',
+            cpf: cpf,
             personName: personName,
             timestamp: timestamp,
             confidence: (log['confidence'] ?? 0.0).toDouble(),
