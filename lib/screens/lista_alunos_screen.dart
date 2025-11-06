@@ -339,8 +339,9 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
       throw Exception('Nenhuma câmera disponível');
     }
 
+    // ✅ CORREÇÃO: Usar câmera traseira para cadastro facial
     final camera = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
+      (c) => c.lensDirection == CameraLensDirection.back,
       orElse: () => cameras.first,
     );
 

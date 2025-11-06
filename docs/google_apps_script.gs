@@ -431,20 +431,21 @@ function getAllStudents() {
 
     const alunos = [];
 
+    // ✅ CORREÇÃO: Sequência das colunas: ID, NOME, TURMA, CPF, TELEFONE, ID-PASSEIO, CONTROLE, INICIO VIAGEM, FIM VIAGEM
     for (let i = 1; i < values.length; i++) {
       const row = values[i];
-      if (!row[0]) continue;
+      if (!row[1]) continue; // Verifica se há nome (coluna B)
 
       const aluno = {
-        cpf: String(row[0]).trim(),
-        nome: row[1] || '',
-        email: row[2] || '',
-        telefone: row[3] || '',
-        turma: row[4] || '',
-        facial_status: String(row[5] || 'NAO').toUpperCase(),
-        tem_qr: String(row[6] || 'NAO').toUpperCase(),
-        inicio_viagem: row[7] || '',
-        fim_viagem: row[8] || ''
+        cpf: String(row[3] || '').trim(),        // Coluna D (CPF)
+        nome: row[1] || '',                      // Coluna B (NOME)
+        email: '',                               // Email não existe na planilha
+        telefone: row[4] || '',                  // Coluna E (TELEFONE)
+        turma: row[2] || '',                     // Coluna C (TURMA)
+        facial_status: 'NAO',                    // Não mapeado na planilha atual
+        tem_qr: 'NAO',                           // Não mapeado na planilha atual
+        inicio_viagem: row[7] || '',             // Coluna H (INICIO VIAGEM)
+        fim_viagem: row[8] || ''                 // Coluna I (FIM VIAGEM)
       };
 
       alunos.push(aluno);
