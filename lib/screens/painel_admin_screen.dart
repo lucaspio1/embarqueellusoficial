@@ -166,6 +166,131 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
   // AÇÕES CRÍTICAS
   // =========================================================================
 
+  /// Dialog para selecionar qual viagem encerrar
+  Future<Map<String, String>?> _mostrarDialogSelecionarViagem() async {
+    // Buscar viagens disponíveis
+    _mostrarProgresso('Carregando viagens...');
+
+    final viagens = await _acoesCriticas.listarViagens();
+
+    if (Navigator.canPop(context)) Navigator.pop(context);
+
+    if (viagens.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ Nenhuma viagem encontrada'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return null;
+    }
+
+    // Mostrar dialog de seleção
+    return await showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.calendar_today, color: Colors.blue),
+            SizedBox(width: 12),
+            Text('Selecionar Viagem'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Escolha qual viagem deseja encerrar:',
+                style: TextStyle(fontSize: 14, color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+              // Lista de viagens
+              ...viagens.map((viagem) {
+                final inicio = viagem['inicio_viagem'] ?? '';
+                final fim = viagem['fim_viagem'] ?? '';
+                final label = '$inicio a $fim';
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, viagem),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade50,
+                      foregroundColor: Colors.blue.shade900,
+                      padding: const EdgeInsets.all(16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: Colors.blue.shade200),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.event, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios, size: 16),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const Divider(height: 24),
+              // Opção: Todas as viagens
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, {'todas': 'sim'}),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade50,
+                  foregroundColor: Colors.red.shade900,
+                  padding: const EdgeInsets.all(16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: Colors.red.shade200),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.delete_sweep, size: 20),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'TODAS AS VIAGENS',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.warning_amber, size: 20),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('CANCELAR'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// AÇÃO CRÍTICA: Encerrar viagem (limpar todos os dados)
   Future<void> _encerrarViagem() async {
     // Confirmação 1: Verificar se é admin
@@ -179,7 +304,23 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       return;
     }
 
-    // Confirmação 2: Dialog de aviso
+    // NOVO: Selecionar viagem
+    final viagemSelecionada = await _mostrarDialogSelecionarViagem();
+
+    if (viagemSelecionada == null) {
+      // Usuário cancelou
+      return;
+    }
+
+    final bool todasViagens = viagemSelecionada.containsKey('todas');
+    final String? inicioViagem = viagemSelecionada['inicio_viagem'];
+    final String? fimViagem = viagemSelecionada['fim_viagem'];
+
+    final String mensagemViagem = todasViagens
+        ? 'TODAS AS VIAGENS'
+        : '$inicioViagem a $fimViagem';
+
+    // Confirmação 2: Dialog de aviso (atualizado com viagem selecionada)
     final confirmacao1 = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -191,16 +332,17 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
             const Text('ATENÇÃO'),
           ],
         ),
-        content: const Text(
+        content: Text(
           '⚠️ ESTA AÇÃO É IRREVERSÍVEL!\n\n'
-              'Você está prestes a APAGAR TODOS OS DADOS:\n'
+              'Você está prestes a APAGAR ${todasViagens ? "TODOS OS DADOS" : "os dados da viagem"}:\n'
+              '${todasViagens ? "" : "📅 Viagem: $mensagemViagem\n\n"}'
               '• Aba PESSOAS do Google Sheets\n'
               '• Aba LOGS do Google Sheets\n'
               '• Aba ALUNOS do Google Sheets\n'
               '• Banco de dados local do aplicativo\n\n'
-              'TODOS OS DADOS SERÃO PERDIDOS PERMANENTEMENTE!\n\n'
+              '${todasViagens ? "TODOS OS DADOS" : "Os dados desta viagem"} SERÃO PERDIDOS PERMANENTEMENTE!\n\n'
               'Deseja continuar?',
-          style: TextStyle(height: 1.5, fontSize: 15),
+          style: const TextStyle(height: 1.5, fontSize: 15),
         ),
         actions: [
           TextButton(
@@ -231,10 +373,37 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Digite "ENCERRAR" para confirmar a exclusão de TODOS OS DADOS:',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            Text(
+              'Digite "ENCERRAR" para confirmar a exclusão ${todasViagens ? "de TODOS OS DADOS" : "da viagem"}:',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
+            if (!todasViagens) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 16, color: Colors.red.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        mensagemViagem,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             TextField(
               autofocus: true,
@@ -263,7 +432,12 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     // Executar ação
     _mostrarProgresso('Encerrando viagem...');
 
-    final resultado = await _acoesCriticas.encerrarViagem();
+    final resultado = todasViagens
+        ? await _acoesCriticas.encerrarViagem()
+        : await _acoesCriticas.encerrarViagem(
+            inicioViagem: inicioViagem,
+            fimViagem: fimViagem,
+          );
 
     if (Navigator.canPop(context)) Navigator.pop(context);
 
@@ -279,7 +453,11 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ${resultado.message}\n✅ Painel atualizado!'),
+            content: Text(
+              '✅ ${resultado.message}\n'
+              '${todasViagens ? "" : "📅 Viagem: $mensagemViagem\n"}'
+              '✅ Painel atualizado!'
+            ),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 4),
           ),
