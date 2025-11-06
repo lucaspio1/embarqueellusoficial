@@ -6,30 +6,34 @@ var ID_PLANILHA_DESTINO = '1xl2wJdaqzIkTA3gjBQws5j6XrOw3AR5RC7_CrDR1M0U';
 var NOME_ABA_DESTINO = 'ALUNOS';
 
 // Estrutura da Planilha (Base 1)
-var COLUNA_ID = 1;        // A
-var COLUNA_NOME = 2;      // B
-var COLUNA_TURMA = 3;     // C
-var COLUNA_CPF = 4;       // D
-var COLUNA_TELEFONE = 5;  // E
-var COLUNA_ID_PASSEIO = 6;// F
-var COLUNA_ONIBUS = 7;    // G
-var COLUNA_FACIAL = 8;    // H
-var COLUNA_EMBARQUE = 9;  // I
-var COLUNA_RETORNO = 10;  // J
-var COLUNA_PULSEIRA = 11; // K
+var COLUNA_ID = 1;            // A
+var COLUNA_NOME = 2;          // B
+var COLUNA_TURMA = 3;         // C
+var COLUNA_CPF = 4;           // D
+var COLUNA_TELEFONE = 5;      // E
+var COLUNA_ID_PASSEIO = 6;    // F
+var COLUNA_ONIBUS = 7;        // G
+var COLUNA_CONTROLE = 8;      // H
+var COLUNA_INICIO_VIAGEM = 9; // I - NOVA COLUNA
+var COLUNA_FIM_VIAGEM = 10;   // J - NOVA COLUNA
+var COLUNA_EMBARQUE = 11;     // K (antes era I)
+var COLUNA_RETORNO = 12;      // L (antes era J)
+var COLUNA_PULSEIRA = 13;     // M (antes era K)
 
-// Índices para array (Base 0) - ✅ CORRIGIDO
-var INDICE_ID = 0;        // A
-var INDICE_NOME = 1;      // B
-var INDICE_TURMA = 2;     // C
-var INDICE_CPF = 3;       // D
-var INDICE_TELEFONE = 4;  // E
-var INDICE_ID_PASSEIO = 5;// F
-var INDICE_ONIBUS = 6;    // G
-var INDICE_FACIAL = 7;    // H
-var INDICE_EMBARQUE = 8;  // I
-var INDICE_RETORNO = 9;   // J
-var INDICE_PULSEIRA = 10; // K ✅ ADICIONADO
+// Índices para array (Base 0) - ✅ ATUALIZADO COM NOVAS COLUNAS
+var INDICE_ID = 0;            // A
+var INDICE_NOME = 1;          // B
+var INDICE_TURMA = 2;         // C
+var INDICE_CPF = 3;           // D
+var INDICE_TELEFONE = 4;      // E
+var INDICE_ID_PASSEIO = 5;    // F
+var INDICE_ONIBUS = 6;        // G
+var INDICE_CONTROLE = 7;      // H
+var INDICE_INICIO_VIAGEM = 8; // I - NOVA COLUNA
+var INDICE_FIM_VIAGEM = 9;    // J - NOVA COLUNA
+var INDICE_EMBARQUE = 10;     // K (antes era 8)
+var INDICE_RETORNO = 11;      // L (antes era 9)
+var INDICE_PULSEIRA = 12;     // M (antes era 10)
 
 // ====================================================================
 // REQUISIÇÕES (GET/POST)
@@ -116,9 +120,11 @@ function doGetOriginal(e) {
           telefone: linha[INDICE_TELEFONE] || '',
           idPasseio: linha[INDICE_ID_PASSEIO] || '',
           onibus: linha[INDICE_ONIBUS] || '',
+          inicioViagem: linha[INDICE_INICIO_VIAGEM] || '', // ✅ NOVA COLUNA
+          fimViagem: linha[INDICE_FIM_VIAGEM] || '',       // ✅ NOVA COLUNA
           embarque: linha[INDICE_EMBARQUE] || '',
           retorno: linha[INDICE_RETORNO] || '',
-          codigoPulseira: linha[INDICE_PULSEIRA] || '' // ✅ CORRIGIDO
+          codigoPulseira: linha[INDICE_PULSEIRA] || ''
         };
       }
     }
@@ -149,9 +155,11 @@ function doGetOriginal(e) {
           telefone: linha[INDICE_TELEFONE] || '',
           idPasseio: linha[INDICE_ID_PASSEIO] || '',
           onibus: linha[INDICE_ONIBUS] || '',
+          inicioViagem: linha[INDICE_INICIO_VIAGEM] || '', // ✅ NOVA COLUNA
+          fimViagem: linha[INDICE_FIM_VIAGEM] || '',       // ✅ NOVA COLUNA
           embarque: linha[INDICE_EMBARQUE] || '',
           retorno: linha[INDICE_RETORNO] || '',
-          codigoPulseira: linha[INDICE_PULSEIRA] || '' // ✅ CORRIGIDO
+          codigoPulseira: linha[INDICE_PULSEIRA] || ''
         };
         break;
       }
@@ -196,9 +204,11 @@ function doGetOriginal(e) {
         telefone: linha[INDICE_TELEFONE] || '',
         idPasseio: linha[INDICE_ID_PASSEIO] || '',
         onibus: linha[INDICE_ONIBUS] || '',
+        inicioViagem: linha[INDICE_INICIO_VIAGEM] || '', // ✅ NOVA COLUNA
+        fimViagem: linha[INDICE_FIM_VIAGEM] || '',       // ✅ NOVA COLUNA
         embarque: linha[INDICE_EMBARQUE] || '',
         retorno: linha[INDICE_RETORNO] || '',
-        codigoPulseira: linha[INDICE_PULSEIRA] || '' // ✅ CORRIGIDO
+        codigoPulseira: linha[INDICE_PULSEIRA] || ''
       });
       totalAlunos++;
     }

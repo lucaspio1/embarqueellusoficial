@@ -72,6 +72,8 @@ class OfflineSyncService {
     required String telefone,
     required List<double> embedding,
     required String personId,
+    String? inicioViagem,
+    String? fimViagem,
   }) async {
     await _db.enqueueOutbox('face_register', {
       'cpf': cpf,
@@ -81,9 +83,11 @@ class OfflineSyncService {
       'embedding': embedding,
       'personId': personId,
       'movimentacao': 'QUARTO', // ✅ JÁ ENVIA COM MOVIMENTAÇÃO INICIAL
+      'inicio_viagem': inicioViagem ?? '',
+      'fim_viagem': fimViagem ?? '',
     });
 
-    print('📝 [OfflineSync] Cadastro facial enfileirado: $nome (Local inicial: QUARTO)');
+    print('📝 [OfflineSync] Cadastro facial enfileirado: $nome (Local inicial: QUARTO, Viagem: ${inicioViagem ?? "N/A"} a ${fimViagem ?? "N/A"})');
   }
 
   Future<bool> _hasInternet() async {
@@ -253,6 +257,8 @@ class OfflineSyncService {
       'embedding': copy['embedding'],
       'personId': copy['personId'] ?? copy['cpf'],
       'movimentacao': copy['movimentacao'] ?? 'QUARTO', // ✅ GARANTE QUE SEMPRE VAI COM QUARTO
+      'inicio_viagem': copy['inicio_viagem'] ?? '',
+      'fim_viagem': copy['fim_viagem'] ?? '',
     };
     return _postWithRetriesAndSuccess(body);
   }

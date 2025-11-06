@@ -84,6 +84,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           'turma': p.turma,
           'email': '', // Passageiros não têm email, mas mantemos a estrutura
           'telefone': '',
+          'inicio_viagem': p.inicioViagem ?? '',
+          'fim_viagem': p.fimViagem ?? '',
         };
       }).where((a) => a['cpf']?.toString().isNotEmpty ?? false).toList();
 
@@ -261,6 +263,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         'embedding': jsonEncode(embedding),
         'facial_status': 'CADASTRADA',
         'movimentacao': 'QUARTO',
+        'inicio_viagem': aluno['inicio_viagem'] ?? '',
+        'fim_viagem': aluno['fim_viagem'] ?? '',
       });
 
       print('✅ [CadastroFacial] Salvo na tabela pessoas_facial com movimentação QUARTO');
@@ -272,6 +276,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         telefone: aluno['telefone'] ?? '',
         embedding: embedding,
         personId: aluno['cpf'],
+        inicioViagem: aluno['inicio_viagem'] ?? '',
+        fimViagem: aluno['fim_viagem'] ?? '',
       );
 
       print('✅ [CadastroFacial] Embedding enfileirado para sincronização com aba Pessoas');
@@ -383,6 +389,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         'embedding': jsonEncode(embedding),
         'facial_status': 'CADASTRADA',
         'movimentacao': 'QUARTO',
+        'inicio_viagem': aluno['inicio_viagem'] ?? '',
+        'fim_viagem': aluno['fim_viagem'] ?? '',
       });
 
       print('✅ [CadastroFacialAvançado] Salvo na tabela pessoas_facial com movimentação QUARTO');
@@ -394,6 +402,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         telefone: aluno['telefone'] ?? '',
         embedding: embedding,
         personId: aluno['cpf'],
+        inicioViagem: aluno['inicio_viagem'] ?? '',
+        fimViagem: aluno['fim_viagem'] ?? '',
       );
 
       print('✅ [CadastroFacialAvançado] Embedding enfileirado para sincronização com aba Pessoas');
