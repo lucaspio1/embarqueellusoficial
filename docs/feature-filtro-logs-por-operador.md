@@ -112,9 +112,9 @@ if (!_carregando && _usuarioLogado != null)
    ✅ 15 log(s) carregado(s) para João Silva
    ```
 3. **Tela**:
-   - Banner verde: "Visualizando apenas seus logs: João Silva"
    - Lista mostra apenas os 15 logs registrados por João Silva
    - Logs de outros operadores não aparecem
+   - Interface limpa sem banners desnecessários
 
 ### Para Administradores
 
@@ -125,9 +125,9 @@ if (!_carregando && _usuarioLogado != null)
    ✅ 127 log(s) carregado(s) para Maria Admin
    ```
 3. **Tela**:
-   - Banner azul: "Visualizando todos os logs (modo ADMIN)"
    - Lista mostra todos os 127 logs do sistema
    - Logs de todos os operadores aparecem
+   - Interface limpa sem banners desnecessários
 
 ## Segurança
 
@@ -147,21 +147,12 @@ if (!_carregando && _usuarioLogado != null)
 
 ## Feedback Visual
 
-### Banner Verde (Usuário Normal)
-```
-┌─────────────────────────────────────────┐
-│ 👤  Visualizando apenas seus logs:      │
-│     João Silva                          │
-└─────────────────────────────────────────┘
-```
+**Atualização (2021d91)**: Banner informativo removido para interface mais limpa.
 
-### Banner Azul (Admin)
-```
-┌─────────────────────────────────────────┐
-│ 🔐  Visualizando todos os logs          │
-│     (modo ADMIN)                        │
-└─────────────────────────────────────────┘
-```
+O filtro continua funcionando perfeitamente nos bastidores:
+- ✅ Usuários normais veem apenas seus logs (comportamento padrão esperado)
+- ✅ ADMIN vê todos os logs (sem necessidade de aviso visual)
+- ✅ Feedback via logs de debug no console para diagnóstico
 
 ## Logs de Debug
 
@@ -207,7 +198,7 @@ if (!_carregando && _usuarioLogado != null)
    - Linha 17: Instância do AuthService
    - Linha 24: Variável `_usuarioLogado`
    - Linha 39-80: Lógica de filtro por perfil
-   - Linha 202-246: Banner informativo visual
+   - **Atualização (2021d91)**: Banner informativo removido para interface mais limpa
 
 ## Resultado
 
@@ -217,20 +208,20 @@ if (!_carregando && _usuarioLogado != null)
 | Admin | Vê todos os logs ✅ | Vê todos os logs ✅ |
 | Privacidade | Baixa ❌ | Alta ✅ |
 | Responsabilidade | Pouca ❌ | Clara ✅ |
-| Feedback visual | Nenhum ❌ | Banner informativo ✅ |
+| Interface | Sem filtro ❌ | Limpa e funcional ✅ |
 | Debug | Sem logs ❌ | Logs completos ✅ |
 
 ## Como Testar
 
 1. **Login como usuário normal** (ex: João Silva, perfil: USUARIO)
    - Ir para "Reconhecimento Facial" → "Logs"
-   - Verificar banner verde: "Visualizando apenas seus logs: João Silva"
    - Verificar que só aparecem logs onde `operador_nome = João Silva`
+   - Interface limpa sem banners desnecessários
 
 2. **Login como ADMIN** (ex: Maria Admin, perfil: ADMIN)
    - Ir para "Reconhecimento Facial" → "Logs"
-   - Verificar banner azul: "Visualizando todos os logs (modo ADMIN)"
    - Verificar que aparecem logs de todos os operadores
+   - Interface limpa sem banners desnecessários
 
 3. **Verificar console**
    - Deve mostrar mensagens de debug indicando o filtro aplicado
