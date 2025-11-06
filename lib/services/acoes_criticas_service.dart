@@ -14,8 +14,85 @@ class AcoesCriticasService {
   final _db = DatabaseHelper.instance;
 
   // URL do Google Apps Script (deve estar no .env ou configuração)
+  // IMPORTANTE: Esta é a URL atualizada que funciona com Postman
   static const String _googleAppsScriptUrl =
-      'https://script.google.com/macros/s/AKfycbxHvpM1yg1oLQT1kwF_d8z9TxiAKa8Vqk5QLFO7AJEBdQtC_VUCNr2MJ-_qZ6ltbyW4/exec';
+      'https://script.google.com/macros/s/AKfycbySCPxbHy-FW-_PoQgxnAZqzh5wgq9E1UCSCT5p4ZPaMaoulluwqkUCMniXGCB2FYoT/exec';
+
+  // =========================================================================
+  // FUNÇÃO AUXILIAR: Fazer requisição POST usando padrão Postman
+  // =========================================================================
+
+  /// Faz uma requisição POST ao Google Apps Script usando o padrão que funciona no Postman
+  /// Usa StreamedResponse ao invés de Response direto
+  Future<Map<String, dynamic>> _fazerRequisicaoGoogleSheets(
+      String action) async {
+    try {
+      print('📤 Enviando requisição: $action');
+      print('📤 URL: $_googleAppsScriptUrl');
+
+      // Criar requisição usando o padrão do Postman
+      final headers = {'Content-Type': 'application/json'};
+      final request = http.Request('POST', Uri.parse(_googleAppsScriptUrl));
+      request.body = jsonEncode({'action': action});
+      request.headers.addAll(headers);
+
+      // Enviar requisição e aguardar resposta (com timeout de 60 segundos)
+      print('⏳ Aguardando resposta...');
+      final streamedResponse =
+          await request.send().timeout(const Duration(seconds: 60));
+
+      print('📊 Status code: ${streamedResponse.statusCode}');
+      print('📊 Content-Type: ${streamedResponse.headers['content-type']}');
+
+      // Converter StreamedResponse para String
+      final responseBody = await streamedResponse.stream.bytesToString();
+      print('📊 Tamanho da resposta: ${responseBody.length} bytes');
+
+      // Verificar status code
+      if (streamedResponse.statusCode != 200) {
+        // Tentar extrair mensagem de erro útil
+        String errorMessage = 'Erro HTTP ${streamedResponse.statusCode}';
+
+        // Verificar se é HTML (erro do servidor)
+        if (responseBody.trim().startsWith('<!DOCTYPE') ||
+            responseBody.trim().startsWith('<html')) {
+          errorMessage +=
+              ': O Google Apps Script retornou um erro de servidor. Verifique os logs do script.';
+          print('❌ Resposta HTML detectada (erro de servidor)');
+          print(
+              '❌ Primeiros 500 caracteres: ${responseBody.substring(0, responseBody.length > 500 ? 500 : responseBody.length)}');
+        } else {
+          errorMessage += ': $responseBody';
+        }
+
+        throw Exception(errorMessage);
+      }
+
+      // Verificar se a resposta é JSON válido
+      final Map<String, dynamic> resultado;
+      try {
+        resultado = jsonDecode(responseBody);
+        print('✅ JSON decodificado com sucesso');
+        print('✅ Success: ${resultado['success']}');
+        print('✅ Message: ${resultado['message']}');
+      } catch (e) {
+        print('❌ Erro ao decodificar resposta JSON: $e');
+        print(
+            '❌ Resposta recebida: ${responseBody.substring(0, responseBody.length > 500 ? 500 : responseBody.length)}');
+        throw Exception(
+            'Resposta inválida do servidor: não foi possível decodificar JSON');
+      }
+
+      if (resultado['success'] != true) {
+        throw Exception(resultado['message'] ?? 'Erro desconhecido');
+      }
+
+      return resultado;
+    } catch (e) {
+      print('❌ Erro na requisição: $e');
+      rethrow;
+    }
+  }
 
   // =========================================================================
   // 1. ENCERRAR VIAGEM - Limpa TUDO (Google Sheets + Banco Local)
@@ -31,49 +108,9 @@ class AcoesCriticasService {
     try {
       print('🔴 [CRÍTICO] Iniciando encerramento de viagem...');
 
-      // 1. Limpar Google Sheets
+      // 1. Limpar Google Sheets usando padrão Postman
       print('🔄 Limpando Google Sheets...');
-      final response = await http.post(
-        Uri.parse(_googleAppsScriptUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'action': 'encerrarViagem'}),
-      ).timeout(const Duration(seconds: 30));
-
-      print('📊 Status code: ${response.statusCode}');
-      print('📊 Content-Type: ${response.headers['content-type']}');
-
-      if (response.statusCode != 200) {
-        // Tentar extrair mensagem de erro útil
-        String errorMessage = 'Erro HTTP ${response.statusCode}';
-
-        // Verificar se é HTML (erro do servidor)
-        if (response.body.trim().startsWith('<!DOCTYPE') ||
-            response.body.trim().startsWith('<html')) {
-          errorMessage +=
-              ': O Google Apps Script retornou um erro de servidor. Verifique os logs do script.';
-          print('❌ Resposta HTML detectada (erro de servidor)');
-          print('❌ Primeiros 500 caracteres: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
-        } else {
-          errorMessage += ': ${response.body}';
-        }
-
-        throw Exception(errorMessage);
-      }
-
-      // Verificar se a resposta é JSON válido
-      final Map<String, dynamic> resultado;
-      try {
-        resultado = jsonDecode(response.body);
-      } catch (e) {
-        print('❌ Erro ao decodificar resposta JSON: $e');
-        print('❌ Resposta recebida: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
-        throw Exception(
-            'Resposta inválida do servidor: não foi possível decodificar JSON');
-      }
-
-      if (resultado['success'] != true) {
-        throw Exception(resultado['message'] ?? 'Erro desconhecido');
-      }
+      final resultado = await _fazerRequisicaoGoogleSheets('encerrarViagem');
 
       print('✅ Google Sheets limpo com sucesso');
 
@@ -126,50 +163,9 @@ class AcoesCriticasService {
     try {
       print('🔄 [CRÍTICO] Enviando todos para QUARTO...');
 
-      // 1. Atualizar Google Sheets
+      // 1. Atualizar Google Sheets usando padrão Postman
       print('🔄 Atualizando Google Sheets...');
-      final response = await http.post(
-        Uri.parse(_googleAppsScriptUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'action': 'enviarTodosParaQuarto'}),
-      ).timeout(const Duration(seconds: 30));
-
-      print('📊 Status code: ${response.statusCode}');
-      print('📊 Content-Type: ${response.headers['content-type']}');
-
-      if (response.statusCode != 200) {
-        // Tentar extrair mensagem de erro útil
-        String errorMessage = 'Erro HTTP ${response.statusCode}';
-
-        // Verificar se é HTML (erro do servidor)
-        if (response.body.trim().startsWith('<!DOCTYPE') ||
-            response.body.trim().startsWith('<html')) {
-          errorMessage +=
-              ': O Google Apps Script retornou um erro de servidor. Verifique os logs do script.';
-          print('❌ Resposta HTML detectada (erro de servidor)');
-          print('❌ Primeiros 500 caracteres: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
-        } else {
-          errorMessage += ': ${response.body}';
-        }
-
-        throw Exception(errorMessage);
-      }
-
-      // Verificar se a resposta é JSON válido
-      final Map<String, dynamic> resultado;
-      try {
-        resultado = jsonDecode(response.body);
-      } catch (e) {
-        print(
-            '❌ Erro ao decodificar resposta JSON: $e');
-        print('❌ Resposta recebida: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
-        throw Exception(
-            'Resposta inválida do servidor: não foi possível decodificar JSON');
-      }
-
-      if (resultado['success'] != true) {
-        throw Exception(resultado['message'] ?? 'Erro desconhecido');
-      }
+      final resultado = await _fazerRequisicaoGoogleSheets('enviarTodosParaQuarto');
 
       print('✅ Google Sheets atualizado: ${resultado['pessoas_atualizadas']} pessoas');
 
