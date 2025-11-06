@@ -116,6 +116,10 @@ function doPost(e) {
         return syncEmbedding(data);
       case 'getAllLogs':
         return getAllLogs();
+      case 'encerrarViagem':
+        return encerrarViagem();
+      case 'enviarTodosParaQuarto':
+        return enviarTodosParaQuarto();
       default:
         console.error('❌ Ação não reconhecida:', action);
         return createResponse(false, 'Ação não reconhecida: ' + action);
@@ -696,6 +700,112 @@ function getAllLogs() {
   } catch (error) {
     console.error('❌ Erro ao buscar logs:', error);
     return createResponse(false, 'Erro ao buscar logs: ' + error.message);
+  }
+}
+
+// ============================================================================
+// AÇÕES CRÍTICAS
+// ============================================================================
+
+/**
+ * AÇÃO CRÍTICA: Encerrar viagem
+ * Limpa todas as abas da planilha (PESSOAS, LOGS, ALUNOS)
+ * ATENÇÃO: OPERAÇÃO IRREVERSÍVEL! Todos os dados serão perdidos!
+ */
+function encerrarViagem() {
+  try {
+    console.log('🔥 [CRÍTICO] Iniciando encerramento de viagem...');
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    // 1. Limpar aba PESSOAS
+    const abaPessoas = ss.getSheetByName('PESSOAS');
+    if (abaPessoas) {
+      const lastRow = abaPessoas.getLastRow();
+      if (lastRow > 1) {
+        abaPessoas.getRange(2, 1, lastRow - 1, abaPessoas.getLastColumn()).clearContent();
+        console.log('✅ Aba PESSOAS limpa');
+      }
+    }
+
+    // 2. Limpar aba LOGS
+    const abaLogs = ss.getSheetByName('LOGS');
+    if (abaLogs) {
+      const lastRow = abaLogs.getLastRow();
+      if (lastRow > 1) {
+        abaLogs.getRange(2, 1, lastRow - 1, abaLogs.getLastColumn()).clearContent();
+        console.log('✅ Aba LOGS limpa');
+      }
+    }
+
+    // 3. Limpar aba ALUNOS
+    const abaAlunos = ss.getSheetByName('ALUNOS');
+    if (abaAlunos) {
+      const lastRow = abaAlunos.getLastRow();
+      if (lastRow > 1) {
+        abaAlunos.getRange(2, 1, lastRow - 1, abaAlunos.getLastColumn()).clearContent();
+        console.log('✅ Aba ALUNOS limpa');
+      }
+    }
+
+    console.log('✅ [CRÍTICO] Viagem encerrada com sucesso!');
+
+    return createResponse(true, 'Viagem encerrada com sucesso! Todas as abas foram limpas.', {
+      abas_limpas: ['PESSOAS', 'LOGS', 'ALUNOS']
+    });
+
+  } catch (error) {
+    console.error('❌ [CRÍTICO] Erro ao encerrar viagem:', error);
+    return createResponse(false, 'Erro ao encerrar viagem: ' + error.message);
+  }
+}
+
+/**
+ * AÇÃO CRÍTICA: Enviar todos para QUARTO
+ * Atualiza a movimentação de TODAS as pessoas para 'QUARTO'
+ * Útil para início/fim de dia ou reset de localização
+ */
+function enviarTodosParaQuarto() {
+  try {
+    console.log('🔄 [CRÍTICO] Enviando todos para QUARTO...');
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const abaPessoas = ss.getSheetByName('PESSOAS');
+
+    if (!abaPessoas) {
+      console.error('❌ Aba PESSOAS não encontrada');
+      return createResponse(false, 'Aba PESSOAS não encontrada');
+    }
+
+    garantirColunaMovimentacao(abaPessoas);
+
+    const lastRow = abaPessoas.getLastRow();
+    if (lastRow <= 1) {
+      console.log('⚠️ Nenhuma pessoa para atualizar');
+      return createResponse(true, 'Nenhuma pessoa para atualizar', {
+        pessoas_atualizadas: 0
+      });
+    }
+
+    // Atualizar todas as linhas (exceto cabeçalho) para 'QUARTO'
+    const range = abaPessoas.getRange(2, MOVIMENTACAO_COLUMN_INDEX, lastRow - 1, 1);
+    const valores = [];
+    for (let i = 0; i < lastRow - 1; i++) {
+      valores.push(['QUARTO']);
+    }
+    range.setValues(valores);
+
+    const pessoasAtualizadas = lastRow - 1;
+
+    console.log(`✅ [CRÍTICO] ${pessoasAtualizadas} pessoa(s) enviada(s) para QUARTO`);
+
+    return createResponse(true, pessoasAtualizadas + ' pessoa(s) enviada(s) para QUARTO', {
+      pessoas_atualizadas: pessoasAtualizadas
+    });
+
+  } catch (error) {
+    console.error('❌ [CRÍTICO] Erro ao enviar para quarto:', error);
+    return createResponse(false, 'Erro ao enviar para quarto: ' + error.message);
   }
 }
 
