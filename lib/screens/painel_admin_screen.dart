@@ -268,11 +268,18 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     if (Navigator.canPop(context)) Navigator.pop(context);
 
     if (resultado.success) {
-      await _carregarDados();
+      // Sincronizar dados do Google Sheets para atualizar o painel
+      print('🔄 Sincronizando dados após encerrar viagem...');
+      _mostrarProgresso('Atualizando painel...');
+
+      await _sincronizarTodasTabelas();
+
+      if (Navigator.canPop(context)) Navigator.pop(context);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ${resultado.message}'),
+            content: Text('✅ ${resultado.message}\n✅ Painel atualizado!'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 4),
           ),
@@ -344,11 +351,18 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     if (Navigator.canPop(context)) Navigator.pop(context);
 
     if (resultado.success) {
-      await _carregarDados();
+      // Sincronizar dados do Google Sheets para atualizar o painel
+      print('🔄 Sincronizando dados após enviar para quarto...');
+      _mostrarProgresso('Atualizando painel...');
+
+      await _sincronizarTodasTabelas();
+
+      if (Navigator.canPop(context)) Navigator.pop(context);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ${resultado.message}'),
+            content: Text('✅ ${resultado.message}\n✅ Painel atualizado!'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
           ),
