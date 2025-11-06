@@ -137,7 +137,9 @@ function doPost(e) {
       case 'getAllLogs':
         return getAllLogs();
       case 'encerrarViagem':
-        return encerrarViagem();
+        return encerrarViagem(data);
+      case 'listarViagens':
+        return listarViagens();
       case 'enviarTodosParaQuarto':
         return enviarTodosParaQuarto();
       default:
@@ -219,6 +221,17 @@ function doGet(e) {
         });
       case 'getAllLogs':
         return getAllLogs();
+      case 'listarViagens':
+        return listarViagens();
+      case 'encerrarViagem':
+        try {
+          return encerrarViagem({
+            inicio_viagem: params.inicio_viagem || params.inicioViagem,
+            fim_viagem: params.fim_viagem || params.fimViagem
+          });
+        } catch (e) {
+          return createResponse(false, 'Erro ao encerrar viagem via GET: ' + e.message);
+        }
       default:
         return createResponse(false, 'Ação não reconhecida em GET: ' + action);
     }
@@ -360,7 +373,9 @@ function getAllPeople() {
         telefone: row[4] || '',
         embedding: row[5] || null,
         turma: '',
-        movimentacao: (row[MOVIMENTACAO_COLUMN_INDEX - 1] || '').toString()
+        movimentacao: (row[MOVIMENTACAO_COLUMN_INDEX - 1] || '').toString(),
+        inicio_viagem: row[8] || '',
+        fim_viagem: row[9] || ''
       };
 
       if (pessoa.embedding && pessoa.embedding.length > 0) {
@@ -427,7 +442,9 @@ function getAllStudents() {
         telefone: row[3] || '',
         turma: row[4] || '',
         facial_status: String(row[5] || 'NAO').toUpperCase(),
-        tem_qr: String(row[6] || 'NAO').toUpperCase()
+        tem_qr: String(row[6] || 'NAO').toUpperCase(),
+        inicio_viagem: row[7] || '',
+        fim_viagem: row[8] || ''
       };
 
       alunos.push(aluno);
@@ -456,6 +473,8 @@ function addPessoa(data) {
       .toString()
       .trim()
       .toUpperCase();
+    const inicioViagem = data.inicio_viagem || data.inicioViagem || '';
+    const fimViagem = data.fim_viagem || data.fimViagem || '';
 
     console.log('📥 [addPessoa] Cadastrando pessoa:', nome, 'CPF:', cpf);
 
@@ -469,7 +488,7 @@ function addPessoa(data) {
     if (!pessoasSheet) {
       console.log('📝 Criando aba PESSOAS...');
       pessoasSheet = ss.insertSheet('PESSOAS');
-      pessoasSheet.appendRow(['ID', 'CPF', 'NOME', 'EMAIL', 'TELEFONE', 'EMBEDDING', 'DATA_CADASTRO', 'MOVIMENTAÇÃO']);
+      pessoasSheet.appendRow(['ID', 'CPF', 'NOME', 'EMAIL', 'TELEFONE', 'EMBEDDING', 'DATA_CADASTRO', 'MOVIMENTAÇÃO', 'INCIO VIAGEM', 'FIM VIAGEM']);
     }
 
     garantirColunaMovimentacao(pessoasSheet);
@@ -496,6 +515,12 @@ function addPessoa(data) {
             .getRange(i + 1, MOVIMENTACAO_COLUMN_INDEX)
             .setValue(movimentacaoValor);
         }
+        if (inicioViagem) {
+          pessoasSheet.getRange(i + 1, 9).setValue(inicioViagem);
+        }
+        if (fimViagem) {
+          pessoasSheet.getRange(i + 1, 10).setValue(fimViagem);
+        }
         console.log('✅ [addPessoa] Pessoa atualizada com sucesso');
         return createResponse(true, 'Pessoa atualizada com sucesso');
       }
@@ -510,7 +535,9 @@ function addPessoa(data) {
       telefone,
       embeddingJson,
       dataCadastro,
-      movimentacaoValor
+      movimentacaoValor,
+      inicioViagem,
+      fimViagem
     ];
 
     pessoasSheet.appendRow(newRow);
@@ -637,7 +664,9 @@ function getAlunos(data) {
         embarque: String(row[4] || 'NAO').toUpperCase(),
         retorno: String(row[5] || 'NAO').toUpperCase(),
         onibus: onibus,
-        tem_qr: String(row[7] || 'NAO').toUpperCase()
+        tem_qr: String(row[7] || 'NAO').toUpperCase(),
+        inicio_viagem: row[8] || '',
+        fim_viagem: row[9] || ''
       };
 
       alunos.push(aluno);
@@ -728,56 +757,180 @@ function getAllLogs() {
 // ============================================================================
 
 /**
- * AÇÃO CRÍTICA: Encerrar viagem
- * Limpa todas as abas da planilha (PESSOAS, LOGS, ALUNOS)
- * ATENÇÃO: OPERAÇÃO IRREVERSÍVEL! Todos os dados serão perdidos!
+ * NOVA FUNÇÃO: Listar viagens disponíveis
+ * Busca todas as viagens únicas (baseado em inicio_viagem e fim_viagem) na aba ALUNOS
  */
-function encerrarViagem() {
+function listarViagens() {
+  try {
+    console.log('📥 [listarViagens] Buscando viagens disponíveis...');
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const abaAlunos = ss.getSheetByName('ALUNOS');
+
+    if (!abaAlunos) {
+      return createResponse(false, 'Aba ALUNOS não encontrada');
+    }
+
+    const lastRow = abaAlunos.getLastRow();
+    if (lastRow <= 1) {
+      return createResponse(true, 'Nenhuma viagem encontrada', { viagens: [] });
+    }
+
+    const data_range = abaAlunos.getDataRange();
+    const values = data_range.getValues();
+
+    // Usar Set para armazenar viagens únicas
+    const viagensMap = new Map();
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const inicioViagem = row[7] || '';
+      const fimViagem = row[8] || '';
+
+      if (inicioViagem && fimViagem) {
+        const chave = inicioViagem + '|' + fimViagem;
+        if (!viagensMap.has(chave)) {
+          viagensMap.set(chave, {
+            inicio_viagem: inicioViagem,
+            fim_viagem: fimViagem
+          });
+        }
+      }
+    }
+
+    const viagens = Array.from(viagensMap.values());
+    console.log('✅ [listarViagens] ' + viagens.length + ' viagem(ns) encontrada(s)');
+
+    return createResponse(true, viagens.length + ' viagem(ns) encontrada(s)', { viagens: viagens });
+  } catch (error) {
+    console.error('❌ [listarViagens] Erro:', error);
+    return createResponse(false, 'Erro ao listar viagens: ' + error.message);
+  }
+}
+
+/**
+ * AÇÃO CRÍTICA: Encerrar viagem (ATUALIZADA)
+ * Limpa dados de uma viagem específica ou de todas as viagens
+ * ATENÇÃO: OPERAÇÃO IRREVERSÍVEL! Dados da viagem selecionada serão perdidos!
+ */
+function encerrarViagem(data) {
   try {
     console.log('🔥 [CRÍTICO] Iniciando encerramento de viagem...');
 
+    const inicioViagem = data ? (data.inicio_viagem || data.inicioViagem) : null;
+    const fimViagem = data ? (data.fim_viagem || data.fimViagem) : null;
+
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
-    // 1. Limpar aba PESSOAS
+    // Se não especificou datas, limpa TUDO (comportamento antigo)
+    if (!inicioViagem || !fimViagem) {
+      console.log('⚠️ Nenhuma data especificada - limpando TODAS as viagens');
+
+      // 1. Limpar aba PESSOAS
+      const abaPessoas = ss.getSheetByName('PESSOAS');
+      if (abaPessoas) {
+        const lastRow = abaPessoas.getLastRow();
+        if (lastRow > 1) {
+          abaPessoas.getRange(2, 1, lastRow - 1, abaPessoas.getLastColumn()).clearContent();
+          console.log('✅ Aba PESSOAS limpa');
+        }
+      }
+
+      // 2. Limpar aba LOGS
+      const abaLogs = ss.getSheetByName('LOGS');
+      if (abaLogs) {
+        const lastRow = abaLogs.getLastRow();
+        if (lastRow > 1) {
+          abaLogs.getRange(2, 1, lastRow - 1, abaLogs.getLastColumn()).clearContent();
+          console.log('✅ Aba LOGS limpa');
+        }
+      }
+
+      // 3. Limpar aba ALUNOS
+      const abaAlunos = ss.getSheetByName('ALUNOS');
+      if (abaAlunos) {
+        const lastRow = abaAlunos.getLastRow();
+        if (lastRow > 1) {
+          abaAlunos.getRange(2, 1, lastRow - 1, abaAlunos.getLastColumn()).clearContent();
+          console.log('✅ Aba ALUNOS limpa');
+        }
+      }
+
+      console.log('✅ [CRÍTICO] Todas as viagens encerradas com sucesso!');
+      return createResponse(true, 'Todas as viagens foram encerradas! Todas as abas foram limpas.', {
+        abas_limpas: ['PESSOAS', 'LOGS', 'ALUNOS']
+      });
+    }
+
+    // Se especificou datas, limpa APENAS essa viagem
+    console.log('🎯 Encerrando viagem específica:', inicioViagem, 'a', fimViagem);
+
+    let totalRemovidos = 0;
+
+    // 1. Limpar aba PESSOAS (filtrado por data)
     const abaPessoas = ss.getSheetByName('PESSOAS');
     if (abaPessoas) {
-      const lastRow = abaPessoas.getLastRow();
-      if (lastRow > 1) {
-        abaPessoas.getRange(2, 1, lastRow - 1, abaPessoas.getLastColumn()).clearContent();
-        console.log('✅ Aba PESSOAS limpa');
-      }
+      totalRemovidos += limparAbaFiltrada(abaPessoas, inicioViagem, fimViagem, 9, 10);
     }
 
-    // 2. Limpar aba LOGS
+    // 2. Limpar aba LOGS (filtrado por data)
     const abaLogs = ss.getSheetByName('LOGS');
     if (abaLogs) {
-      const lastRow = abaLogs.getLastRow();
-      if (lastRow > 1) {
-        abaLogs.getRange(2, 1, lastRow - 1, abaLogs.getLastColumn()).clearContent();
-        console.log('✅ Aba LOGS limpa');
-      }
+      // Na aba LOGS, as colunas são diferentes - preciso verificar a estrutura
+      // TIMESTAMP, CPF, NOME, CONFIDENCE, TIPO, PERSON_ID, OPERADOR, INICIO_VIAGEM, FIM_VIAGEM
+      totalRemovidos += limparAbaFiltrada(abaLogs, inicioViagem, fimViagem, 8, 9);
     }
 
-    // 3. Limpar aba ALUNOS
+    // 3. Limpar aba ALUNOS (filtrado por data)
     const abaAlunos = ss.getSheetByName('ALUNOS');
     if (abaAlunos) {
-      const lastRow = abaAlunos.getLastRow();
-      if (lastRow > 1) {
-        abaAlunos.getRange(2, 1, lastRow - 1, abaAlunos.getLastColumn()).clearContent();
-        console.log('✅ Aba ALUNOS limpa');
-      }
+      totalRemovidos += limparAbaFiltrada(abaAlunos, inicioViagem, fimViagem, 8, 9);
     }
 
-    console.log('✅ [CRÍTICO] Viagem encerrada com sucesso!');
+    console.log('✅ [CRÍTICO] Viagem encerrada com sucesso! Total de registros removidos:', totalRemovidos);
 
-    return createResponse(true, 'Viagem encerrada com sucesso! Todas as abas foram limpas.', {
-      abas_limpas: ['PESSOAS', 'LOGS', 'ALUNOS']
+    return createResponse(true, 'Viagem encerrada com sucesso! ' + totalRemovidos + ' registro(s) removido(s).', {
+      inicio_viagem: inicioViagem,
+      fim_viagem: fimViagem,
+      total_removidos: totalRemovidos
     });
 
   } catch (error) {
     console.error('❌ [CRÍTICO] Erro ao encerrar viagem:', error);
     return createResponse(false, 'Erro ao encerrar viagem: ' + error.message);
   }
+}
+
+/**
+ * Função auxiliar para limpar registros filtrados por data de viagem
+ */
+function limparAbaFiltrada(sheet, inicioViagem, fimViagem, colunaInicio, colunaFim) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    return 0;
+  }
+
+  const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const linhasParaRemover = [];
+
+  // Identificar linhas que correspondem à viagem
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    const inicio = row[colunaInicio - 1] || '';
+    const fim = row[colunaFim - 1] || '';
+
+    if (inicio === inicioViagem && fim === fimViagem) {
+      linhasParaRemover.push(i + 2); // +2 porque arrays começam em 0 e pulamos o header
+    }
+  }
+
+  // Remover linhas de trás para frente para não afetar índices
+  for (let i = linhasParaRemover.length - 1; i >= 0; i--) {
+    sheet.deleteRow(linhasParaRemover[i]);
+  }
+
+  console.log('✅ Aba', sheet.getName(), ':', linhasParaRemover.length, 'registro(s) removido(s)');
+  return linhasParaRemover.length;
 }
 
 /**

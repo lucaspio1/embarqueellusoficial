@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -40,6 +40,40 @@ class DatabaseHelper {
         print('⚠️ [DB] Coluna movimentacao já existia: $e');
       }
     }
+    if (oldVersion < 4) {
+      // Adicionar colunas inicio_viagem e fim_viagem às tabelas
+      try {
+        await db.execute("ALTER TABLE passageiros ADD COLUMN inicio_viagem TEXT");
+        await db.execute("ALTER TABLE passageiros ADD COLUMN fim_viagem TEXT");
+        print('✅ [DB] Migração v3 -> v4: Adicionadas colunas de data em passageiros');
+      } catch (e) {
+        print('⚠️ [DB] Colunas de data já existiam em passageiros: $e');
+      }
+
+      try {
+        await db.execute("ALTER TABLE alunos ADD COLUMN inicio_viagem TEXT");
+        await db.execute("ALTER TABLE alunos ADD COLUMN fim_viagem TEXT");
+        print('✅ [DB] Migração v3 -> v4: Adicionadas colunas de data em alunos');
+      } catch (e) {
+        print('⚠️ [DB] Colunas de data já existiam em alunos: $e');
+      }
+
+      try {
+        await db.execute("ALTER TABLE pessoas_facial ADD COLUMN inicio_viagem TEXT");
+        await db.execute("ALTER TABLE pessoas_facial ADD COLUMN fim_viagem TEXT");
+        print('✅ [DB] Migração v3 -> v4: Adicionadas colunas de data em pessoas_facial');
+      } catch (e) {
+        print('⚠️ [DB] Colunas de data já existiam em pessoas_facial: $e');
+      }
+
+      try {
+        await db.execute("ALTER TABLE logs ADD COLUMN inicio_viagem TEXT");
+        await db.execute("ALTER TABLE logs ADD COLUMN fim_viagem TEXT");
+        print('✅ [DB] Migração v3 -> v4: Adicionadas colunas de data em logs');
+      } catch (e) {
+        print('⚠️ [DB] Colunas de data já existiam em logs: $e');
+      }
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -53,7 +87,9 @@ class DatabaseHelper {
         embarque TEXT DEFAULT 'NÃO',
         retorno TEXT DEFAULT 'NÃO',
         onibus TEXT,
-        codigo_pulseira TEXT
+        codigo_pulseira TEXT,
+        inicio_viagem TEXT,
+        fim_viagem TEXT
       )
     ''');
 
@@ -67,7 +103,9 @@ class DatabaseHelper {
         turma TEXT,
         facial TEXT,
         tem_qr TEXT DEFAULT 'NAO',
-        created_at TEXT
+        created_at TEXT,
+        inicio_viagem TEXT,
+        fim_viagem TEXT
       )
     ''');
 
@@ -93,7 +131,9 @@ class DatabaseHelper {
         facial_status TEXT DEFAULT 'CADASTRADA',
         movimentacao TEXT,
         created_at TEXT,
-        updated_at TEXT
+        updated_at TEXT,
+        inicio_viagem TEXT,
+        fim_viagem TEXT
       )
     ''');
 
@@ -107,6 +147,8 @@ class DatabaseHelper {
         tipo TEXT,
         operador_nome TEXT,
         created_at TEXT,
+        inicio_viagem TEXT,
+        fim_viagem TEXT,
         UNIQUE(cpf, timestamp, tipo)
       )
     ''');
