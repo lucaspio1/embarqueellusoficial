@@ -1,432 +1,1020 @@
-// ====================================================================
-// CONFIGURAÇÕES GLOBAIS - FOCADO EM EMBARQUE DAS PESSOAS
-// ====================================================================
+// ============================================================================
+// GOOGLE APPS SCRIPT - ELLUS EMBARQUE (VERSÃO ATUALIZADA)
+// ============================================================================
+// Este script gerencia a integração entre o app Flutter e o Google Sheets
+// Planilha com as seguintes abas:
+// - PESSOAS: Lista de pessoas com embeddings faciais
+// - LOGIN: Usuários do sistema com credenciais
+// - LOGS: Logs de reconhecimento facial
+// - Outras abas de passeios/embarques
+// ============================================================================
 
-var ID_PLANILHA_DESTINO = '1xl2wJdaqzIkTA3gjBQws5j6XrOw3AR5RC7_CrDR1M0U';
-var NOME_ABA_DESTINO = 'ALUNOS';
+const SPREADSHEET_ID = '1xl2wJdaqzIkTA3gjBQws5j6XrOw3AR5RC7_CrDR1M0U';
+const MOVIMENTACAO_COLUMN_INDEX = 8; // Coluna H
 
-// Estrutura da Planilha (Base 1) — NOVO LAYOUT
-var COLUNA_ID          = 1;  // A
-var COLUNA_NOME        = 2;  // B
-var COLUNA_TURMA       = 3;  // C
-var COLUNA_CPF         = 4;  // D
-var COLUNA_TELEFONE    = 5;  // E
-var COLUNA_ID_PASSEIO  = 6;  // F
-var COLUNA_ONIBUS      = 7;  // G
-var COLUNA_CONTROLE    = 8;  // H
-var COLUNA_INICIO      = 9;  // I  (Início Viagem)
-var COLUNA_FIM         = 10; // J  (Fim Viagem)
-var COLUNA_EMBARQUE    = 11; // K
-var COLUNA_RETORNO     = 12; // L
-var COLUNA_PULSEIRA    = 13; // M
+function createResponse(success, message, data = {}) {
+  const response = {
+    success: success,
+    message: message,
+    timestamp: new Date().toISOString(),
+    ...data,
+  };
 
-// Índices para array (Base 0) — NOVO LAYOUT
-var INDICE_ID          = 0;  // A
-var INDICE_NOME        = 1;  // B
-var INDICE_TURMA       = 2;  // C
-var INDICE_CPF         = 3;  // D
-var INDICE_TELEFONE    = 4;  // E
-var INDICE_ID_PASSEIO  = 5;  // F
-var INDICE_ONIBUS      = 6;  // G
-var INDICE_CONTROLE    = 7;  // H
-var INDICE_INICIO      = 8;  // I
-var INDICE_FIM         = 9;  // J
-var INDICE_EMBARQUE    = 10; // K
-var INDICE_RETORNO     = 11; // L
-var INDICE_PULSEIRA    = 12; // M
+  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(
+    ContentService.MimeType.JSON,
+  );
+}
 
-// ====================================================================
-// REQUISIÇÕES (GET/POST)
-// ====================================================================
+function garantirColunaMovimentacao(pessoasSheet) {
+  try {
+    const lastColumn = pessoasSheet.getLastColumn();
 
-function doGet(e) {
-  return handleRequest(e);
+    // Se a planilha tem menos colunas que o necessário, adicionar colunas
+    if (lastColumn < MOVIMENTACAO_COLUMN_INDEX) {
+      const colunasParaAdicionar = MOVIMENTACAO_COLUMN_INDEX - lastColumn;
+
+      // Se a planilha está vazia (lastColumn = 0), usar método diferente
+      if (lastColumn === 0) {
+        // Planilha vazia - não fazer nada, o header será criado depois
+        console.log('⚠️ Planilha vazia, pulando inserção de colunas');
+      } else {
+        // Inserir colunas depois da última coluna existente
+        console.log(`📝 Inserindo ${colunasParaAdicionar} coluna(s) após coluna ${lastColumn}`);
+        pessoasSheet.insertColumnsAfter(lastColumn, colunasParaAdicionar);
+      }
+    }
+
+    // Garantir que o cabeçalho está correto
+    const headerCell = pessoasSheet.getRange(1, MOVIMENTACAO_COLUMN_INDEX);
+    const currentValue = headerCell.getValue();
+
+    if (currentValue !== 'MOVIMENTAÇÃO') {
+      console.log(`📝 Atualizando cabeçalho da coluna ${MOVIMENTACAO_COLUMN_INDEX} de "${currentValue}" para "MOVIMENTAÇÃO"`);
+      headerCell.setValue('MOVIMENTAÇÃO');
+    }
+
+    console.log('✅ Coluna MOVIMENTAÇÃO garantida');
+  } catch (error) {
+    console.error('❌ Erro ao garantir coluna movimentação:', error);
+    throw new Error('Falha ao configurar coluna MOVIMENTAÇÃO: ' + error.message);
+  }
+}
+
+function atualizarMovimentacaoPessoa(cpf, movimentacao) {
+  if (!cpf || !movimentacao) {
+    return;
+  }
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const pessoasSheet = ss.getSheetByName('PESSOAS');
+
+  if (!pessoasSheet) {
+    console.error('❌ Aba PESSOAS não encontrada ao atualizar movimentação');
+    return;
+  }
+
+  garantirColunaMovimentacao(pessoasSheet);
+
+  const lastRow = pessoasSheet.getLastRow();
+  if (lastRow < 2) {
+    return;
+  }
+
+  const cpfRange = pessoasSheet.getRange(2, 2, lastRow - 1, 1);
+  const cpfValues = cpfRange.getValues();
+
+  for (let i = 0; i < cpfValues.length; i++) {
+    const cpfSheet = String(cpfValues[i][0] || '').trim();
+    if (cpfSheet === cpf) {
+      pessoasSheet
+        .getRange(i + 2, MOVIMENTACAO_COLUMN_INDEX)
+        .setValue(movimentacao);
+      console.log(`🔄 Atualizada movimentação de ${cpf} para ${movimentacao}`);
+      return;
+    }
+  }
+
+  console.log(`⚠️ CPF ${cpf} não encontrado para atualizar movimentação`);
 }
 
 function doPost(e) {
-  return handleRequest(e, true);
-}
-
-function handleRequest(e, isPost = false) {
-  var output = ContentService.createTextOutput();
-  output.setMimeType(ContentService.MimeType.JSON);
-
   try {
-    var result = isPost ? doPostOriginal(e) : doGetOriginal(e);
+    console.log('📥 Requisição recebida');
+    console.log('postData:', e.postData);
 
-    if (result === null || result === undefined) {
-      result = {
-        status: "erro",
-        mensagem: "Nenhuma resposta gerada pelo servidor (retorno nulo ou indefinido)."
-      };
+    if (!e.postData || !e.postData.contents) {
+      console.error('❌ Sem postData.contents');
+      return createResponse(false, 'Requisição inválida: sem dados POST');
     }
 
-    output.setContent(JSON.stringify(result));
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action;
+
+    console.log('📥 Ação recebida:', action);
+    console.log('📥 Dados:', JSON.stringify(data));
+
+    switch (action) {
+      case 'login':
+        return login(data);
+      case 'getAllUsers':
+        return getAllUsers();
+      case 'getAllPeople':
+        return getAllPeople();
+      case 'getAllStudents':
+        return getAllStudents();
+      case 'getAlunos':
+        return getAlunos(data);
+      case 'addPessoa':
+        return addPessoa(data);
+      case 'cadastrarFacial':
+        return cadastrarFacial(data);
+      case 'addMovementLog':
+        return addMovementLog(data);
+      case 'registrarLog':
+        return registrarLog(data);
+      case 'syncEmbedding':
+        return syncEmbedding(data);
+      case 'getAllLogs':
+        return getAllLogs();
+      case 'encerrarViagem':
+        return encerrarViagem(data);
+      case 'listarViagens':
+        return listarViagens();
+      case 'enviarTodosParaQuarto':
+        return enviarTodosParaQuarto();
+      default:
+        console.error('❌ Ação não reconhecida:', action);
+        return createResponse(false, 'Ação não reconhecida: ' + action);
+    }
   } catch (error) {
-    Logger.log('❌ ERRO no handleRequest: ' + error.toString());
-    output.setContent(JSON.stringify({
-      status: "erro",
-      mensagem: error.toString(),
-      linha: error.lineNumber || "desconhecida"
-    }));
+    console.error('❌ Erro no doPost:', error);
+    console.error('Stack:', error.stack);
+    return createResponse(false, 'Erro no servidor: ' + error.message + ' | ' + error.stack);
   }
-
-  return output;
 }
 
-function doGetOriginal(e) {
-  var nomeDoColegio = e.parameter.colegio;
-  var nomeParaBuscar = e.parameter.nome;
-  var cpfParaBuscar = e.parameter.cpf;
-  var onibusParaFiltrar = e.parameter.onibus;
-  var idPasseioParaFiltrar = e.parameter.id_passeio;
-  var buscarTodos = e.parameter.todos;
-
-  var onibusFiltroNormalizado = onibusParaFiltrar ? onibusParaFiltrar.toString().toLowerCase().trim() : '';
-  var idPasseioFiltroNormalizado = idPasseioParaFiltrar ? idPasseioParaFiltrar.toString().toLowerCase().trim() : '';
-
-  if (!nomeDoColegio && !buscarTodos) {
-    return listarColegios();
-  }
-
-  var nomeAba = nomeDoColegio || 'TODOS';
-  var planilha = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nomeAba);
-
-  if (!planilha) {
-    return {
-      status: "erro",
-      mensagem: "Aba não encontrada: " + nomeAba
-    };
-  }
-
-  var dados = planilha.getDataRange().getValues();
-
-  // =====================================================
-  // 🔍 BUSCA POR CPF (prioritária)
-  // =====================================================
-  if (cpfParaBuscar) {
-    var cpfNormalizado = cpfParaBuscar.toString().replace(/\D/g, '');
-    for (var i = 1; i < dados.length; i++) {
-      var linha = dados[i];
-      var cpfNaPlanilha = (linha[INDICE_CPF] || '').toString().replace(/\D/g, '');
-
-      if (cpfNaPlanilha && cpfNaPlanilha === cpfNormalizado) {
-        return {
-          status: "sucesso",
-          aba: nomeAba,
-          nome: linha[INDICE_NOME] || '',
-          turma: linha[INDICE_TURMA] || '',
-          cpf: linha[INDICE_CPF] || '',
-          telefone: linha[INDICE_TELEFONE] || '',
-          idPasseio: linha[INDICE_ID_PASSEIO] || '',
-          onibus: linha[INDICE_ONIBUS] || '',
-          inicioViagem: linha[INDICE_INICIO] || '',      // ✅ ADICIONADO
-          fimViagem: linha[INDICE_FIM] || '',            // ✅ ADICIONADO
-          embarque: linha[INDICE_EMBARQUE] || '',
-          retorno: linha[INDICE_RETORNO] || '',
-          codigoPulseira: linha[INDICE_PULSEIRA] || ''
-        };
-      }
-    }
-    return {
-      status: "erro",
-      mensagem: "Nenhum aluno encontrado com o CPF informado."
-    };
-  }
-
-  // =====================================================
-  // 🔍 BUSCA POR NOME (alternativa)
-  // =====================================================
-  if (nomeParaBuscar) {
-    var pessoaEncontrada = null;
-    var nomeNormalizado = nomeParaBuscar.toLowerCase().trim();
-
-    for (var i = 1; i < dados.length; i++) {
-      var linha = dados[i];
-      var nomeNaPlanilha = linha[INDICE_NOME];
-
-      if (nomeNaPlanilha && nomeNaPlanilha.toString().toLowerCase().trim() === nomeNormalizado) {
-        pessoaEncontrada = {
-          status: "sucesso",
-          aba: nomeAba,
-          nome: linha[INDICE_NOME] || '',
-          turma: linha[INDICE_TURMA] || '',
-          cpf: linha[INDICE_CPF] || '',
-          telefone: linha[INDICE_TELEFONE] || '',
-          idPasseio: linha[INDICE_ID_PASSEIO] || '',
-          onibus: linha[INDICE_ONIBUS] || '',
-          inicioViagem: linha[INDICE_INICIO] || '',      // ✅ ADICIONADO
-          fimViagem: linha[INDICE_FIM] || '',            // ✅ ADICIONADO
-          embarque: linha[INDICE_EMBARQUE] || '',
-          retorno: linha[INDICE_RETORNO] || '',
-          codigoPulseira: linha[INDICE_PULSEIRA] || ''
-        };
-        break;
-      }
-    }
-
-    return pessoaEncontrada || {
-      status: "erro",
-      mensagem: "Pessoa não encontrada pelo nome informado."
-    };
-  }
-
-  // =====================================================
-  // 🔍 LISTA COMPLETA COM FILTROS
-  // =====================================================
-  var listaPassageiros = [];
-  var totalAlunos = 0;
-
-  for (var i = 1; i < dados.length; i++) {
-    var linha = dados[i];
-    var onibusNaPlanilha = linha[INDICE_ONIBUS];
-    var idPasseioNaPlanilha = linha[INDICE_ID_PASSEIO];
-
-    var onibusNormalizado = onibusNaPlanilha ? onibusNaPlanilha.toString().toLowerCase().trim() : '';
-    var idPasseioNormalizado = idPasseioNaPlanilha ? idPasseioNaPlanilha.toString().toLowerCase().trim() : '';
-
-    var deveIncluir = true;
-
-    if (idPasseioFiltroNormalizado && idPasseioNormalizado !== idPasseioFiltroNormalizado) {
-      deveIncluir = false;
-    }
-
-    if (deveIncluir && onibusFiltroNormalizado && onibusNormalizado !== onibusFiltroNormalizado) {
-      deveIncluir = false;
-    }
-
-    if (deveIncluir && linha[INDICE_NOME] && linha[INDICE_NOME].toString().trim() !== '') {
-      listaPassageiros.push({
-        id: linha[INDICE_ID] || '',
-        nome: linha[INDICE_NOME] || '',
-        turma: linha[INDICE_TURMA] || '',
-        cpf: linha[INDICE_CPF] || '',
-        telefone: linha[INDICE_TELEFONE] || '',
-        idPasseio: linha[INDICE_ID_PASSEIO] || '',
-        onibus: linha[INDICE_ONIBUS] || '',
-        inicioViagem: linha[INDICE_INICIO] || '',        // ✅ ADICIONADO
-        fimViagem: linha[INDICE_FIM] || '',              // ✅ ADICIONADO
-        embarque: linha[INDICE_EMBARQUE] || '',
-        retorno: linha[INDICE_RETORNO] || '',
-        codigoPulseira: linha[INDICE_PULSEIRA] || ''
-      });
-      totalAlunos++;
-    }
-  }
-
-  return {
-    status: "sucesso",
-    aba: nomeAba,
-    totalAlunos: totalAlunos,
-    passageiros: listaPassageiros
-  };
-}
-
-function doPostOriginal(e) {
+function doGet(e) {
   try {
-    var dadosDoCorpo = JSON.parse(e.postData.contents);
-    var nomeDoColegio = dadosDoCorpo.colegio;
-    var operacao = dadosDoCorpo.operacao || 'geral';
-    var buscarTodos = dadosDoCorpo.todos || false;
+    const params = e && e.parameter ? e.parameter : {};
+    const action = params.action;
 
-    var cpfAluno = dadosDoCorpo.cpf;
-    var novoStatus = dadosDoCorpo.novoStatus;
-    var novoRetorno = dadosDoCorpo.novoRetorno;
-    var codigoPulseira = dadosDoCorpo.codigoPulseira;
+    console.log('📥 [doGet] Ação:', action, 'Params:', JSON.stringify(params));
 
-    if (!cpfAluno) {
-      return {
-        status: "erro",
-        mensagem: "CPF não informado no corpo da requisição."
-      };
+    switch (action) {
+      case 'getAllUsers':
+        return getAllUsers();
+      case 'getAllPeople':
+        return getAllPeople();
+      case 'getAllStudents':
+        return getAllStudents();
+      case 'getAlunos':
+        return getAlunos({
+          nomeAba: params.nomeAba,
+          numeroOnibus: params.numeroOnibus
+        });
+      case 'addPessoa':
+        try {
+          const embeddingParam = params.embedding;
+          const embedding = embeddingParam ? JSON.parse(embeddingParam) : null;
+
+          return addPessoa({
+            cpf: params.cpf,
+            nome: params.nome,
+            email: params.email || '',
+            telefone: params.telefone || '',
+            embedding: embedding,
+            personId: params.personId || params.cpf
+          });
+        } catch (e) {
+          return createResponse(false, 'Erro ao processar addPessoa via GET: ' + e.message);
+        }
+      case 'cadastrarFacial':
+        try {
+          const embeddingParam = params.embedding;
+          const embedding = embeddingParam ? JSON.parse(embeddingParam) : null;
+
+          return cadastrarFacial({
+            cpf: params.cpf,
+            nome: params.nome,
+            email: params.email || '',
+            telefone: params.telefone || '',
+            embedding: embedding
+          });
+        } catch (e) {
+          return createResponse(false, 'Erro ao processar cadastro facial via GET: ' + e.message);
+        }
+      case 'addMovementLog':
+        try {
+          const peopleParam = params.people;
+          const people = peopleParam ? JSON.parse(peopleParam) : [];
+
+          return addMovementLog({ people: people });
+        } catch (e) {
+          return createResponse(false, 'Erro ao processar addMovementLog via GET: ' + e.message);
+        }
+      case 'registrarLog':
+        return registrarLog({
+          cpf: params.cpf,
+          nome: params.nome,
+          confidence: parseFloat(params.confidence || '0'),
+          tipo: params.tipo || 'reconhecimento'
+        });
+      case 'getAllLogs':
+        return getAllLogs();
+      case 'listarViagens':
+        return listarViagens();
+      case 'encerrarViagem':
+        try {
+          return encerrarViagem({
+            inicio_viagem: params.inicio_viagem || params.inicioViagem,
+            fim_viagem: params.fim_viagem || params.fimViagem
+          });
+        } catch (e) {
+          return createResponse(false, 'Erro ao encerrar viagem via GET: ' + e.message);
+        }
+      default:
+        return createResponse(false, 'Ação não reconhecida em GET: ' + action);
+    }
+  } catch (err) {
+    console.error('❌ [doGet] Erro:', err);
+    return createResponse(false, 'Erro no doGet: ' + err.message);
+  }
+}
+
+// ============================================================================
+// FUNÇÃO DE LOGIN
+// ============================================================================
+function login(data) {
+  try {
+    const cpf = data.cpf;
+    const senha = data.senha;
+
+    console.log('🔐 Tentativa de login:', cpf);
+
+    if (!cpf || !senha) {
+      return createResponse(false, 'CPF e senha são obrigatórios');
     }
 
-    var deveUsarTodos = buscarTodos === true || buscarTodos === 'true' || nomeDoColegio === 'TODOS';
-    var nomeAba = deveUsarTodos ? 'TODOS' : nomeDoColegio;
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const loginSheet = ss.getSheetByName('LOGIN');
 
-    var planilha = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nomeAba);
-    if (!planilha) {
-      return {
-        status: "erro",
-        mensagem: "Aba não encontrada: " + nomeAba
-      };
+    if (!loginSheet) {
+      return createResponse(false, 'Aba LOGIN não encontrada na planilha');
     }
 
-    var dados = planilha.getDataRange().getValues();
+    const data_range = loginSheet.getDataRange();
+    const values = data_range.getValues();
 
-    for (var i = 1; i < dados.length; i++) {
-      var linha = dados[i];
-      var cpfNaPlanilha = linha[INDICE_CPF];
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const id = row[0];
+      const nome = row[1];
+      const cpfSheet = String(row[2]).trim();
+      const senhaSheet = String(row[3]).trim();
+      const perfil = String(row[4]).trim().toUpperCase();
 
-      if (
-        cpfNaPlanilha &&
-        cpfNaPlanilha.toString().replace(/\D/g, '') === cpfAluno.toString().replace(/\D/g, '')
-      ) {
-        var atualizacoes = [];
-
-        // ✅ Atualiza embarque
-        if (operacao === 'embarque' && novoStatus) {
-          planilha.getRange(i + 1, COLUNA_EMBARQUE).setValue(novoStatus);
-          atualizacoes.push("Embarque: " + novoStatus);
-        }
-
-        // ✅ Atualiza retorno
-        if (operacao === 'retorno' && novoRetorno) {
-          planilha.getRange(i + 1, COLUNA_RETORNO).setValue(novoRetorno);
-          atualizacoes.push("Retorno: " + novoRetorno);
-        }
-
-        // ✅ Atualiza pulseira
-        if (codigoPulseira && codigoPulseira.toString().trim() !== '') {
-          planilha.getRange(i + 1, COLUNA_PULSEIRA).setValue(codigoPulseira);
-          atualizacoes.push("Pulseira: " + codigoPulseira);
-        }
-
-        if (atualizacoes.length > 0) {
-          return {
-            status: "sucesso",
-            mensagem: "Atualizações realizadas com sucesso: " + atualizacoes.join(", "),
-            cpf: cpfAluno,
-            operacao: operacao,
-            atualizacoes: atualizacoes
-          };
-        }
-
-        return {
-          status: "erro",
-          mensagem: "Aluno encontrado, mas nenhuma atualização válida foi enviada.",
-          cpf: cpfAluno
-        };
+      if (cpfSheet === cpf && senhaSheet === senha) {
+        console.log('✅ Login bem-sucedido:', nome);
+        return createResponse(true, 'Login bem-sucedido', {
+          user: {
+            id: id,
+            nome: nome,
+            cpf: cpfSheet,
+            perfil: perfil || 'USUARIO'
+          }
+        });
       }
     }
 
-    return {
-      status: "erro",
-      mensagem: "Aluno com CPF " + cpfAluno + " não encontrado na aba " + nomeAba
-    };
-
+    console.log('❌ Credenciais inválidas');
+    return createResponse(false, 'CPF ou senha inválidos');
   } catch (error) {
-    return {
-      status: "erro",
-      mensagem: "Erro interno: " + error.toString(),
-      linha: error.lineNumber || "desconhecida"
-    };
+    console.error('❌ Erro no login:', error);
+    return createResponse(false, 'Erro ao fazer login: ' + error.message);
   }
 }
 
-// ====================================================================
-// FUNÇÃO AUXILIAR: LISTAR COLÉGIOS
-// ====================================================================
-function listarColegios() {
-  var planilha = SpreadsheetApp.getActiveSpreadsheet();
-  var abas = planilha.getSheets();
-  var listaColegios = [];
+// ============================================================================
+// FUNÇÃO: GET ALL USERS
+// ============================================================================
+function getAllUsers() {
+  try {
+    console.log('📥 [getAllUsers] Buscando todos os usuários da aba LOGIN...');
 
-  for (var i = 0; i < abas.length; i++) {
-    listaColegios.push(abas[i].getName());
-  }
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const loginSheet = ss.getSheetByName('LOGIN');
 
-  return {
-    status: "sucesso",
-    colegios: listaColegios
-  };
-}
-
-// ====================================================================
-// FUNÇÃO PARA GATILHO AUTOMÁTICO (ON EDIT)
-// ====================================================================
-
-function copiarFacial_onEdit(e) {
-  var planilhaDestino = SpreadsheetApp.openById(ID_PLANILHA_DESTINO);
-  var abaDestino = planilhaDestino.getSheetByName(NOME_ABA_DESTINO);
-
-  if (!abaDestino) return;
-
-  var linha = e.range.getRow();
-  var coluna = e.range.getColumn();
-  var linhasAfetadas = e.range.getNumRows();
-
-  // Só dispara no CONTROLE (coluna H)
-  if (linha === 1 || coluna !== COLUNA_CONTROLE) return;
-
-  var abaOrigem = e.range.getSheet();
-  var valores = e.range.getValues();
-  var registros = [];
-
-  for (var i = 0; i < linhasAfetadas; i++) {
-    var valor = valores[i][0];
-
-    if (valor && valor.toString().toUpperCase().trim() === "SIM") {
-
-      var dados = abaOrigem.getRange(linha + i, COLUNA_NOME, 1, 10).getValues()[0];
-      // 10 colunas: NOME, TURMA, CPF, TELEFONE, ID_PASSEIO, ONIBUS, CONTROLE, INICIO, FIM
-
-      registros.push(dados);
+    if (!loginSheet) {
+      console.error('❌ Aba LOGIN não encontrada');
+      return createResponse(false, 'Aba LOGIN não encontrada na planilha');
     }
+
+    const data_range = loginSheet.getDataRange();
+    const values = data_range.getValues();
+
+    const users = [];
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      if (!row[2] || !row[3]) continue;
+
+      const user = {
+        id: row[0],
+        nome: row[1],
+        cpf: String(row[2]).trim(),
+        senha: String(row[3]).trim(),
+        perfil: String(row[4] || 'USUARIO').trim().toUpperCase()
+      };
+
+      users.push(user);
+    }
+
+    console.log('✅ [getAllUsers] ' + users.length + ' usuários encontrados');
+    return createResponse(true, users.length + ' usuários encontrados', { users: users });
+  } catch (error) {
+    console.error('❌ Erro ao buscar usuários:', error);
+    return createResponse(false, 'Erro ao buscar usuários: ' + error.message);
   }
-
-  if (registros.length === 0) return;
-
-  var ultima = abaDestino.getLastRow();
-  var ultimoID = ultima >= 2 ?
-      abaDestino.getRange(ultima, COLUNA_ID).getValue() : 0;
-
-  var pronto = registros.map(function(d){
-    ultimoID++;
-    return [ultimoID].concat(d);
-  });
-
-  // total escrito: 1 (ID) + 10 colunas = 11 colunas
-  abaDestino.getRange(ultima + 1, COLUNA_ID, pronto.length, 11)
-    .setValues(pronto);
 }
 
-// ====================================================================
-// FUNÇÃO DE EXECUÇÃO MANUAL
-// ====================================================================
+// ============================================================================
+// FUNÇÃO: GET ALL PEOPLE
+// ============================================================================
+function getAllPeople() {
+  try {
+    console.log('📥 [getAllPeople] Buscando pessoas da aba PESSOAS...');
 
-function enviarParaCadastroFacial() {
-  var origem = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var destino = SpreadsheetApp.openById(ID_PLANILHA_DESTINO).getSheetByName(NOME_ABA_DESTINO);
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const pessoasSheet = ss.getSheetByName('PESSOAS');
 
-  if (!destino) {
-    SpreadsheetApp.getUi().alert("A aba destino não existe.");
-    return;
+    if (!pessoasSheet) {
+      console.error('❌ Aba PESSOAS não encontrada');
+      return createResponse(false, 'Aba PESSOAS não encontrada');
+    }
+
+    garantirColunaMovimentacao(pessoasSheet);
+
+    const data_range = pessoasSheet.getDataRange();
+    const values = data_range.getValues();
+
+    console.log('📋 Cabeçalho da planilha PESSOAS:', values[0]);
+    console.log('📋 Total de linhas:', values.length);
+
+    const pessoas = [];
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      if (!row[1]) continue;
+
+      const pessoa = {
+        cpf: String(row[1]).trim(),
+        nome: row[2] || '',
+        email: row[3] || '',
+        telefone: row[4] || '',
+        embedding: row[5] || null,
+        turma: '',
+        movimentacao: (row[MOVIMENTACAO_COLUMN_INDEX - 1] || '').toString(),
+        inicio_viagem: row[8] || '',
+        fim_viagem: row[9] || ''
+      };
+
+      if (pessoa.embedding && pessoa.embedding.length > 0) {
+        const embeddingStr = String(pessoa.embedding);
+        if (embeddingStr.startsWith('[') && embeddingStr.includes(',')) {
+          pessoas.push(pessoa);
+          if (pessoas.length === 1) {
+            console.log('✅ Exemplo de pessoa válida:', {
+              cpf: pessoa.cpf,
+              nome: pessoa.nome,
+              movimentacao: pessoa.movimentacao,
+              embeddingPreview: embeddingStr.substring(0, 50) + '...'
+            });
+          }
+        } else {
+          console.log(`⚠️ Ignorando ${pessoa.nome} - embedding inválido: ${embeddingStr.substring(0, 50)}`);
+        }
+      } else {
+        console.log(`⚠️ Ignorando ${pessoa.nome} - sem embedding`);
+      }
+    }
+
+    console.log('✅ [getAllPeople] ' + pessoas.length + ' pessoas encontradas');
+    return createResponse(true, pessoas.length + ' pessoas encontradas', { data: pessoas });
+  } catch (error) {
+    console.error('❌ Erro ao buscar pessoas:', error);
+    return createResponse(false, 'Erro: ' + error.message);
   }
+}
 
-  var d = origem.getDataRange().getValues();
-  var inserir = [];
+// ============================================================================
+// FUNÇÃO: GET ALL STUDENTS - permanece igual
+// ============================================================================
+function getAllStudents() {
+  try {
+    console.log('📥 [getAllStudents] Buscando alunos...');
 
-  for (var i = 1; i < d.length; i++) {
-    if (d[i][INDICE_CONTROLE].toString().toUpperCase().trim() === "SIM") {
-      inserir.push([
-        d[i][INDICE_NOME],
-        d[i][INDICE_TURMA],
-        d[i][INDICE_CPF],
-        d[i][INDICE_TELEFONE],
-        d[i][INDICE_ID_PASSEIO],
-        d[i][INDICE_ONIBUS],
-        d[i][INDICE_CONTROLE],
-        d[i][INDICE_INICIO],     // ✅ ADICIONADO
-        d[i][INDICE_FIM]         // ✅ ADICIONADO
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    let alunosSheet = ss.getSheetByName('ALUNOS') ||
+                      ss.getSheetByName('Alunos') ||
+                      ss.getSheetByName('LISTA_ALUNOS');
+
+    if (!alunosSheet) {
+      console.log('⚠️ Aba ALUNOS não encontrada, retornando lista vazia');
+      return createResponse(true, 'Aba ALUNOS não encontrada', { data: [] });
+    }
+
+    const data_range = alunosSheet.getDataRange();
+    const values = data_range.getValues();
+
+    console.log('📋 Cabeçalho da planilha ALUNOS:', values[0]);
+
+    const alunos = [];
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      if (!row[0]) continue;
+
+      const aluno = {
+        cpf: String(row[0]).trim(),
+        nome: row[1] || '',
+        email: row[2] || '',
+        telefone: row[3] || '',
+        turma: row[4] || '',
+        facial_status: String(row[5] || 'NAO').toUpperCase(),
+        tem_qr: String(row[6] || 'NAO').toUpperCase(),
+        inicio_viagem: row[7] || '',
+        fim_viagem: row[8] || ''
+      };
+
+      alunos.push(aluno);
+    }
+
+    console.log('✅ [getAllStudents] ' + alunos.length + ' alunos encontrados');
+    return createResponse(true, alunos.length + ' alunos encontrados', { data: alunos });
+  } catch (error) {
+    console.error('❌ Erro ao buscar alunos:', error);
+    return createResponse(false, 'Erro: ' + error.message);
+  }
+}
+
+// ============================================================================
+// FUNÇÃO: ADD PESSOA
+// ============================================================================
+function addPessoa(data) {
+  try {
+    const cpf = data.cpf;
+    const nome = data.nome;
+    const email = data.email || '';
+    const telefone = data.telefone || '';
+    const embedding = data.embedding;
+    const personId = data.personId || cpf;
+    const movimentacaoValor = (data.movimentacao || '')
+      .toString()
+      .trim()
+      .toUpperCase();
+    const inicioViagem = data.inicio_viagem || data.inicioViagem || '';
+    const fimViagem = data.fim_viagem || data.fimViagem || '';
+
+    console.log('📥 [addPessoa] Cadastrando pessoa:', nome, 'CPF:', cpf);
+
+    if (!cpf || !nome || !embedding) {
+      return createResponse(false, 'CPF, nome e embedding são obrigatórios');
+    }
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let pessoasSheet = ss.getSheetByName('PESSOAS');
+
+    if (!pessoasSheet) {
+      console.log('📝 Criando aba PESSOAS...');
+      pessoasSheet = ss.insertSheet('PESSOAS');
+      pessoasSheet.appendRow(['ID', 'CPF', 'NOME', 'EMAIL', 'TELEFONE', 'EMBEDDING', 'DATA_CADASTRO', 'MOVIMENTAÇÃO', 'INCIO VIAGEM', 'FIM VIAGEM']);
+    }
+
+    garantirColunaMovimentacao(pessoasSheet);
+
+    const embeddingJson = JSON.stringify(embedding);
+    const dataCadastro = new Date().toISOString();
+
+    const data_range = pessoasSheet.getDataRange();
+    const values = data_range.getValues();
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const cpfSheet = String(row[1]).trim();
+
+      if (cpfSheet === cpf) {
+        console.log('🔄 Atualizando pessoa existente:', nome);
+        pessoasSheet.getRange(i + 1, 3).setValue(nome);
+        pessoasSheet.getRange(i + 1, 4).setValue(email);
+        pessoasSheet.getRange(i + 1, 5).setValue(telefone);
+        pessoasSheet.getRange(i + 1, 6).setValue(embeddingJson);
+        pessoasSheet.getRange(i + 1, 7).setValue(dataCadastro);
+        if (movimentacaoValor) {
+          pessoasSheet
+            .getRange(i + 1, MOVIMENTACAO_COLUMN_INDEX)
+            .setValue(movimentacaoValor);
+        }
+        if (inicioViagem) {
+          pessoasSheet.getRange(i + 1, 9).setValue(inicioViagem);
+        }
+        if (fimViagem) {
+          pessoasSheet.getRange(i + 1, 10).setValue(fimViagem);
+        }
+        console.log('✅ [addPessoa] Pessoa atualizada com sucesso');
+        return createResponse(true, 'Pessoa atualizada com sucesso');
+      }
+    }
+
+    const newId = values.length;
+    const newRow = [
+      newId,
+      cpf,
+      nome,
+      email,
+      telefone,
+      embeddingJson,
+      dataCadastro,
+      movimentacaoValor,
+      inicioViagem,
+      fimViagem
+    ];
+
+    pessoasSheet.appendRow(newRow);
+
+    console.log('✅ [addPessoa] Nova pessoa cadastrada:', nome);
+    return createResponse(true, 'Pessoa cadastrada com sucesso');
+  } catch (error) {
+    console.error('❌ [addPessoa] Erro:', error);
+    return createResponse(false, 'Erro ao cadastrar pessoa: ' + error.message);
+  }
+}
+
+// ============================================================================
+// FUNÇÃO: ADD MOVEMENT LOG
+// ============================================================================
+function addMovementLog(data) {
+  try {
+    const people = data.people || [];
+
+    console.log('📥 [addMovementLog] Recebendo', people.length, 'log(s)');
+
+    if (people.length === 0) {
+      return createResponse(false, 'Nenhum log para processar');
+    }
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let logsSheet = ss.getSheetByName('LOGS');
+
+    if (!logsSheet) {
+      console.log('📝 Criando aba LOGS...');
+      logsSheet = ss.insertSheet('LOGS');
+      logsSheet.appendRow(['TIMESTAMP', 'CPF', 'NOME', 'CONFIDENCE', 'TIPO', 'PERSON_ID', 'OPERADOR']);
+    }
+
+    let count = 0;
+
+    for (const person of people) {
+      const timestamp = person.timestamp || new Date().toISOString();
+      const cpf = person.cpf || '';
+      const personName = person.personName || person.nome || '';
+      const confidence = person.confidence || 0;
+      const tipo = (person.tipo || 'RECONHECIMENTO').toString().toUpperCase();
+      const movimentacaoRecebida = (
+        person.movimentacao ||
+        person.movimento ||
+        ''
+      )
+        .toString()
+        .trim();
+      const personId = person.personId || cpf;
+      const operadorNome = person.operadorNome || 'Sistema';
+
+      logsSheet.appendRow([
+        timestamp,
+        cpf,
+        personName,
+        confidence,
+        tipo,
+        personId,
+        operadorNome
       ]);
+
+      let movimentacao = movimentacaoRecebida;
+      if (!movimentacao) {
+        const tipoNormalizado = tipo.trim();
+        if (tipoNormalizado !== 'RECONHECIMENTO' && tipoNormalizado !== 'FACIAL') {
+          movimentacao = tipoNormalizado;
+        }
+      }
+
+      if (cpf && movimentacao) {
+        atualizarMovimentacaoPessoa(cpf, movimentacao.toUpperCase());
+      }
+
+      count++;
+    }
+
+    console.log('✅ [addMovementLog]', count, 'log(s) registrado(s)');
+    return createResponse(true, count + ' log(s) registrado(s)', {
+      data: { total: count }
+    });
+  } catch (error) {
+    console.error('❌ [addMovementLog] Erro:', error);
+    return createResponse(false, 'Erro ao registrar logs: ' + error.message);
+  }
+}
+
+// ============================================================================
+// FUNÇÃO: GET ALUNOS
+// ============================================================================
+function getAlunos(data) {
+  try {
+    const nomeAba = data.nomeAba;
+    const numeroOnibus = data.numeroOnibus;
+
+    console.log('📥 [getAlunos] Buscando alunos:', nomeAba, 'Ônibus:', numeroOnibus);
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(nomeAba);
+
+    if (!sheet) {
+      return createResponse(false, 'Aba não encontrada: ' + nomeAba);
+    }
+
+    const data_range = sheet.getDataRange();
+    const values = data_range.getValues();
+
+    const alunos = [];
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+
+      const onibus = String(row[6]).trim();
+
+      if (numeroOnibus && onibus !== numeroOnibus) {
+        continue;
+      }
+
+      const aluno = {
+        nome: row[0],
+        cpf: String(row[1]).trim(),
+        id_passeio: row[2] || '',
+        turma: row[3] || '',
+        embarque: String(row[4] || 'NAO').toUpperCase(),
+        retorno: String(row[5] || 'NAO').toUpperCase(),
+        onibus: onibus,
+        tem_qr: String(row[7] || 'NAO').toUpperCase(),
+        inicio_viagem: row[8] || '',
+        fim_viagem: row[9] || ''
+      };
+
+      alunos.push(aluno);
+    }
+
+    console.log('✅ [getAlunos] Alunos encontrados:', alunos.length);
+    return createResponse(true, alunos.length + ' alunos encontrados', { data: alunos });
+  } catch (error) {
+    console.error('❌ Erro ao buscar alunos:', error);
+    return createResponse(false, 'Erro: ' + error.message);
+  }
+}
+
+// ============================================================================
+// FUNÇÕES DE COMPATIBILIDADE
+// ============================================================================
+function cadastrarFacial(data) {
+  console.log('ℹ️ [cadastrarFacial] Redirecionando para addPessoa...');
+  return addPessoa(data);
+}
+
+function registrarLog(data) {
+  console.log('ℹ️ [registrarLog] Redirecionando para addMovementLog...');
+  return addMovementLog({
+    people: [{
+      cpf: data.cpf,
+      personName: data.nome,
+      confidence: data.confidence || 0,
+      tipo: data.tipo || 'reconhecimento',
+      movimentacao: data.movimentacao || data.tipo || '',
+      timestamp: new Date().toISOString()
+    }]
+  });
+}
+
+function syncEmbedding(data) {
+  console.log('ℹ️ [syncEmbedding] Redirecionando para addPessoa...');
+  return addPessoa(data);
+}
+
+// ============================================================================
+// FUNÇÃO: GET ALL LOGS
+// ============================================================================
+function getAllLogs() {
+  try {
+    console.log('📥 [getAllLogs] Buscando todos os logs da aba LOGS...');
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const logsSheet = ss.getSheetByName('LOGS');
+
+    if (!logsSheet) {
+      console.error('❌ Aba LOGS não encontrada');
+      return createResponse(false, 'Aba LOGS não encontrada na planilha');
+    }
+
+    const data_range = logsSheet.getDataRange();
+    const values = data_range.getValues();
+
+    const logs = [];
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      if (!row[0]) continue;
+
+      const log = {
+        timestamp: row[0],
+        cpf: row[1] || '',
+        nome: row[2] || '',
+        confidence: row[3] || 0,
+        tipo: row[4] || '',
+        person_id: row[5] || '',
+        operador: row[6] || ''
+      };
+
+      logs.push(log);
+    }
+
+    console.log('✅ [getAllLogs] ' + logs.length + ' logs encontrados');
+    return createResponse(true, logs.length + ' logs encontrados', { data: logs });
+  } catch (error) {
+    console.error('❌ Erro ao buscar logs:', error);
+    return createResponse(false, 'Erro ao buscar logs: ' + error.message);
+  }
+}
+
+// ============================================================================
+// AÇÕES CRÍTICAS
+// ============================================================================
+
+/**
+ * NOVA FUNÇÃO: Listar viagens disponíveis
+ * Busca todas as viagens únicas (baseado em inicio_viagem e fim_viagem) na aba ALUNOS
+ */
+function listarViagens() {
+  try {
+    console.log('📥 [listarViagens] Buscando viagens disponíveis...');
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const abaAlunos = ss.getSheetByName('ALUNOS');
+
+    if (!abaAlunos) {
+      return createResponse(false, 'Aba ALUNOS não encontrada');
+    }
+
+    const lastRow = abaAlunos.getLastRow();
+    if (lastRow <= 1) {
+      return createResponse(true, 'Nenhuma viagem encontrada', { viagens: [] });
+    }
+
+    const data_range = abaAlunos.getDataRange();
+    const values = data_range.getValues();
+
+    // Usar Set para armazenar viagens únicas
+    const viagensMap = new Map();
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const inicioViagem = row[8] || '';
+      const fimViagem = row[9] || '';
+
+      if (inicioViagem && fimViagem) {
+        const chave = inicioViagem + '|' + fimViagem;
+        if (!viagensMap.has(chave)) {
+          viagensMap.set(chave, {
+            inicio_viagem: inicioViagem,
+            fim_viagem: fimViagem
+          });
+        }
+      }
+    }
+
+    const viagens = Array.from(viagensMap.values());
+    console.log('✅ [listarViagens] ' + viagens.length + ' viagem(ns) encontrada(s)');
+
+    return createResponse(true, viagens.length + ' viagem(ns) encontrada(s)', { viagens: viagens });
+  } catch (error) {
+    console.error('❌ [listarViagens] Erro:', error);
+    return createResponse(false, 'Erro ao listar viagens: ' + error.message);
+  }
+}
+
+/**
+ * AÇÃO CRÍTICA: Encerrar viagem (ATUALIZADA)
+ * Limpa dados de uma viagem específica ou de todas as viagens
+ * ATENÇÃO: OPERAÇÃO IRREVERSÍVEL! Dados da viagem selecionada serão perdidos!
+ */
+function encerrarViagem(data) {
+  try {
+    console.log('🔥 [CRÍTICO] Iniciando encerramento de viagem...');
+
+    const inicioViagem = data ? (data.inicio_viagem || data.inicioViagem) : null;
+    const fimViagem = data ? (data.fim_viagem || data.fimViagem) : null;
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    // Se não especificou datas, limpa TUDO (comportamento antigo)
+    if (!inicioViagem || !fimViagem) {
+      console.log('⚠️ Nenhuma data especificada - limpando TODAS as viagens');
+
+      // 1. Limpar aba PESSOAS
+      const abaPessoas = ss.getSheetByName('PESSOAS');
+      if (abaPessoas) {
+        const lastRow = abaPessoas.getLastRow();
+        if (lastRow > 1) {
+          abaPessoas.getRange(2, 1, lastRow - 1, abaPessoas.getLastColumn()).clearContent();
+          console.log('✅ Aba PESSOAS limpa');
+        }
+      }
+
+      // 2. Limpar aba LOGS
+      const abaLogs = ss.getSheetByName('LOGS');
+      if (abaLogs) {
+        const lastRow = abaLogs.getLastRow();
+        if (lastRow > 1) {
+          abaLogs.getRange(2, 1, lastRow - 1, abaLogs.getLastColumn()).clearContent();
+          console.log('✅ Aba LOGS limpa');
+        }
+      }
+
+      // 3. Limpar aba ALUNOS
+      const abaAlunos = ss.getSheetByName('ALUNOS');
+      if (abaAlunos) {
+        const lastRow = abaAlunos.getLastRow();
+        if (lastRow > 1) {
+          abaAlunos.getRange(2, 1, lastRow - 1, abaAlunos.getLastColumn()).clearContent();
+          console.log('✅ Aba ALUNOS limpa');
+        }
+      }
+
+      console.log('✅ [CRÍTICO] Todas as viagens encerradas com sucesso!');
+      return createResponse(true, 'Todas as viagens foram encerradas! Todas as abas foram limpas.', {
+        abas_limpas: ['PESSOAS', 'LOGS', 'ALUNOS']
+      });
+    }
+
+    // Se especificou datas, limpa APENAS essa viagem
+    console.log('🎯 Encerrando viagem específica:', inicioViagem, 'a', fimViagem);
+
+    let totalRemovidos = 0;
+
+    // 1. Limpar aba PESSOAS (filtrado por data)
+    const abaPessoas = ss.getSheetByName('PESSOAS');
+    if (abaPessoas) {
+      totalRemovidos += limparAbaFiltrada(abaPessoas, inicioViagem, fimViagem, 9, 10);
+    }
+
+    // 2. Limpar aba LOGS (filtrado por data)
+    const abaLogs = ss.getSheetByName('LOGS');
+    if (abaLogs) {
+      // Na aba LOGS, as colunas são diferentes - preciso verificar a estrutura
+      // TIMESTAMP, CPF, NOME, CONFIDENCE, TIPO, PERSON_ID, OPERADOR, INICIO_VIAGEM, FIM_VIAGEM
+      totalRemovidos += limparAbaFiltrada(abaLogs, inicioViagem, fimViagem, 8, 9);
+    }
+
+    // 3. Limpar aba ALUNOS (filtrado por data)
+    const abaAlunos = ss.getSheetByName('ALUNOS');
+    if (abaAlunos) {
+      totalRemovidos += limparAbaFiltrada(abaAlunos, inicioViagem, fimViagem, 8, 9);
+    }
+
+    console.log('✅ [CRÍTICO] Viagem encerrada com sucesso! Total de registros removidos:', totalRemovidos);
+
+    return createResponse(true, 'Viagem encerrada com sucesso! ' + totalRemovidos + ' registro(s) removido(s).', {
+      inicio_viagem: inicioViagem,
+      fim_viagem: fimViagem,
+      total_removidos: totalRemovidos
+    });
+
+  } catch (error) {
+    console.error('❌ [CRÍTICO] Erro ao encerrar viagem:', error);
+    return createResponse(false, 'Erro ao encerrar viagem: ' + error.message);
+  }
+}
+
+/**
+ * Função auxiliar para limpar registros filtrados por data de viagem
+ */
+function limparAbaFiltrada(sheet, inicioViagem, fimViagem, colunaInicio, colunaFim) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    return 0;
+  }
+
+  const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const linhasParaRemover = [];
+
+  // Identificar linhas que correspondem à viagem
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    const inicio = row[colunaInicio - 1] || '';
+    const fim = row[colunaFim - 1] || '';
+
+    if (inicio === inicioViagem && fim === fimViagem) {
+      linhasParaRemover.push(i + 2); // +2 porque arrays começam em 0 e pulamos o header
     }
   }
 
-  if (inserir.length == 0) {
-    SpreadsheetApp.getUi().alert("Nada para inserir.");
-    return;
+  // Remover linhas de trás para frente para não afetar índices
+  for (let i = linhasParaRemover.length - 1; i >= 0; i--) {
+    sheet.deleteRow(linhasParaRemover[i]);
   }
 
-  var ultima = destino.getLastRow();
-  var id = ultima >= 2 ?
-      destino.getRange(ultima, COLUNA_ID).getValue() + 1 : 1;
-
-  var pronto = inserir.map(l => [id++].concat(l));
-
-  // total escrito: 1 (ID) + 9 colunas = 10 colunas
-  destino.getRange(ultima + 1, COLUNA_ID, pronto.length, 10)
-    .setValues(pronto);
-
-  SpreadsheetApp.getUi().alert("✅ " + pronto.length + " alunos enviados!");
+  console.log('✅ Aba', sheet.getName(), ':', linhasParaRemover.length, 'registro(s) removido(s)');
+  return linhasParaRemover.length;
 }
+
+/**
+ * AÇÃO CRÍTICA: Enviar todos para QUARTO
+ * Atualiza a movimentação de TODAS as pessoas para 'QUARTO'
+ * Útil para início/fim de dia ou reset de localização
+ */
+function enviarTodosParaQuarto() {
+  try {
+    console.log('🔄 [CRÍTICO] Enviando todos para QUARTO...');
+
+    // Passo 1: Abrir planilha
+    console.log('📝 Passo 1: Abrindo planilha...');
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const abaPessoas = ss.getSheetByName('PESSOAS');
+
+    if (!abaPessoas) {
+      console.error('❌ Aba PESSOAS não encontrada');
+      return createResponse(false, 'Aba PESSOAS não encontrada');
+    }
+    console.log('✅ Aba PESSOAS encontrada');
+
+    // Passo 2: Verificar e garantir coluna movimentação
+    console.log('📝 Passo 2: Garantindo coluna MOVIMENTAÇÃO...');
+    try {
+      garantirColunaMovimentacao(abaPessoas);
+    } catch (errColuna) {
+      console.error('❌ Erro ao garantir coluna:', errColuna);
+      return createResponse(false, 'Erro ao configurar coluna MOVIMENTAÇÃO: ' + errColuna.message);
+    }
+
+    // Passo 3: Verificar quantas linhas temos
+    console.log('📝 Passo 3: Verificando quantidade de pessoas...');
+    const lastRow = abaPessoas.getLastRow();
+    const lastColumn = abaPessoas.getLastColumn();
+
+    console.log(`📊 Última linha: ${lastRow}, Última coluna: ${lastColumn}`);
+
+    if (lastRow <= 1) {
+      console.log('⚠️ Nenhuma pessoa para atualizar');
+      return createResponse(true, 'Nenhuma pessoa para atualizar', {
+        pessoas_atualizadas: 0
+      });
+    }
+
+    // Verificar se a coluna MOVIMENTACAO existe
+    if (lastColumn < MOVIMENTACAO_COLUMN_INDEX) {
+      console.error(`❌ Planilha não tem coluna ${MOVIMENTACAO_COLUMN_INDEX}. Última coluna: ${lastColumn}`);
+      return createResponse(false, `Erro: Planilha não possui a coluna ${MOVIMENTACAO_COLUMN_INDEX} necessária`);
+    }
+
+    // Passo 4: Preparar valores para atualização
+    console.log('📝 Passo 4: Preparando valores...');
+    const numPessoas = lastRow - 1;
+    const valores = [];
+
+    for (let i = 0; i < numPessoas; i++) {
+      valores.push(['QUARTO']);
+    }
+
+    console.log(`📊 Total de ${numPessoas} pessoa(s) serão atualizadas`);
+
+    // Passo 5: Atualizar células em lote
+    console.log('📝 Passo 5: Atualizando células...');
+    try {
+      const range = abaPessoas.getRange(2, MOVIMENTACAO_COLUMN_INDEX, numPessoas, 1);
+      range.setValues(valores);
+      console.log('✅ Células atualizadas com sucesso');
+    } catch (errUpdate) {
+      console.error('❌ Erro ao atualizar células:', errUpdate);
+      return createResponse(false, 'Erro ao atualizar células: ' + errUpdate.message);
+    }
+
+    // Passo 6: Confirmar sucesso
+    console.log(`✅ [CRÍTICO] ${numPessoas} pessoa(s) enviada(s) para QUARTO`);
+
+    return createResponse(true, numPessoas + ' pessoa(s) enviada(s) para QUARTO', {
+      pessoas_atualizadas: numPessoas
+    });
+
+  } catch (error) {
+    console.error('❌ [CRÍTICO] Erro ao enviar para quarto:', error);
+    console.error('❌ Stack trace:', error.stack);
+    return createResponse(false, 'Erro ao enviar para quarto: ' + error.message + ' | Stack: ' + error.stack);
+  }
+}
+
