@@ -554,6 +554,17 @@ class DatabaseHelper {
     return await db.query('logs', orderBy: 'timestamp DESC');
   }
 
+  /// Retorna logs apenas do operador especificado
+  Future<List<Map<String, dynamic>>> getLogsByOperador(String operadorNome) async {
+    final db = await database;
+    return await db.query(
+      'logs',
+      where: 'operador_nome = ?',
+      whereArgs: [operadorNome],
+      orderBy: 'timestamp DESC',
+    );
+  }
+
   Future<void> clearAllData() async {
     final db = await database;
     await db.delete('passageiros');
