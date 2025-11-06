@@ -276,27 +276,69 @@ class AcoesCriticasService {
       Map<String, dynamic> resultado;
 
       try {
-        final headers = {'Content-Type': 'application/json'};
-        final request = http.Request('POST', Uri.parse(_googleAppsScriptUrl));
-        request.body = jsonEncode({
+        final requestBody = jsonEncode({
           'action': 'encerrarViagem',
           if (inicioViagem != null) 'inicio_viagem': inicioViagem,
           if (fimViagem != null) 'fim_viagem': fimViagem,
         });
-        request.headers.addAll(headers);
-        request.followRedirects = true;
-        request.maxRedirects = 5;
 
-        final streamedResponse =
-            await client.send(request).timeout(const Duration(seconds: 60));
-        final responseBody = await streamedResponse.stream.bytesToString();
+        final request = http.Request('POST', Uri.parse(_googleAppsScriptUrl))
+          ..followRedirects = false
+          ..headers['Content-Type'] = 'application/json; charset=utf-8'
+          ..headers['Accept'] = 'application/json'
+          ..headers['X-Requested-With'] = 'XMLHttpRequest'
+          ..headers['User-Agent'] = 'PostmanRuntime/7.32.3'
+          ..body = requestBody;
 
-        if (streamedResponse.statusCode == 200 || streamedResponse.statusCode == 302) {
-          resultado = jsonDecode(responseBody);
-          print('✅ Google Sheets atualizado');
+        final streamedResponse = await client.send(request);
+        final response = await http.Response.fromStream(streamedResponse);
+
+        print('📡 [EncerrarViagem] Status: ${response.statusCode}');
+
+        // Se recebeu 302, seguir o redirect manualmente com GET
+        if (response.statusCode == 302 && response.headers['location'] != null) {
+          final redirectedUrl = response.headers['location']!;
+          print('🔁 [EncerrarViagem] Redirecionando para: $redirectedUrl');
+
+          http.Response redirectedResponse;
+
+          try {
+            redirectedResponse = await http.post(
+              Uri.parse(redirectedUrl),
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'User-Agent': 'PostmanRuntime/7.32.3',
+              },
+              body: requestBody,
+            );
+
+            if (redirectedResponse.statusCode == 405) {
+              print('⚠️ [Redirected] POST não permitido, tentando GET...');
+              redirectedResponse = await http.get(
+                Uri.parse(redirectedUrl),
+                headers: {
+                  'Accept': 'application/json',
+                  'User-Agent': 'PostmanRuntime/7.32.3',
+                  'X-Requested-With': 'XMLHttpRequest',
+                },
+              );
+            }
+          } catch (e) {
+            print('❌ [Redirected] Erro ao seguir redirect: $e');
+            throw Exception('Erro ao seguir redirect: $e');
+          }
+
+          print('📡 [Redirected] Status: ${redirectedResponse.statusCode}');
+          resultado = jsonDecode(redirectedResponse.body);
+        } else if (response.statusCode == 200) {
+          resultado = jsonDecode(response.body);
         } else {
-          throw Exception('Erro HTTP ${streamedResponse.statusCode}');
+          throw Exception('Erro HTTP ${response.statusCode}');
         }
+
+        print('✅ Google Sheets atualizado');
       } finally {
         client.close();
       }
