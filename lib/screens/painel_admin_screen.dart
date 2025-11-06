@@ -301,7 +301,12 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
           children: [
             Icon(Icons.bed, color: Colors.blue.shade700, size: 28),
             const SizedBox(width: 12),
-            const Text('Enviar Todos para Quarto'),
+            const Flexible(
+              child: Text(
+                'Enviar Todos para Quarto',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: const Text(
