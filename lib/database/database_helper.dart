@@ -456,7 +456,7 @@ class DatabaseHelper {
     // ✅ CORREÇÃO: Buscar APENAS da tabela pessoas_facial (fonte única da verdade)
     // Removido UNION desnecessário - pessoas_facial já contém tudo
     final List<Map<String, dynamic>> pessoasComFacial = await db.rawQuery('''
-      SELECT cpf, nome, email, telefone, turma, embedding, movimentacao
+      SELECT cpf, nome, email, telefone, turma, embedding, movimentacao, inicio_viagem, fim_viagem
       FROM pessoas_facial
       WHERE facial_status = 'CADASTRADA' AND embedding IS NOT NULL
     ''');
