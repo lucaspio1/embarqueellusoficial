@@ -784,8 +784,9 @@ function listarViagens() {
 
     for (let i = 1; i < values.length; i++) {
       const row = values[i];
-      const inicioViagem = row[7] || '';
-      const fimViagem = row[8] || '';
+      // Coluna I = índice 8, Coluna J = índice 9
+      const inicioViagem = row[8] || '';
+      const fimViagem = row[9] || '';
 
       if (inicioViagem && fimViagem) {
         const chave = inicioViagem + '|' + fimViagem;
@@ -884,7 +885,8 @@ function encerrarViagem(data) {
     // 3. Limpar aba ALUNOS (filtrado por data)
     const abaAlunos = ss.getSheetByName('ALUNOS');
     if (abaAlunos) {
-      totalRemovidos += limparAbaFiltrada(abaAlunos, inicioViagem, fimViagem, 8, 9);
+      // Colunas I=9 e J=10 na aba ALUNOS
+      totalRemovidos += limparAbaFiltrada(abaAlunos, inicioViagem, fimViagem, 9, 10);
     }
 
     console.log('✅ [CRÍTICO] Viagem encerrada com sucesso! Total de registros removidos:', totalRemovidos);
