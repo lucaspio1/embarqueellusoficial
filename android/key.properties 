@@ -1,0 +1,4 @@
+storePassword=010203a
+keyPassword=010203a
+keyAlias=upload
+storeFile=key.jks

@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
@@ -7,6 +8,20 @@ plugins {
 }
 
 android {
+    signingConfigs {
+        release {
+            def keyProperties = new Properties()
+            def keyPropertiesFile = rootProject.file("key.properties")
+            if (keyPropertiesFile.exists()) {
+                keyProperties.load(new FileInputStream(keyPropertiesFile))
+            }
+
+            storeFile = keyProperties['storeFile'] ? file(keyProperties['storeFile']) : null
+            storePassword = keyProperties['storePassword']
+            keyAlias = keyProperties['keyAlias']
+            keyPassword = keyProperties['keyPassword']
+        }
+    }
     namespace = "com.example.embarqueellus"
 
     // ✅ Atualizado para suportar o mobile_scanner
