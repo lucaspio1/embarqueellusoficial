@@ -445,15 +445,16 @@ class DatabaseHelper {
   Future<Map<String, int>> getContagemPorMovimentacao() async {
     final db = await database;
 
-    // ✅ Buscar apenas dos 3 locais específicos: QUARTO, PISCINA, BALADA
+    // ✅ Buscar da tabela pessoas_facial (onde as pessoas ESTÃO AGORA)
+    // Não dos logs (histórico), para ser consistente com a listagem
     final result = await db.rawQuery('''
-    SELECT TRIM(UPPER(tipo)) AS tipo,
-           COUNT(DISTINCT cpf) AS total
-    FROM logs
-    WHERE UPPER(TRIM(tipo)) IN ('QUARTO', 'PISCINA', 'BALADA')
-    GROUP BY TRIM(UPPER(tipo))
-    ORDER BY 
-      CASE TRIM(UPPER(tipo))
+    SELECT TRIM(UPPER(movimentacao)) AS tipo,
+           COUNT(*) AS total
+    FROM pessoas_facial
+    WHERE UPPER(TRIM(movimentacao)) IN ('QUARTO', 'PISCINA', 'BALADA')
+    GROUP BY TRIM(UPPER(movimentacao))
+    ORDER BY
+      CASE TRIM(UPPER(movimentacao))
         WHEN 'QUARTO' THEN 1
         WHEN 'PISCINA' THEN 2
         WHEN 'BALADA' THEN 3
