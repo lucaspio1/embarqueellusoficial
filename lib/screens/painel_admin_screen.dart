@@ -176,60 +176,6 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     }
   }
 
-  Future<void> _limparDados() async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('⚠️ Limpar Todos os Dados'),
-        content: const Text(
-          'Isso irá apagar todos os dados locais:\n\n'
-              '• Alunos\n'
-              '• Passageiros\n'
-              '• Faciais\n'
-              '• Embeddings\n'
-              '• Logs\n\n'
-              'Esta ação não pode ser desfeita!',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Sim, Limpar Tudo'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar == true) {
-      try {
-        await _db.clearAllData();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Todos os dados foram limpos'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          _carregarDados();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Erro ao limpar dados: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -373,7 +319,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
 
             // Ações administrativas
             const Text(
-              'Ações Administrativas',
+              'Informações',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -381,40 +327,27 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
             ),
             const SizedBox(height: 16),
 
-            ElevatedButton.icon(
-              onPressed: _limparDados,
-              icon: const Icon(Icons.delete_forever),
-              label: const Text('LIMPAR TODOS OS DADOS'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
             // Informação
             Container(
               padding: const EdgeInsets.all(16.0),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
+                color: Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(12.0),
-                border: Border.all(color: Colors.orange.shade200),
+                border: Border.all(color: Colors.blue.shade200),
               ),
               child: Row(
                 children: [
                   Icon(
-                    Icons.warning_amber,
-                    color: Colors.orange.shade700,
+                    Icons.info_outline,
+                    color: Colors.blue.shade700,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Use essas ações com cuidado. Todas as operações são irreversíveis.',
+                      'Os dados são sincronizados automaticamente a cada 10 minutos com o Google Sheets.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.orange.shade900,
+                        color: Colors.blue.shade900,
                       ),
                     ),
                   ),
