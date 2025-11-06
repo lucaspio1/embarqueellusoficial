@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/logs_sync_service.dart';
+import 'package:embarqueellus/services/auth_service.dart';
 import 'package:intl/intl.dart';
 
 class ListaLogsScreen extends StatefulWidget {
@@ -13,12 +14,14 @@ class ListaLogsScreen extends StatefulWidget {
 class _ListaLogsScreenState extends State<ListaLogsScreen> {
   final _db = DatabaseHelper.instance;
   final _logsSync = LogsSyncService.instance;
+  final _authService = AuthService.instance;
 
   bool _carregando = true;
   bool _sincronizando = false;
   List<Map<String, dynamic>> _logs = [];
   List<Map<String, dynamic>> _logsFiltrados = [];
   final TextEditingController _searchController = TextEditingController();
+  Map<String, dynamic>? _usuarioLogado;
 
   @override
   void initState() {
@@ -37,7 +40,21 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
     setState(() => _carregando = true);
 
     try {
-      final logsFromDb = await _db.getAllLogs();
+      // Pegar usuário logado
+      _usuarioLogado = await _authService.getUsuarioLogado();
+      final perfil = _usuarioLogado?['perfil']?.toString().toUpperCase() ?? '';
+      final nomeOperador = _usuarioLogado?['nome'] ?? '';
+
+      List<Map<String, dynamic>> logsFromDb;
+
+      // ADMIN vê todos os logs, outros usuários veem apenas os próprios
+      if (perfil == 'ADMIN') {
+        print('👤 ADMIN logado - Mostrando TODOS os logs');
+        logsFromDb = await _db.getAllLogs();
+      } else {
+        print('👤 Usuário $nomeOperador - Mostrando apenas seus logs');
+        logsFromDb = await _db.getLogsByOperador(nomeOperador);
+      }
 
       // Criar uma cópia modificável da lista para poder ordenar
       final logs = List<Map<String, dynamic>>.from(logsFromDb);
@@ -54,6 +71,8 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
         _logsFiltrados = logs;
         _carregando = false;
       });
+
+      print('✅ ${logs.length} log(s) carregado(s) para $nomeOperador');
     } catch (e) {
       print('❌ Erro ao carregar logs: $e');
       setState(() => _carregando = false);
