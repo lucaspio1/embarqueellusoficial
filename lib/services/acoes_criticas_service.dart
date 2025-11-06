@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/config/app_config.dart';
 
 /// Serviço para ações críticas do sistema
 /// ATENÇÃO: Métodos destrutivos que apagam dados permanentemente!
@@ -13,10 +14,8 @@ class AcoesCriticasService {
 
   final _db = DatabaseHelper.instance;
 
-  // URL do Google Apps Script (deve estar no .env ou configuração)
-  // IMPORTANTE: Esta é a URL atualizada que funciona com Postman
-  static const String _googleAppsScriptUrl =
-      'https://script.google.com/macros/s/AKfycbySCPxbHy-FW-_PoQgxnAZqzh5wgq9E1UCSCT5p4ZPaMaoulluwqkUCMniXGCB2FYoT/exec';
+  // ✅ URL do Google Apps Script lida do arquivo .env
+  String get _googleAppsScriptUrl => AppConfig.instance.googleAppsScriptUrl;
 
   // =========================================================================
   // FUNÇÃO AUXILIAR: Fazer requisição POST usando padrão Postman
