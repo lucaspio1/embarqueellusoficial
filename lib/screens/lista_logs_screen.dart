@@ -199,52 +199,6 @@ class _ListaLogsScreenState extends State<ListaLogsScreen> {
             ),
           ),
 
-          // Banner informativo de filtro por operador
-          if (!_carregando && _usuarioLogado != null)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _usuarioLogado!['perfil']?.toString().toUpperCase() == 'ADMIN'
-                    ? Colors.blue.shade50
-                    : Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _usuarioLogado!['perfil']?.toString().toUpperCase() == 'ADMIN'
-                      ? Colors.blue.shade200
-                      : Colors.green.shade200,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _usuarioLogado!['perfil']?.toString().toUpperCase() == 'ADMIN'
-                        ? Icons.admin_panel_settings
-                        : Icons.person,
-                    size: 20,
-                    color: _usuarioLogado!['perfil']?.toString().toUpperCase() == 'ADMIN'
-                        ? Colors.blue.shade700
-                        : Colors.green.shade700,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _usuarioLogado!['perfil']?.toString().toUpperCase() == 'ADMIN'
-                          ? 'Visualizando todos os logs (modo ADMIN)'
-                          : 'Visualizando apenas seus logs: ${_usuarioLogado!['nome']}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: _usuarioLogado!['perfil']?.toString().toUpperCase() == 'ADMIN'
-                            ? Colors.blue.shade800
-                            : Colors.green.shade800,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
           // Contador de resultados
           if (!_carregando)
             Container(
