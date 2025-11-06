@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
 import 'package:embarqueellus/services/face_recognition_service.dart';
+import 'package:embarqueellus/widgets/camera_preview_widget.dart';
 
 /// Tela de reconhecimento facial para embarque
 /// Reconhece o aluno e retorna seus dados
@@ -13,7 +15,6 @@ class ReconhecerAlunoScreen extends StatefulWidget {
 }
 
 class _ReconhecerAlunoScreenState extends State<ReconhecerAlunoScreen> {
-  final picker = ImagePicker();
   bool processando = false;
   bool reconhecido = false;
   String status = "Pronto para reconhecer";
@@ -46,26 +47,42 @@ class _ReconhecerAlunoScreenState extends State<ReconhecerAlunoScreen> {
   }
 
   Future<void> _reconhecer() async {
-    final image = await picker.pickImage(
-      source: ImageSource.camera,
-      preferredCameraDevice: CameraDevice.front,
-      imageQuality: 85,
-    );
-
-    if (image == null) {
-      if (mounted) {
-        Navigator.pop(context);
-      }
-      return;
-    }
-
-    setState(() {
-      processando = true;
-      status = "Reconhecendo rosto...";
-    });
-
     try {
-      final bytes = await image.readAsBytes();
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        throw Exception('Nenhuma câmera disponível');
+      }
+
+      final camera = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+
+      if (!mounted) return;
+
+      final imagePath = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CameraPreviewWidget(
+            camera: camera,
+            title: 'Reconhecer Aluno',
+          ),
+        ),
+      );
+
+      if (imagePath == null) {
+        if (mounted) {
+          Navigator.pop(context);
+        }
+        return;
+      }
+
+      setState(() {
+        processando = true;
+        status = "Reconhecendo rosto...";
+      });
+
+      final bytes = await File(imagePath).readAsBytes();
       final decoded = img.decodeImage(bytes);
 
       if (decoded == null) {
@@ -74,8 +91,7 @@ class _ReconhecerAlunoScreenState extends State<ReconhecerAlunoScreen> {
 
       setState(() => status = "Comparando com banco de dados...");
 
-      final resultado =
-      await FaceRecognitionService.instance.recognize(decoded);
+      final resultado = await FaceRecognitionService.instance.recognize(decoded);
 
       if (resultado != null) {
         setState(() {
@@ -103,6 +119,7 @@ class _ReconhecerAlunoScreenState extends State<ReconhecerAlunoScreen> {
         }
       }
     } catch (e) {
+      print('❌ Erro ao reconhecer: $e');
       setState(() {
         processando = false;
         reconhecido = false;

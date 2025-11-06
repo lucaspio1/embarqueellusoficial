@@ -7,6 +7,7 @@ import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
+import 'package:embarqueellus/widgets/camera_preview_widget.dart';
 
 class ListaAlunosScreen extends StatefulWidget {
   const ListaAlunosScreen({super.key});
@@ -348,7 +349,10 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
     return await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder: (context) => _CameraScreen(camera: camera),
+        builder: (context) => CameraPreviewWidget(
+          camera: camera,
+          title: 'Cadastrar Facial',
+        ),
       ),
     );
   }
@@ -563,89 +567,6 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// =========================================================
-// WIDGET DE CÂMERA
-// =========================================================
-class _CameraScreen extends StatefulWidget {
-  final CameraDescription camera;
-
-  const _CameraScreen({required this.camera});
-
-  @override
-  State<_CameraScreen> createState() => _CameraScreenState();
-}
-
-class _CameraScreenState extends State<_CameraScreen> {
-  late CameraController _controller;
-  late Future<void> _initializeControllerFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = CameraController(
-      widget.camera,
-      ResolutionPreset.medium,
-    );
-    _initializeControllerFuture = _controller.initialize();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _takePicture() async {
-    try {
-      await _initializeControllerFuture;
-      final image = await _controller.takePicture();
-      if (mounted) {
-        Navigator.pop(context, image.path);
-      }
-    } catch (e) {
-      print('❌ Erro ao tirar foto: $e');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Tirar Foto'),
-        backgroundColor: const Color(0xFF4C643C),
-      ),
-      body: FutureBuilder<void>(
-        future: _initializeControllerFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            return Stack(
-              children: [
-                SizedBox.expand(
-                  child: CameraPreview(_controller),
-                ),
-                Positioned(
-                  bottom: 32,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: FloatingActionButton(
-                      onPressed: _takePicture,
-                      backgroundColor: Colors.white,
-                      child: const Icon(Icons.camera_alt, color: Color(0xFF4C643C)),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          } else {
-            return const Center(child: CircularProgressIndicator());
-          }
-        },
       ),
     );
   }
