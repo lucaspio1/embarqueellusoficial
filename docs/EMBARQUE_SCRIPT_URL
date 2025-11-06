@@ -5,35 +5,35 @@
 var ID_PLANILHA_DESTINO = '1xl2wJdaqzIkTA3gjBQws5j6XrOw3AR5RC7_CrDR1M0U';
 var NOME_ABA_DESTINO = 'ALUNOS';
 
-// Estrutura da Planilha (Base 1)
-var COLUNA_ID = 1;            // A
-var COLUNA_NOME = 2;          // B
-var COLUNA_TURMA = 3;         // C
-var COLUNA_CPF = 4;           // D
-var COLUNA_TELEFONE = 5;      // E
-var COLUNA_ID_PASSEIO = 6;    // F
-var COLUNA_ONIBUS = 7;        // G
-var COLUNA_CONTROLE = 8;      // H
-var COLUNA_INICIO_VIAGEM = 9; // I - NOVA COLUNA
-var COLUNA_FIM_VIAGEM = 10;   // J - NOVA COLUNA
-var COLUNA_EMBARQUE = 11;     // K (antes era I)
-var COLUNA_RETORNO = 12;      // L (antes era J)
-var COLUNA_PULSEIRA = 13;     // M (antes era K)
+// Estrutura da Planilha (Base 1) — NOVO LAYOUT
+var COLUNA_ID          = 1;  // A
+var COLUNA_NOME        = 2;  // B
+var COLUNA_TURMA       = 3;  // C
+var COLUNA_CPF         = 4;  // D
+var COLUNA_TELEFONE    = 5;  // E
+var COLUNA_ID_PASSEIO  = 6;  // F
+var COLUNA_ONIBUS      = 7;  // G
+var COLUNA_CONTROLE    = 8;  // H
+var COLUNA_INICIO      = 9;  // I  (Início Viagem)
+var COLUNA_FIM         = 10; // J  (Fim Viagem)
+var COLUNA_EMBARQUE    = 11; // K
+var COLUNA_RETORNO     = 12; // L
+var COLUNA_PULSEIRA    = 13; // M
 
-// Índices para array (Base 0) - ✅ ATUALIZADO COM NOVAS COLUNAS
-var INDICE_ID = 0;            // A
-var INDICE_NOME = 1;          // B
-var INDICE_TURMA = 2;         // C
-var INDICE_CPF = 3;           // D
-var INDICE_TELEFONE = 4;      // E
-var INDICE_ID_PASSEIO = 5;    // F
-var INDICE_ONIBUS = 6;        // G
-var INDICE_CONTROLE = 7;      // H
-var INDICE_INICIO_VIAGEM = 8; // I - NOVA COLUNA
-var INDICE_FIM_VIAGEM = 9;    // J - NOVA COLUNA
-var INDICE_EMBARQUE = 10;     // K (antes era 8)
-var INDICE_RETORNO = 11;      // L (antes era 9)
-var INDICE_PULSEIRA = 12;     // M (antes era 10)
+// Índices para array (Base 0) — NOVO LAYOUT
+var INDICE_ID          = 0;  // A
+var INDICE_NOME        = 1;  // B
+var INDICE_TURMA       = 2;  // C
+var INDICE_CPF         = 3;  // D
+var INDICE_TELEFONE    = 4;  // E
+var INDICE_ID_PASSEIO  = 5;  // F
+var INDICE_ONIBUS      = 6;  // G
+var INDICE_CONTROLE    = 7;  // H
+var INDICE_INICIO      = 8;  // I
+var INDICE_FIM         = 9;  // J
+var INDICE_EMBARQUE    = 10; // K
+var INDICE_RETORNO     = 11; // L
+var INDICE_PULSEIRA    = 12; // M
 
 // ====================================================================
 // REQUISIÇÕES (GET/POST)
@@ -120,8 +120,8 @@ function doGetOriginal(e) {
           telefone: linha[INDICE_TELEFONE] || '',
           idPasseio: linha[INDICE_ID_PASSEIO] || '',
           onibus: linha[INDICE_ONIBUS] || '',
-          inicioViagem: linha[INDICE_INICIO_VIAGEM] || '', // ✅ NOVA COLUNA
-          fimViagem: linha[INDICE_FIM_VIAGEM] || '',       // ✅ NOVA COLUNA
+          inicioViagem: linha[INDICE_INICIO] || '',      // ✅ ADICIONADO
+          fimViagem: linha[INDICE_FIM] || '',            // ✅ ADICIONADO
           embarque: linha[INDICE_EMBARQUE] || '',
           retorno: linha[INDICE_RETORNO] || '',
           codigoPulseira: linha[INDICE_PULSEIRA] || ''
@@ -155,8 +155,8 @@ function doGetOriginal(e) {
           telefone: linha[INDICE_TELEFONE] || '',
           idPasseio: linha[INDICE_ID_PASSEIO] || '',
           onibus: linha[INDICE_ONIBUS] || '',
-          inicioViagem: linha[INDICE_INICIO_VIAGEM] || '', // ✅ NOVA COLUNA
-          fimViagem: linha[INDICE_FIM_VIAGEM] || '',       // ✅ NOVA COLUNA
+          inicioViagem: linha[INDICE_INICIO] || '',      // ✅ ADICIONADO
+          fimViagem: linha[INDICE_FIM] || '',            // ✅ ADICIONADO
           embarque: linha[INDICE_EMBARQUE] || '',
           retorno: linha[INDICE_RETORNO] || '',
           codigoPulseira: linha[INDICE_PULSEIRA] || ''
@@ -204,8 +204,8 @@ function doGetOriginal(e) {
         telefone: linha[INDICE_TELEFONE] || '',
         idPasseio: linha[INDICE_ID_PASSEIO] || '',
         onibus: linha[INDICE_ONIBUS] || '',
-        inicioViagem: linha[INDICE_INICIO_VIAGEM] || '', // ✅ NOVA COLUNA
-        fimViagem: linha[INDICE_FIM_VIAGEM] || '',       // ✅ NOVA COLUNA
+        inicioViagem: linha[INDICE_INICIO] || '',        // ✅ ADICIONADO
+        fimViagem: linha[INDICE_FIM] || '',              // ✅ ADICIONADO
         embarque: linha[INDICE_EMBARQUE] || '',
         retorno: linha[INDICE_RETORNO] || '',
         codigoPulseira: linha[INDICE_PULSEIRA] || ''
@@ -340,69 +340,45 @@ function copiarFacial_onEdit(e) {
   var planilhaDestino = SpreadsheetApp.openById(ID_PLANILHA_DESTINO);
   var abaDestino = planilhaDestino.getSheetByName(NOME_ABA_DESTINO);
 
-  if (!abaDestino) {
-    Logger.log('❌ Erro: A aba de destino "%s" não foi encontrada.', NOME_ABA_DESTINO);
-    return;
-  }
+  if (!abaDestino) return;
 
-  var rangeEditado = e.range;
-  var abaOrigem = rangeEditado.getSheet();
-  var linhaInicial = rangeEditado.getRow();
-  var colunaInicial = rangeEditado.getColumn();
-  var numLinhas = rangeEditado.getNumRows();
-  var numColunas = rangeEditado.getNumColumns();
+  var linha = e.range.getRow();
+  var coluna = e.range.getColumn();
+  var linhasAfetadas = e.range.getNumRows();
 
-  if (colunaInicial > COLUNA_FACIAL || colunaInicial + numColunas - 1 < COLUNA_FACIAL || linhaInicial === 1) {
-    return;
-  }
+  // Só dispara no CONTROLE (coluna H)
+  if (linha === 1 || coluna !== COLUNA_CONTROLE) return;
 
-  var linhasParaAdicionar = [];
-  var larguraRange = COLUNA_FACIAL - COLUNA_NOME + 1;
-  var rangeDados = abaOrigem.getRange(linhaInicial, COLUNA_NOME, numLinhas, larguraRange);
-  var dadosEditados = rangeDados.getValues();
-  var INDICE_FACIAL_ARRAY = COLUNA_FACIAL - COLUNA_NOME;
+  var abaOrigem = e.range.getSheet();
+  var valores = e.range.getValues();
+  var registros = [];
 
-  for (var i = 0; i < dadosEditados.length; i++) {
-    var linha = dadosEditados[i];
-    var valorFacial = linha[INDICE_FACIAL_ARRAY];
+  for (var i = 0; i < linhasAfetadas; i++) {
+    var valor = valores[i][0];
 
-    if (valorFacial && valorFacial.toString().toUpperCase().trim() === 'SIM') {
-      var dadosLinha = [
-        linha[0], // NOME
-        linha[1], // TURMA
-        linha[2], // CPF
-        linha[3],  // TELEFONE
-        linha[4]
-      ];
-      linhasParaAdicionar.push(dadosLinha);
+    if (valor && valor.toString().toUpperCase().trim() === "SIM") {
+
+      var dados = abaOrigem.getRange(linha + i, COLUNA_NOME, 1, 10).getValues()[0];
+      // 10 colunas: NOME, TURMA, CPF, TELEFONE, ID_PASSEIO, ONIBUS, CONTROLE, INICIO, FIM
+
+      registros.push(dados);
     }
   }
 
-  if (linhasParaAdicionar.length > 0) {
-    var ultimaLinhaDestino = abaDestino.getLastRow();
-    var ultimoID = 0;
-    var linhaParaAdicionarNoDestino = 2;
+  if (registros.length === 0) return;
 
-    if (ultimaLinhaDestino >= 1) {
-      var valorUltimoID = abaDestino.getRange(ultimaLinhaDestino, COLUNA_ID).getValue();
-      var idLido = parseInt(valorUltimoID);
+  var ultima = abaDestino.getLastRow();
+  var ultimoID = ultima >= 2 ?
+      abaDestino.getRange(ultima, COLUNA_ID).getValue() : 0;
 
-      if (!isNaN(idLido) && idLido > 0) {
-        ultimoID = idLido;
-        linhaParaAdicionarNoDestino = ultimaLinhaDestino + 1;
-      }
-    }
+  var pronto = registros.map(function(d){
+    ultimoID++;
+    return [ultimoID].concat(d);
+  });
 
-    var dadosComID = linhasParaAdicionar.map(function(linha) {
-      ultimoID++;
-      return [ultimoID].concat(linha);
-    });
-
-    abaDestino.getRange(linhaParaAdicionarNoDestino, COLUNA_ID, dadosComID.length, 6).setValues(dadosComID);
-
-    Logger.log('✅ %s entradas faciais copiadas. IDs gerados de %s a %s.',
-      dadosComID.length, ultimoID - dadosComID.length + 1, ultimoID);
-  }
+  // total escrito: 1 (ID) + 10 colunas = 11 colunas
+  abaDestino.getRange(ultima + 1, COLUNA_ID, pronto.length, 11)
+    .setValues(pronto);
 }
 
 // ====================================================================
@@ -410,58 +386,47 @@ function copiarFacial_onEdit(e) {
 // ====================================================================
 
 function enviarParaCadastroFacial() {
-  var planilhaOrigem = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var planilhaDestino = SpreadsheetApp.openById(ID_PLANILHA_DESTINO);
-  var abaDestino = planilhaDestino.getSheetByName(NOME_ABA_DESTINO);
+  var origem = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var destino = SpreadsheetApp.openById(ID_PLANILHA_DESTINO).getSheetByName(NOME_ABA_DESTINO);
 
-  if (!abaDestino) {
-    SpreadsheetApp.getUi().alert('Erro: A aba de destino "' + NOME_ABA_DESTINO + '" não foi encontrada.');
+  if (!destino) {
+    SpreadsheetApp.getUi().alert("A aba destino não existe.");
     return;
   }
 
-  var dadosOrigem = planilhaOrigem.getDataRange().getValues();
-  var linhasParaAdicionar = [];
+  var d = origem.getDataRange().getValues();
+  var inserir = [];
 
-  for (var i = 1; i < dadosOrigem.length; i++) {
-    var linha = dadosOrigem[i];
-    var precisaFacial = linha[INDICE_FACIAL];
-
-    if (precisaFacial && precisaFacial.toString().toUpperCase().trim() === 'SIM') {
-      var novaLinha = [
-        linha[INDICE_NOME],
-        linha[INDICE_TURMA],
-        linha[INDICE_CPF],
-        linha[INDICE_TELEFONE],
-        linha[INDICE_ID_PASSEIO]
-      ];
-      linhasParaAdicionar.push(novaLinha);
+  for (var i = 1; i < d.length; i++) {
+    if (d[i][INDICE_CONTROLE].toString().toUpperCase().trim() === "SIM") {
+      inserir.push([
+        d[i][INDICE_NOME],
+        d[i][INDICE_TURMA],
+        d[i][INDICE_CPF],
+        d[i][INDICE_TELEFONE],
+        d[i][INDICE_ID_PASSEIO],
+        d[i][INDICE_ONIBUS],
+        d[i][INDICE_CONTROLE],
+        d[i][INDICE_INICIO],     // ✅ ADICIONADO
+        d[i][INDICE_FIM]         // ✅ ADICIONADO
+      ]);
     }
   }
 
-  if (linhasParaAdicionar.length > 0) {
-    var ultimaLinhaDestino = abaDestino.getLastRow();
-    var ultimoID = 0;
-    var linhaParaAdicionar = 2;
-
-    if (ultimaLinhaDestino >= 1) {
-      var valorUltimoID = abaDestino.getRange(ultimaLinhaDestino, COLUNA_ID).getValue();
-      var idLido = parseInt(valorUltimoID);
-
-      if (!isNaN(idLido) && idLido > 0) {
-        ultimoID = idLido;
-        linhaParaAdicionar = ultimaLinhaDestino + 1;
-      }
-    }
-
-    var dadosComID = linhasParaAdicionar.map(function(linha) {
-      ultimoID++;
-      return [ultimoID].concat(linha);
-    });
-
-    abaDestino.getRange(linhaParaAdicionar, COLUNA_ID, dadosComID.length, 5).setValues(dadosComID);
-
-    SpreadsheetApp.getUi().alert('Sucesso! ' + dadosComID.length + ' alunos copiados com novo ID para Cadastro Facial.');
-  } else {
-    SpreadsheetApp.getUi().alert('Nenhuma linha encontrada com "SIM" para Cadastro Facial.');
+  if (inserir.length == 0) {
+    SpreadsheetApp.getUi().alert("Nada para inserir.");
+    return;
   }
+
+  var ultima = destino.getLastRow();
+  var id = ultima >= 2 ?
+      destino.getRange(ultima, COLUNA_ID).getValue() + 1 : 1;
+
+  var pronto = inserir.map(l => [id++].concat(l));
+
+  // total escrito: 1 (ID) + 9 colunas = 10 colunas
+  destino.getRange(ultima + 1, COLUNA_ID, pronto.length, 10)
+    .setValues(pronto);
+
+  SpreadsheetApp.getUi().alert("✅ " + pronto.length + " alunos enviados!");
 }
