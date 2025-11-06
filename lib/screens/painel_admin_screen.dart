@@ -102,6 +102,9 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       // Sincronizar alunos
       await _alunosSync.syncAlunosFromSheets();
 
+      // Sincronizar pessoas (com embeddings e movimentação)
+      await _alunosSync.syncPessoasFromSheets();
+
       // Sincronizar logs
       await _logsSync.syncLogsFromSheets();
 
@@ -112,6 +115,11 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
 
       // Recarregar dados após sincronização
       await _carregarDados();
+
+      // Forçar rebuild da UI
+      if (mounted) {
+        setState(() {});
+      }
 
       // Mostrar mensagem de sucesso
       if (mounted) {
@@ -525,12 +533,25 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       elevation: 2,
       child: InkWell(
         onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ListaPorLocalScreen(local: local),
-            ),
-          ).then((_) => _carregarDados()); // Recarrega ao voltar
+          print('🔘 Card clicado: $local - Total: $total');
+          if (total > 0) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ListaPorLocalScreen(local: local),
+              ),
+            ).then((_) {
+              print('🔄 Retornou da lista de $local, recarregando dados...');
+              _carregarDados();
+            });
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Nenhuma pessoa em ${info['titulo']}'),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
