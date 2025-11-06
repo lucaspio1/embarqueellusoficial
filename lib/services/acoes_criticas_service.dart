@@ -139,35 +139,137 @@ class AcoesCriticasService {
   // 1. ENCERRAR VIAGEM - Limpa TUDO (Google Sheets + Banco Local)
   // =========================================================================
 
-  /// Encerra a viagem: Limpa TODAS as abas do Google Sheets (Pessoas, Logs, Alunos)
-  /// E limpa TODOS os dados do banco de dados local
+  // =========================================================================
+  // NOVO: LISTAR VIAGENS DISPONÍVEIS
+  // =========================================================================
+
+  /// Lista todas as viagens únicas disponíveis (baseado em inicio_viagem e fim_viagem)
+  /// Busca na aba ALUNOS do Google Sheets
   ///
-  /// ATENÇÃO: OPERAÇÃO IRREVERSÍVEL! Todos os dados serão perdidos!
+  /// Returns: Lista de viagens com { inicio_viagem, fim_viagem }
+  Future<List<Map<String, String>>> listarViagens() async {
+    try {
+      print('📋 Listando viagens disponíveis...');
+
+      final client = http.Client();
+
+      try {
+        final headers = {'Content-Type': 'application/json'};
+        final request = http.Request('POST', Uri.parse(_googleAppsScriptUrl));
+        request.body = jsonEncode({'action': 'listarViagens'});
+        request.headers.addAll(headers);
+        request.followRedirects = true;
+        request.maxRedirects = 5;
+
+        final streamedResponse =
+            await client.send(request).timeout(const Duration(seconds: 60));
+        final responseBody = await streamedResponse.stream.bytesToString();
+
+        if (streamedResponse.statusCode == 200 || streamedResponse.statusCode == 302) {
+          final resultado = jsonDecode(responseBody);
+
+          if (resultado['success'] == true) {
+            final viagens = resultado['viagens'] as List? ?? [];
+            print('✅ ${viagens.length} viagem(ns) encontrada(s)');
+
+            return viagens
+                .map((v) => {
+                      'inicio_viagem': v['inicio_viagem']?.toString() ?? '',
+                      'fim_viagem': v['fim_viagem']?.toString() ?? '',
+                    })
+                .toList();
+          }
+        }
+
+        print('⚠️ Nenhuma viagem encontrada');
+        return [];
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      print('❌ Erro ao listar viagens: $e');
+      return [];
+    }
+  }
+
+  // =========================================================================
+  // ATUALIZADO: ENCERRAR VIAGEM (com suporte a viagem específica)
+  // =========================================================================
+
+  /// Encerra uma viagem específica ou todas as viagens
+  /// Se inicioViagem e fimViagem forem fornecidos, encerra APENAS essa viagem
+  /// Caso contrário, encerra TODAS as viagens (comportamento antigo)
+  ///
+  /// ATENÇÃO: OPERAÇÃO IRREVERSÍVEL! Dados serão perdidos!
   ///
   /// Returns: Resultado da operação
-  Future<AcaoCriticaResult> encerrarViagem() async {
+  Future<AcaoCriticaResult> encerrarViagem({
+    String? inicioViagem,
+    String? fimViagem,
+  }) async {
     try {
-      print('🔴 [CRÍTICO] Iniciando encerramento de viagem...');
+      if (inicioViagem != null && fimViagem != null) {
+        print('🔴 [CRÍTICO] Encerrando viagem específica: $inicioViagem a $fimViagem...');
+      } else {
+        print('🔴 [CRÍTICO] Encerrando TODAS as viagens...');
+      }
 
-      // 1. Limpar Google Sheets usando padrão Postman
+      // 1. Limpar Google Sheets
       print('🔄 Limpando Google Sheets (pode receber HTTP 302 - isso é normal)...');
-      final resultado = await _fazerRequisicaoGoogleSheets('encerrarViagem');
 
-      print('✅ Google Sheets limpo com sucesso (abas: PESSOAS, LOGS, ALUNOS)');
+      final client = http.Client();
+      Map<String, dynamic> resultado;
+
+      try {
+        final headers = {'Content-Type': 'application/json'};
+        final request = http.Request('POST', Uri.parse(_googleAppsScriptUrl));
+        request.body = jsonEncode({
+          'action': 'encerrarViagem',
+          if (inicioViagem != null) 'inicio_viagem': inicioViagem,
+          if (fimViagem != null) 'fim_viagem': fimViagem,
+        });
+        request.headers.addAll(headers);
+        request.followRedirects = true;
+        request.maxRedirects = 5;
+
+        final streamedResponse =
+            await client.send(request).timeout(const Duration(seconds: 60));
+        final responseBody = await streamedResponse.stream.bytesToString();
+
+        if (streamedResponse.statusCode == 200 || streamedResponse.statusCode == 302) {
+          resultado = jsonDecode(responseBody);
+          print('✅ Google Sheets atualizado');
+        } else {
+          throw Exception('Erro HTTP ${streamedResponse.statusCode}');
+        }
+      } finally {
+        client.close();
+      }
 
       // 2. Limpar banco de dados local
       print('🔄 Limpando banco de dados local...');
-      await _limparBancoDadosLocal();
+      if (inicioViagem != null && fimViagem != null) {
+        await _limparBancoDadosLocalFiltrado(inicioViagem, fimViagem);
+      } else {
+        await _limparBancoDadosLocal();
+      }
       print('✅ Banco de dados local limpo');
 
-      print('✅ [CRÍTICO] Viagem encerrada com sucesso! Todos os dados foram removidos.');
+      final totalRemovidos = resultado['total_removidos'] ?? 0;
+      final mensagem = inicioViagem != null && fimViagem != null
+          ? 'Viagem encerrada com sucesso! $totalRemovidos registro(s) removido(s).'
+          : 'Todas as viagens encerradas com sucesso!';
+
+      print('✅ [CRÍTICO] $mensagem');
 
       return AcaoCriticaResult(
         success: true,
-        message: 'Viagem encerrada com sucesso! Todos os dados foram removidos.',
+        message: mensagem,
         detalhes: {
           'google_sheets': resultado,
           'banco_local': 'Limpo',
+          if (inicioViagem != null) 'inicio_viagem': inicioViagem,
+          if (fimViagem != null) 'fim_viagem': fimViagem,
         },
       );
     } catch (e) {
@@ -190,6 +292,32 @@ class AcoesCriticasService {
     await db.delete('offline_sync_queue');
 
     print('✅ Tabelas locais limpas: pessoas_facial, logs, alunos, offline_sync_queue');
+  }
+
+  /// Limpa registros filtrados por data de viagem do banco de dados local
+  Future<void> _limparBancoDadosLocalFiltrado(String inicioViagem, String fimViagem) async {
+    final db = await _db.database;
+
+    // Limpar registros específicos
+    int totalPessoas = await db.delete(
+      'pessoas_facial',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+
+    int totalLogs = await db.delete(
+      'logs',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+
+    int totalAlunos = await db.delete(
+      'alunos',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+
+    print('✅ Registros removidos: $totalPessoas pessoas, $totalLogs logs, $totalAlunos alunos');
   }
 
   // =========================================================================

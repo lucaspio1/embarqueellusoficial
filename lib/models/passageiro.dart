@@ -9,6 +9,8 @@ class Passageiro {
   final String? cpf;
   final String? codigoPulseira;
   String? flowType;
+  final String? inicioViagem;
+  final String? fimViagem;
 
   Passageiro({
     required this.nome,
@@ -20,6 +22,8 @@ class Passageiro {
     this.cpf,
     this.codigoPulseira,
     this.flowType,
+    this.inicioViagem,
+    this.fimViagem,
   });
 
   factory Passageiro.fromMap(Map<String, dynamic> map) {
@@ -32,6 +36,8 @@ class Passageiro {
       onibus: (map['onibus'] ?? '').toString(),
       cpf: map['cpf']?.toString(),
       codigoPulseira: map['codigo_pulseira']?.toString(),
+      inicioViagem: map['inicio_viagem']?.toString(),
+      fimViagem: map['fim_viagem']?.toString(),
     );
   }
 
@@ -46,6 +52,8 @@ class Passageiro {
       cpf: json['cpf']?.toString(),
       codigoPulseira: json['codigoPulseira']?.toString(),
       flowType: json['flowType']?.toString(),
+      inicioViagem: json['inicioViagem']?.toString(),
+      fimViagem: json['fimViagem']?.toString(),
     );
   }
 
@@ -60,6 +68,8 @@ class Passageiro {
       'cpf': cpf,
       'codigoPulseira': codigoPulseira,
       'flowType': flowType,
+      'inicioViagem': inicioViagem,
+      'fimViagem': fimViagem,
     };
   }
 
@@ -73,6 +83,8 @@ class Passageiro {
       'onibus': onibus,
       'cpf': cpf,
       'codigo_pulseira': codigoPulseira,
+      'inicio_viagem': inicioViagem,
+      'fim_viagem': fimViagem,
     };
   }
 
@@ -86,6 +98,8 @@ class Passageiro {
     String? cpf,
     String? flowType,
     String? codigoPulseira,
+    String? inicioViagem,
+    String? fimViagem,
   }) {
     return Passageiro(
       nome: nome ?? this.nome,
@@ -97,11 +111,13 @@ class Passageiro {
       cpf: cpf ?? this.cpf,
       flowType: flowType ?? this.flowType,
       codigoPulseira: codigoPulseira ?? this.codigoPulseira,
+      inicioViagem: inicioViagem ?? this.inicioViagem,
+      fimViagem: fimViagem ?? this.fimViagem,
     );
   }
 
   @override
   String toString() {
-    return 'Passageiro(nome: $nome, cpf: $cpf, idPasseio: $idPasseio, turma: $turma, onibus: $onibus, embarque: $embarque, retorno: $retorno, pulseira: $codigoPulseira)';
+    return 'Passageiro(nome: $nome, cpf: $cpf, idPasseio: $idPasseio, turma: $turma, onibus: $onibus, embarque: $embarque, retorno: $retorno, pulseira: $codigoPulseira, inicioViagem: $inicioViagem, fimViagem: $fimViagem)';
   }
 }

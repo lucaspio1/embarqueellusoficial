@@ -238,6 +238,8 @@ class AlunosSyncService {
                 'facial_status': 'CADASTRADA',
                 'movimentacao':
                     (pessoa['movimentacao'] ?? '').toString().toUpperCase(),
+                'inicio_viagem': pessoa['inicio_viagem'] ?? '',
+                'fim_viagem': pessoa['fim_viagem'] ?? '',
               });
 
               countPessoas++;
@@ -294,6 +296,8 @@ class AlunosSyncService {
             'turma': aluno['turma'] ?? '',
             'facial': aluno['facial_status'],
             'tem_qr': aluno['tem_qr'] ?? aluno['pulseira'] ?? 'NAO',
+            'inicio_viagem': aluno['inicio_viagem'] ?? '',
+            'fim_viagem': aluno['fim_viagem'] ?? '',
           };
           print('💾 [AlunosSync] Salvando aluno: ${alunoData['nome']} (${alunoData['cpf']})');
           await _db.upsertAluno(alunoData);
