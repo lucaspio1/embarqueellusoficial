@@ -1,0 +1,457 @@
+// ====================================================================
+// CONFIGURAÇÕES GLOBAIS - FOCADO EM EMBARQUE DAS PESSOAS
+// ====================================================================
+
+var ID_PLANILHA_DESTINO = '1xl2wJdaqzIkTA3gjBQws5j6XrOw3AR5RC7_CrDR1M0U';
+var NOME_ABA_DESTINO = 'ALUNOS';
+
+// Estrutura da Planilha (Base 1)
+var COLUNA_ID = 1;        // A
+var COLUNA_NOME = 2;      // B
+var COLUNA_TURMA = 3;     // C
+var COLUNA_CPF = 4;       // D
+var COLUNA_TELEFONE = 5;  // E
+var COLUNA_ID_PASSEIO = 6;// F
+var COLUNA_ONIBUS = 7;    // G
+var COLUNA_FACIAL = 8;    // H
+var COLUNA_EMBARQUE = 9;  // I
+var COLUNA_RETORNO = 10;  // J
+var COLUNA_PULSEIRA = 11; // K
+
+// Índices para array (Base 0) - ✅ CORRIGIDO
+var INDICE_ID = 0;        // A
+var INDICE_NOME = 1;      // B
+var INDICE_TURMA = 2;     // C
+var INDICE_CPF = 3;       // D
+var INDICE_TELEFONE = 4;  // E
+var INDICE_ID_PASSEIO = 5;// F
+var INDICE_ONIBUS = 6;    // G
+var INDICE_FACIAL = 7;    // H
+var INDICE_EMBARQUE = 8;  // I
+var INDICE_RETORNO = 9;   // J
+var INDICE_PULSEIRA = 10; // K ✅ ADICIONADO
+
+// ====================================================================
+// REQUISIÇÕES (GET/POST)
+// ====================================================================
+
+function doGet(e) {
+  return handleRequest(e);
+}
+
+function doPost(e) {
+  return handleRequest(e, true);
+}
+
+function handleRequest(e, isPost = false) {
+  var output = ContentService.createTextOutput();
+  output.setMimeType(ContentService.MimeType.JSON);
+
+  try {
+    var result = isPost ? doPostOriginal(e) : doGetOriginal(e);
+
+    if (result === null || result === undefined) {
+      result = {
+        status: "erro",
+        mensagem: "Nenhuma resposta gerada pelo servidor (retorno nulo ou indefinido)."
+      };
+    }
+
+    output.setContent(JSON.stringify(result));
+  } catch (error) {
+    Logger.log('❌ ERRO no handleRequest: ' + error.toString());
+    output.setContent(JSON.stringify({
+      status: "erro",
+      mensagem: error.toString(),
+      linha: error.lineNumber || "desconhecida"
+    }));
+  }
+
+  return output;
+}
+
+function doGetOriginal(e) {
+  var nomeDoColegio = e.parameter.colegio;
+  var nomeParaBuscar = e.parameter.nome;
+  var cpfParaBuscar = e.parameter.cpf;
+  var onibusParaFiltrar = e.parameter.onibus;
+  var idPasseioParaFiltrar = e.parameter.id_passeio;
+  var buscarTodos = e.parameter.todos;
+
+  var onibusFiltroNormalizado = onibusParaFiltrar ? onibusParaFiltrar.toString().toLowerCase().trim() : '';
+  var idPasseioFiltroNormalizado = idPasseioParaFiltrar ? idPasseioParaFiltrar.toString().toLowerCase().trim() : '';
+
+  if (!nomeDoColegio && !buscarTodos) {
+    return listarColegios();
+  }
+
+  var nomeAba = nomeDoColegio || 'TODOS';
+  var planilha = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nomeAba);
+
+  if (!planilha) {
+    return {
+      status: "erro",
+      mensagem: "Aba não encontrada: " + nomeAba
+    };
+  }
+
+  var dados = planilha.getDataRange().getValues();
+
+  // =====================================================
+  // 🔍 BUSCA POR CPF (prioritária)
+  // =====================================================
+  if (cpfParaBuscar) {
+    var cpfNormalizado = cpfParaBuscar.toString().replace(/\D/g, '');
+    for (var i = 1; i < dados.length; i++) {
+      var linha = dados[i];
+      var cpfNaPlanilha = (linha[INDICE_CPF] || '').toString().replace(/\D/g, '');
+
+      if (cpfNaPlanilha && cpfNaPlanilha === cpfNormalizado) {
+        return {
+          status: "sucesso",
+          aba: nomeAba,
+          nome: linha[INDICE_NOME] || '',
+          turma: linha[INDICE_TURMA] || '',
+          cpf: linha[INDICE_CPF] || '',
+          telefone: linha[INDICE_TELEFONE] || '',
+          idPasseio: linha[INDICE_ID_PASSEIO] || '',
+          onibus: linha[INDICE_ONIBUS] || '',
+          embarque: linha[INDICE_EMBARQUE] || '',
+          retorno: linha[INDICE_RETORNO] || '',
+          codigoPulseira: linha[INDICE_PULSEIRA] || '' // ✅ CORRIGIDO
+        };
+      }
+    }
+    return {
+      status: "erro",
+      mensagem: "Nenhum aluno encontrado com o CPF informado."
+    };
+  }
+
+  // =====================================================
+  // 🔍 BUSCA POR NOME (alternativa)
+  // =====================================================
+  if (nomeParaBuscar) {
+    var pessoaEncontrada = null;
+    var nomeNormalizado = nomeParaBuscar.toLowerCase().trim();
+
+    for (var i = 1; i < dados.length; i++) {
+      var linha = dados[i];
+      var nomeNaPlanilha = linha[INDICE_NOME];
+
+      if (nomeNaPlanilha && nomeNaPlanilha.toString().toLowerCase().trim() === nomeNormalizado) {
+        pessoaEncontrada = {
+          status: "sucesso",
+          aba: nomeAba,
+          nome: linha[INDICE_NOME] || '',
+          turma: linha[INDICE_TURMA] || '',
+          cpf: linha[INDICE_CPF] || '',
+          telefone: linha[INDICE_TELEFONE] || '',
+          idPasseio: linha[INDICE_ID_PASSEIO] || '',
+          onibus: linha[INDICE_ONIBUS] || '',
+          embarque: linha[INDICE_EMBARQUE] || '',
+          retorno: linha[INDICE_RETORNO] || '',
+          codigoPulseira: linha[INDICE_PULSEIRA] || '' // ✅ CORRIGIDO
+        };
+        break;
+      }
+    }
+
+    return pessoaEncontrada || {
+      status: "erro",
+      mensagem: "Pessoa não encontrada pelo nome informado."
+    };
+  }
+
+  // =====================================================
+  // 🔍 LISTA COMPLETA COM FILTROS
+  // =====================================================
+  var listaPassageiros = [];
+  var totalAlunos = 0;
+
+  for (var i = 1; i < dados.length; i++) {
+    var linha = dados[i];
+    var onibusNaPlanilha = linha[INDICE_ONIBUS];
+    var idPasseioNaPlanilha = linha[INDICE_ID_PASSEIO];
+
+    var onibusNormalizado = onibusNaPlanilha ? onibusNaPlanilha.toString().toLowerCase().trim() : '';
+    var idPasseioNormalizado = idPasseioNaPlanilha ? idPasseioNaPlanilha.toString().toLowerCase().trim() : '';
+
+    var deveIncluir = true;
+
+    if (idPasseioFiltroNormalizado && idPasseioNormalizado !== idPasseioFiltroNormalizado) {
+      deveIncluir = false;
+    }
+
+    if (deveIncluir && onibusFiltroNormalizado && onibusNormalizado !== onibusFiltroNormalizado) {
+      deveIncluir = false;
+    }
+
+    if (deveIncluir && linha[INDICE_NOME] && linha[INDICE_NOME].toString().trim() !== '') {
+      listaPassageiros.push({
+        id: linha[INDICE_ID] || '',
+        nome: linha[INDICE_NOME] || '',
+        turma: linha[INDICE_TURMA] || '',
+        cpf: linha[INDICE_CPF] || '',
+        telefone: linha[INDICE_TELEFONE] || '',
+        idPasseio: linha[INDICE_ID_PASSEIO] || '',
+        onibus: linha[INDICE_ONIBUS] || '',
+        embarque: linha[INDICE_EMBARQUE] || '',
+        retorno: linha[INDICE_RETORNO] || '',
+        codigoPulseira: linha[INDICE_PULSEIRA] || '' // ✅ CORRIGIDO
+      });
+      totalAlunos++;
+    }
+  }
+
+  return {
+    status: "sucesso",
+    aba: nomeAba,
+    totalAlunos: totalAlunos,
+    passageiros: listaPassageiros
+  };
+}
+
+function doPostOriginal(e) {
+  try {
+    var dadosDoCorpo = JSON.parse(e.postData.contents);
+    var nomeDoColegio = dadosDoCorpo.colegio;
+    var operacao = dadosDoCorpo.operacao || 'geral';
+    var buscarTodos = dadosDoCorpo.todos || false;
+
+    var cpfAluno = dadosDoCorpo.cpf;
+    var novoStatus = dadosDoCorpo.novoStatus;
+    var novoRetorno = dadosDoCorpo.novoRetorno;
+    var codigoPulseira = dadosDoCorpo.codigoPulseira;
+
+    if (!cpfAluno) {
+      return {
+        status: "erro",
+        mensagem: "CPF não informado no corpo da requisição."
+      };
+    }
+
+    var deveUsarTodos = buscarTodos === true || buscarTodos === 'true' || nomeDoColegio === 'TODOS';
+    var nomeAba = deveUsarTodos ? 'TODOS' : nomeDoColegio;
+
+    var planilha = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nomeAba);
+    if (!planilha) {
+      return {
+        status: "erro",
+        mensagem: "Aba não encontrada: " + nomeAba
+      };
+    }
+
+    var dados = planilha.getDataRange().getValues();
+
+    for (var i = 1; i < dados.length; i++) {
+      var linha = dados[i];
+      var cpfNaPlanilha = linha[INDICE_CPF];
+
+      if (
+        cpfNaPlanilha &&
+        cpfNaPlanilha.toString().replace(/\D/g, '') === cpfAluno.toString().replace(/\D/g, '')
+      ) {
+        var atualizacoes = [];
+
+        // ✅ Atualiza embarque
+        if (operacao === 'embarque' && novoStatus) {
+          planilha.getRange(i + 1, COLUNA_EMBARQUE).setValue(novoStatus);
+          atualizacoes.push("Embarque: " + novoStatus);
+        }
+
+        // ✅ Atualiza retorno
+        if (operacao === 'retorno' && novoRetorno) {
+          planilha.getRange(i + 1, COLUNA_RETORNO).setValue(novoRetorno);
+          atualizacoes.push("Retorno: " + novoRetorno);
+        }
+
+        // ✅ Atualiza pulseira
+        if (codigoPulseira && codigoPulseira.toString().trim() !== '') {
+          planilha.getRange(i + 1, COLUNA_PULSEIRA).setValue(codigoPulseira);
+          atualizacoes.push("Pulseira: " + codigoPulseira);
+        }
+
+        if (atualizacoes.length > 0) {
+          return {
+            status: "sucesso",
+            mensagem: "Atualizações realizadas com sucesso: " + atualizacoes.join(", "),
+            cpf: cpfAluno,
+            operacao: operacao,
+            atualizacoes: atualizacoes
+          };
+        }
+
+        return {
+          status: "erro",
+          mensagem: "Aluno encontrado, mas nenhuma atualização válida foi enviada.",
+          cpf: cpfAluno
+        };
+      }
+    }
+
+    return {
+      status: "erro",
+      mensagem: "Aluno com CPF " + cpfAluno + " não encontrado na aba " + nomeAba
+    };
+
+  } catch (error) {
+    return {
+      status: "erro",
+      mensagem: "Erro interno: " + error.toString(),
+      linha: error.lineNumber || "desconhecida"
+    };
+  }
+}
+
+// ====================================================================
+// FUNÇÃO AUXILIAR: LISTAR COLÉGIOS
+// ====================================================================
+function listarColegios() {
+  var planilha = SpreadsheetApp.getActiveSpreadsheet();
+  var abas = planilha.getSheets();
+  var listaColegios = [];
+
+  for (var i = 0; i < abas.length; i++) {
+    listaColegios.push(abas[i].getName());
+  }
+
+  return {
+    status: "sucesso",
+    colegios: listaColegios
+  };
+}
+
+// ====================================================================
+// FUNÇÃO PARA GATILHO AUTOMÁTICO (ON EDIT)
+// ====================================================================
+
+function copiarFacial_onEdit(e) {
+  var planilhaDestino = SpreadsheetApp.openById(ID_PLANILHA_DESTINO);
+  var abaDestino = planilhaDestino.getSheetByName(NOME_ABA_DESTINO);
+
+  if (!abaDestino) {
+    Logger.log('❌ Erro: A aba de destino "%s" não foi encontrada.', NOME_ABA_DESTINO);
+    return;
+  }
+
+  var rangeEditado = e.range;
+  var abaOrigem = rangeEditado.getSheet();
+  var linhaInicial = rangeEditado.getRow();
+  var colunaInicial = rangeEditado.getColumn();
+  var numLinhas = rangeEditado.getNumRows();
+  var numColunas = rangeEditado.getNumColumns();
+
+  if (colunaInicial > COLUNA_FACIAL || colunaInicial + numColunas - 1 < COLUNA_FACIAL || linhaInicial === 1) {
+    return;
+  }
+
+  var linhasParaAdicionar = [];
+  var larguraRange = COLUNA_FACIAL - COLUNA_NOME + 1;
+  var rangeDados = abaOrigem.getRange(linhaInicial, COLUNA_NOME, numLinhas, larguraRange);
+  var dadosEditados = rangeDados.getValues();
+  var INDICE_FACIAL_ARRAY = COLUNA_FACIAL - COLUNA_NOME;
+
+  for (var i = 0; i < dadosEditados.length; i++) {
+    var linha = dadosEditados[i];
+    var valorFacial = linha[INDICE_FACIAL_ARRAY];
+
+    if (valorFacial && valorFacial.toString().toUpperCase().trim() === 'SIM') {
+      var dadosLinha = [
+        linha[0], // NOME
+        linha[1], // TURMA
+        linha[2], // CPF
+        linha[3],  // TELEFONE
+        linha[4]
+      ];
+      linhasParaAdicionar.push(dadosLinha);
+    }
+  }
+
+  if (linhasParaAdicionar.length > 0) {
+    var ultimaLinhaDestino = abaDestino.getLastRow();
+    var ultimoID = 0;
+    var linhaParaAdicionarNoDestino = 2;
+
+    if (ultimaLinhaDestino >= 1) {
+      var valorUltimoID = abaDestino.getRange(ultimaLinhaDestino, COLUNA_ID).getValue();
+      var idLido = parseInt(valorUltimoID);
+
+      if (!isNaN(idLido) && idLido > 0) {
+        ultimoID = idLido;
+        linhaParaAdicionarNoDestino = ultimaLinhaDestino + 1;
+      }
+    }
+
+    var dadosComID = linhasParaAdicionar.map(function(linha) {
+      ultimoID++;
+      return [ultimoID].concat(linha);
+    });
+
+    abaDestino.getRange(linhaParaAdicionarNoDestino, COLUNA_ID, dadosComID.length, 6).setValues(dadosComID);
+
+    Logger.log('✅ %s entradas faciais copiadas. IDs gerados de %s a %s.',
+      dadosComID.length, ultimoID - dadosComID.length + 1, ultimoID);
+  }
+}
+
+// ====================================================================
+// FUNÇÃO DE EXECUÇÃO MANUAL
+// ====================================================================
+
+function enviarParaCadastroFacial() {
+  var planilhaOrigem = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var planilhaDestino = SpreadsheetApp.openById(ID_PLANILHA_DESTINO);
+  var abaDestino = planilhaDestino.getSheetByName(NOME_ABA_DESTINO);
+
+  if (!abaDestino) {
+    SpreadsheetApp.getUi().alert('Erro: A aba de destino "' + NOME_ABA_DESTINO + '" não foi encontrada.');
+    return;
+  }
+
+  var dadosOrigem = planilhaOrigem.getDataRange().getValues();
+  var linhasParaAdicionar = [];
+
+  for (var i = 1; i < dadosOrigem.length; i++) {
+    var linha = dadosOrigem[i];
+    var precisaFacial = linha[INDICE_FACIAL];
+
+    if (precisaFacial && precisaFacial.toString().toUpperCase().trim() === 'SIM') {
+      var novaLinha = [
+        linha[INDICE_NOME],
+        linha[INDICE_TURMA],
+        linha[INDICE_CPF],
+        linha[INDICE_TELEFONE],
+        linha[INDICE_ID_PASSEIO]
+      ];
+      linhasParaAdicionar.push(novaLinha);
+    }
+  }
+
+  if (linhasParaAdicionar.length > 0) {
+    var ultimaLinhaDestino = abaDestino.getLastRow();
+    var ultimoID = 0;
+    var linhaParaAdicionar = 2;
+
+    if (ultimaLinhaDestino >= 1) {
+      var valorUltimoID = abaDestino.getRange(ultimaLinhaDestino, COLUNA_ID).getValue();
+      var idLido = parseInt(valorUltimoID);
+
+      if (!isNaN(idLido) && idLido > 0) {
+        ultimoID = idLido;
+        linhaParaAdicionar = ultimaLinhaDestino + 1;
+      }
+    }
+
+    var dadosComID = linhasParaAdicionar.map(function(linha) {
+      ultimoID++;
+      return [ultimoID].concat(linha);
+    });
+
+    abaDestino.getRange(linhaParaAdicionar, COLUNA_ID, dadosComID.length, 5).setValues(dadosComID);
+
+    SpreadsheetApp.getUi().alert('Sucesso! ' + dadosComID.length + ' alunos copiados com novo ID para Cadastro Facial.');
+  } else {
+    SpreadsheetApp.getUi().alert('Nenhuma linha encontrada com "SIM" para Cadastro Facial.');
+  }
+}
