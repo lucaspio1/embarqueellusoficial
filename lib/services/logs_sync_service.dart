@@ -126,6 +126,7 @@ class LogsSyncService {
           final cpf = (log['cpf'] ?? log['person_id'] ?? '').toString();
           print('💾 [LogsSync] Salvando log: $personName ($cpf) - ${log['tipo']}');
 
+          // ✅ CORREÇÃO: Incluir inicio_viagem e fim_viagem na sincronização
           await _db.insertLog(
             cpf: cpf,
             personName: personName,
@@ -133,6 +134,8 @@ class LogsSyncService {
             confidence: (log['confidence'] ?? 0.0).toDouble(),
             tipo: log['tipo'] ?? 'FACIAL',
             operadorNome: log['operador_nome'] ?? log['operador'] ?? '',
+            inicioViagem: log['inicio_viagem'] ?? '',
+            fimViagem: log['fim_viagem'] ?? '',
           );
           count++;
         } catch (e) {

@@ -532,17 +532,24 @@ class DatabaseHelper {
     String? fimViagem,
   }) async {
     final db = await database;
-    await db.insert('logs', {
-      'cpf': cpf,
-      'person_name': personName,
-      'timestamp': timestamp.toIso8601String(),
-      'confidence': confidence,
-      'tipo': tipo,
-      'operador_nome': operadorNome,
-      'inicio_viagem': inicioViagem,
-      'fim_viagem': fimViagem,
-      'created_at': DateTime.now().toIso8601String(),
-    });
+    // ✅ CORREÇÃO: Adicionar conflictAlgorithm.ignore para evitar duplicatas
+    // Devido à UNIQUE constraint (cpf, timestamp, tipo), se houver tentativa de inserir
+    // um log duplicado, ele será simplesmente ignorado ao invés de dar erro
+    await db.insert(
+      'logs',
+      {
+        'cpf': cpf,
+        'person_name': personName,
+        'timestamp': timestamp.toIso8601String(),
+        'confidence': confidence,
+        'tipo': tipo,
+        'operador_nome': operadorNome,
+        'inicio_viagem': inicioViagem,
+        'fim_viagem': fimViagem,
+        'created_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
 
     final tipoNormalizado = tipo.trim().toUpperCase();
     if (tipoNormalizado.isNotEmpty &&
