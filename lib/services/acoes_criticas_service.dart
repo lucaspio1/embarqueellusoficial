@@ -39,11 +39,38 @@ class AcoesCriticasService {
         body: jsonEncode({'action': 'encerrarViagem'}),
       ).timeout(const Duration(seconds: 30));
 
+      print('📊 Status code: ${response.statusCode}');
+      print('📊 Content-Type: ${response.headers['content-type']}');
+
       if (response.statusCode != 200) {
-        throw Exception('Erro HTTP ${response.statusCode}: ${response.body}');
+        // Tentar extrair mensagem de erro útil
+        String errorMessage = 'Erro HTTP ${response.statusCode}';
+
+        // Verificar se é HTML (erro do servidor)
+        if (response.body.trim().startsWith('<!DOCTYPE') ||
+            response.body.trim().startsWith('<html')) {
+          errorMessage +=
+              ': O Google Apps Script retornou um erro de servidor. Verifique os logs do script.';
+          print('❌ Resposta HTML detectada (erro de servidor)');
+          print('❌ Primeiros 500 caracteres: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
+        } else {
+          errorMessage += ': ${response.body}';
+        }
+
+        throw Exception(errorMessage);
       }
 
-      final resultado = jsonDecode(response.body);
+      // Verificar se a resposta é JSON válido
+      final Map<String, dynamic> resultado;
+      try {
+        resultado = jsonDecode(response.body);
+      } catch (e) {
+        print('❌ Erro ao decodificar resposta JSON: $e');
+        print('❌ Resposta recebida: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
+        throw Exception(
+            'Resposta inválida do servidor: não foi possível decodificar JSON');
+      }
+
       if (resultado['success'] != true) {
         throw Exception(resultado['message'] ?? 'Erro desconhecido');
       }
@@ -107,11 +134,39 @@ class AcoesCriticasService {
         body: jsonEncode({'action': 'enviarTodosParaQuarto'}),
       ).timeout(const Duration(seconds: 30));
 
+      print('📊 Status code: ${response.statusCode}');
+      print('📊 Content-Type: ${response.headers['content-type']}');
+
       if (response.statusCode != 200) {
-        throw Exception('Erro HTTP ${response.statusCode}: ${response.body}');
+        // Tentar extrair mensagem de erro útil
+        String errorMessage = 'Erro HTTP ${response.statusCode}';
+
+        // Verificar se é HTML (erro do servidor)
+        if (response.body.trim().startsWith('<!DOCTYPE') ||
+            response.body.trim().startsWith('<html')) {
+          errorMessage +=
+              ': O Google Apps Script retornou um erro de servidor. Verifique os logs do script.';
+          print('❌ Resposta HTML detectada (erro de servidor)');
+          print('❌ Primeiros 500 caracteres: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
+        } else {
+          errorMessage += ': ${response.body}';
+        }
+
+        throw Exception(errorMessage);
       }
 
-      final resultado = jsonDecode(response.body);
+      // Verificar se a resposta é JSON válido
+      final Map<String, dynamic> resultado;
+      try {
+        resultado = jsonDecode(response.body);
+      } catch (e) {
+        print(
+            '❌ Erro ao decodificar resposta JSON: $e');
+        print('❌ Resposta recebida: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
+        throw Exception(
+            'Resposta inválida do servidor: não foi possível decodificar JSON');
+      }
+
       if (resultado['success'] != true) {
         throw Exception(resultado['message'] ?? 'Erro desconhecido');
       }

@@ -26,17 +26,37 @@ function createResponse(success, message, data = {}) {
 }
 
 function garantirColunaMovimentacao(pessoasSheet) {
-  const lastColumn = pessoasSheet.getLastColumn();
-  if (lastColumn < MOVIMENTACAO_COLUMN_INDEX) {
-    pessoasSheet.insertColumnsAfter(
-      lastColumn,
-      MOVIMENTACAO_COLUMN_INDEX - lastColumn,
-    );
-  }
+  try {
+    const lastColumn = pessoasSheet.getLastColumn();
 
-  const headerCell = pessoasSheet.getRange(1, MOVIMENTACAO_COLUMN_INDEX);
-  if (headerCell.getValue() !== 'MOVIMENTAÇÃO') {
-    headerCell.setValue('MOVIMENTAÇÃO');
+    // Se a planilha tem menos colunas que o necessário, adicionar colunas
+    if (lastColumn < MOVIMENTACAO_COLUMN_INDEX) {
+      const colunasParaAdicionar = MOVIMENTACAO_COLUMN_INDEX - lastColumn;
+
+      // Se a planilha está vazia (lastColumn = 0), usar método diferente
+      if (lastColumn === 0) {
+        // Planilha vazia - não fazer nada, o header será criado depois
+        console.log('⚠️ Planilha vazia, pulando inserção de colunas');
+      } else {
+        // Inserir colunas depois da última coluna existente
+        console.log(`📝 Inserindo ${colunasParaAdicionar} coluna(s) após coluna ${lastColumn}`);
+        pessoasSheet.insertColumnsAfter(lastColumn, colunasParaAdicionar);
+      }
+    }
+
+    // Garantir que o cabeçalho está correto
+    const headerCell = pessoasSheet.getRange(1, MOVIMENTACAO_COLUMN_INDEX);
+    const currentValue = headerCell.getValue();
+
+    if (currentValue !== 'MOVIMENTAÇÃO') {
+      console.log(`📝 Atualizando cabeçalho da coluna ${MOVIMENTACAO_COLUMN_INDEX} de "${currentValue}" para "MOVIMENTAÇÃO"`);
+      headerCell.setValue('MOVIMENTAÇÃO');
+    }
+
+    console.log('✅ Coluna MOVIMENTAÇÃO garantida');
+  } catch (error) {
+    console.error('❌ Erro ao garantir coluna movimentação:', error);
+    throw new Error('Falha ao configurar coluna MOVIMENTAÇÃO: ' + error.message);
   }
 }
 
@@ -769,6 +789,8 @@ function enviarTodosParaQuarto() {
   try {
     console.log('🔄 [CRÍTICO] Enviando todos para QUARTO...');
 
+    // Passo 1: Abrir planilha
+    console.log('📝 Passo 1: Abrindo planilha...');
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const abaPessoas = ss.getSheetByName('PESSOAS');
 
@@ -776,10 +798,24 @@ function enviarTodosParaQuarto() {
       console.error('❌ Aba PESSOAS não encontrada');
       return createResponse(false, 'Aba PESSOAS não encontrada');
     }
+    console.log('✅ Aba PESSOAS encontrada');
 
-    garantirColunaMovimentacao(abaPessoas);
+    // Passo 2: Verificar e garantir coluna movimentação
+    console.log('📝 Passo 2: Garantindo coluna MOVIMENTAÇÃO...');
+    try {
+      garantirColunaMovimentacao(abaPessoas);
+    } catch (errColuna) {
+      console.error('❌ Erro ao garantir coluna:', errColuna);
+      return createResponse(false, 'Erro ao configurar coluna MOVIMENTAÇÃO: ' + errColuna.message);
+    }
 
+    // Passo 3: Verificar quantas linhas temos
+    console.log('📝 Passo 3: Verificando quantidade de pessoas...');
     const lastRow = abaPessoas.getLastRow();
+    const lastColumn = abaPessoas.getLastColumn();
+
+    console.log(`📊 Última linha: ${lastRow}, Última coluna: ${lastColumn}`);
+
     if (lastRow <= 1) {
       console.log('⚠️ Nenhuma pessoa para atualizar');
       return createResponse(true, 'Nenhuma pessoa para atualizar', {
@@ -787,25 +823,45 @@ function enviarTodosParaQuarto() {
       });
     }
 
-    // Atualizar todas as linhas (exceto cabeçalho) para 'QUARTO'
-    const range = abaPessoas.getRange(2, MOVIMENTACAO_COLUMN_INDEX, lastRow - 1, 1);
+    // Verificar se a coluna MOVIMENTACAO existe
+    if (lastColumn < MOVIMENTACAO_COLUMN_INDEX) {
+      console.error(`❌ Planilha não tem coluna ${MOVIMENTACAO_COLUMN_INDEX}. Última coluna: ${lastColumn}`);
+      return createResponse(false, `Erro: Planilha não possui a coluna ${MOVIMENTACAO_COLUMN_INDEX} necessária`);
+    }
+
+    // Passo 4: Preparar valores para atualização
+    console.log('📝 Passo 4: Preparando valores...');
+    const numPessoas = lastRow - 1;
     const valores = [];
-    for (let i = 0; i < lastRow - 1; i++) {
+
+    for (let i = 0; i < numPessoas; i++) {
       valores.push(['QUARTO']);
     }
-    range.setValues(valores);
 
-    const pessoasAtualizadas = lastRow - 1;
+    console.log(`📊 Total de ${numPessoas} pessoa(s) serão atualizadas`);
 
-    console.log(`✅ [CRÍTICO] ${pessoasAtualizadas} pessoa(s) enviada(s) para QUARTO`);
+    // Passo 5: Atualizar células em lote
+    console.log('📝 Passo 5: Atualizando células...');
+    try {
+      const range = abaPessoas.getRange(2, MOVIMENTACAO_COLUMN_INDEX, numPessoas, 1);
+      range.setValues(valores);
+      console.log('✅ Células atualizadas com sucesso');
+    } catch (errUpdate) {
+      console.error('❌ Erro ao atualizar células:', errUpdate);
+      return createResponse(false, 'Erro ao atualizar células: ' + errUpdate.message);
+    }
 
-    return createResponse(true, pessoasAtualizadas + ' pessoa(s) enviada(s) para QUARTO', {
-      pessoas_atualizadas: pessoasAtualizadas
+    // Passo 6: Confirmar sucesso
+    console.log(`✅ [CRÍTICO] ${numPessoas} pessoa(s) enviada(s) para QUARTO`);
+
+    return createResponse(true, numPessoas + ' pessoa(s) enviada(s) para QUARTO', {
+      pessoas_atualizadas: numPessoas
     });
 
   } catch (error) {
     console.error('❌ [CRÍTICO] Erro ao enviar para quarto:', error);
-    return createResponse(false, 'Erro ao enviar para quarto: ' + error.message);
+    console.error('❌ Stack trace:', error.stack);
+    return createResponse(false, 'Erro ao enviar para quarto: ' + error.message + ' | Stack: ' + error.stack);
   }
 }
 
