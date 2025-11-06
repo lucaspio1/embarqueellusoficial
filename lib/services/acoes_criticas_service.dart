@@ -226,8 +226,8 @@ class AcoesCriticasService {
       final resultado = jsonDecode(response.body);
 
       if (resultado['success'] == true) {
-        final data = resultado['data'] ?? {};
-        final viagens = data['viagens'] as List? ?? [];
+        // A resposta vem diretamente em 'viagens', não em 'data.viagens'
+        final viagens = resultado['viagens'] as List? ?? [];
         print('✅ ${viagens.length} viagem(ns) encontrada(s)');
 
         return viagens
