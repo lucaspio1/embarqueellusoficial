@@ -528,6 +528,8 @@ class DatabaseHelper {
     required double confidence,
     required String tipo,
     String? operadorNome,
+    String? inicioViagem,
+    String? fimViagem,
   }) async {
     final db = await database;
     await db.insert('logs', {
@@ -537,6 +539,8 @@ class DatabaseHelper {
       'confidence': confidence,
       'tipo': tipo,
       'operador_nome': operadorNome,
+      'inicio_viagem': inicioViagem,
+      'fim_viagem': fimViagem,
       'created_at': DateTime.now().toIso8601String(),
     });
 
