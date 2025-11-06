@@ -407,7 +407,7 @@ function getAllPeople() {
 }
 
 // ============================================================================
-// FUNÇÃO: GET ALL STUDENTS - permanece igual
+// FUNÇÃO: GET ALL STUDENTS
 // ============================================================================
 function getAllStudents() {
   try {
@@ -783,7 +783,7 @@ function listarViagens() {
     const data_range = abaAlunos.getDataRange();
     const values = data_range.getValues();
 
-    // Usar Set para armazenar viagens únicas
+    // Usar Map para armazenar viagens únicas
     const viagensMap = new Map();
 
     for (let i = 1; i < values.length; i++) {
@@ -881,7 +881,6 @@ function encerrarViagem(data) {
     // 2. Limpar aba LOGS (filtrado por data)
     const abaLogs = ss.getSheetByName('LOGS');
     if (abaLogs) {
-      // Na aba LOGS, as colunas são diferentes - preciso verificar a estrutura
       // TIMESTAMP, CPF, NOME, CONFIDENCE, TIPO, PERSON_ID, OPERADOR, INICIO_VIAGEM, FIM_VIAGEM
       totalRemovidos += limparAbaFiltrada(abaLogs, inicioViagem, fimViagem, 8, 9);
     }
@@ -1052,4 +1051,3 @@ function enviarTodosParaQuarto() {
     return createResponse(false, 'Erro ao enviar para quarto: ' + error.message + ' | Stack: ' + error.stack);
   }
 }
-
