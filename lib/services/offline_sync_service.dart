@@ -42,6 +42,8 @@ class OfflineSyncService {
     required String personId,
     required String tipo,
     String? operadorNome,
+    String? inicioViagem,
+    String? fimViagem,
   }) async {
     await _db.insertLog(
       cpf: cpf,
@@ -50,6 +52,8 @@ class OfflineSyncService {
       confidence: confidence,
       tipo: tipo,
       operadorNome: operadorNome,
+      inicioViagem: inicioViagem,
+      fimViagem: fimViagem,
     );
 
     await _db.enqueueOutbox('movement_log', {
@@ -60,6 +64,8 @@ class OfflineSyncService {
       'personId': personId,
       'tipo': tipo,
       'operadorNome': operadorNome,
+      'inicio_viagem': inicioViagem ?? '',
+      'fim_viagem': fimViagem ?? '',
     });
 
     print('📝 [OfflineSync] Log enfileirado: $personName - $tipo (Operador: ${operadorNome ?? "N/A"})');

@@ -569,7 +569,7 @@ function addMovementLog(data) {
     if (!logsSheet) {
       console.log('📝 Criando aba LOGS...');
       logsSheet = ss.insertSheet('LOGS');
-      logsSheet.appendRow(['TIMESTAMP', 'CPF', 'NOME', 'CONFIDENCE', 'TIPO', 'PERSON_ID', 'OPERADOR']);
+      logsSheet.appendRow(['TIMESTAMP', 'CPF', 'NOME', 'CONFIDENCE', 'TIPO', 'PERSON_ID', 'OPERADOR', 'INICIO_VIAGEM', 'FIM_VIAGEM']);
     }
 
     let count = 0;
@@ -589,6 +589,8 @@ function addMovementLog(data) {
         .trim();
       const personId = person.personId || cpf;
       const operadorNome = person.operadorNome || 'Sistema';
+      const inicioViagem = person.inicio_viagem || person.inicioViagem || '';
+      const fimViagem = person.fim_viagem || person.fimViagem || '';
 
       logsSheet.appendRow([
         timestamp,
@@ -597,7 +599,9 @@ function addMovementLog(data) {
         confidence,
         tipo,
         personId,
-        operadorNome
+        operadorNome,
+        inicioViagem,
+        fimViagem
       ]);
 
       let movimentacao = movimentacaoRecebida;

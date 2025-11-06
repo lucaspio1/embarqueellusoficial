@@ -161,6 +161,8 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         personId: aluno['cpf'],
         tipo: tipo,
         operadorNome: operadorNome,
+        inicioViagem: aluno['inicio_viagem'] as String?,
+        fimViagem: aluno['fim_viagem'] as String?,
       );
 
       await _db.updatePessoaMovimentacao(
