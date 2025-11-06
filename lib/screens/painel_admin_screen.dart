@@ -5,6 +5,7 @@ import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/logs_sync_service.dart';
 import 'package:embarqueellus/services/user_sync_service.dart';
+import 'package:embarqueellus/services/acoes_criticas_service.dart';
 import 'package:embarqueellus/screens/lista_alunos_screen.dart';
 import 'package:embarqueellus/screens/lista_logs_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +25,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
   final _alunosSync = AlunosSyncService.instance;
   final _logsSync = LogsSyncService.instance;
   final _userSync = UserSyncService.instance;
+  final _acoesCriticas = AcoesCriticasService.instance;
 
   bool _carregando = true;
   bool _sincronizando = false;
@@ -159,6 +161,230 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     palavra.isEmpty ? palavra : '${palavra[0].toUpperCase()}${palavra.substring(1)}')
         .join(' ');
   }
+
+  // =========================================================================
+  // AÇÕES CRÍTICAS
+  // =========================================================================
+
+  /// AÇÃO CRÍTICA: Encerrar viagem (limpar todos os dados)
+  Future<void> _encerrarViagem() async {
+    // Confirmação 1: Verificar se é admin
+    if (_usuario?['perfil']?.toString().toUpperCase() != 'ADMIN') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Apenas administradores podem encerrar viagem'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Confirmação 2: Dialog de aviso
+    final confirmacao1 = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 32),
+            const SizedBox(width: 12),
+            const Text('ATENÇÃO'),
+          ],
+        ),
+        content: const Text(
+          '⚠️ ESTA AÇÃO É IRREVERSÍVEL!\n\n'
+              'Você está prestes a APAGAR TODOS OS DADOS:\n'
+              '• Aba PESSOAS do Google Sheets\n'
+              '• Aba LOGS do Google Sheets\n'
+              '• Aba ALUNOS do Google Sheets\n'
+              '• Banco de dados local do aplicativo\n\n'
+              'TODOS OS DADOS SERÃO PERDIDOS PERMANENTEMENTE!\n\n'
+              'Deseja continuar?',
+          style: TextStyle(height: 1.5, fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar', style: TextStyle(fontSize: 16)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Continuar', style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmacao1 != true) return;
+
+    // Confirmação 3: Confirmação final com texto
+    final confirmacao2 = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('CONFIRMAÇÃO FINAL'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Digite "ENCERRAR" para confirmar a exclusão de TODOS OS DADOS:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                hintText: 'Digite ENCERRAR',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (value) {
+                Navigator.pop(context, value.toUpperCase() == 'ENCERRAR');
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmacao2 != true) return;
+
+    // Executar ação
+    _mostrarProgresso('Encerrando viagem...');
+
+    final resultado = await _acoesCriticas.encerrarViagem();
+
+    if (Navigator.canPop(context)) Navigator.pop(context);
+
+    if (resultado.success) {
+      await _carregarDados();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${resultado.message}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ ${resultado.message}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  /// AÇÃO CRÍTICA: Enviar todos para QUARTO
+  Future<void> _enviarTodosParaQuarto() async {
+    // Confirmação 1: Dialog de aviso
+    final confirmacao = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.bed, color: Colors.blue.shade700, size: 28),
+            const SizedBox(width: 12),
+            const Text('Enviar Todos para Quarto'),
+          ],
+        ),
+        content: const Text(
+          'Esta ação irá atualizar a movimentação de TODAS as pessoas para "QUARTO".\n\n'
+              'Isso afeta:\n'
+              '• Aba PESSOAS do Google Sheets\n'
+              '• Banco de dados local\n\n'
+              'Deseja continuar?',
+          style: TextStyle(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmacao != true) return;
+
+    // Executar ação
+    _mostrarProgresso('Enviando todos para QUARTO...');
+
+    final resultado = await _acoesCriticas.enviarTodosParaQuarto();
+
+    if (Navigator.canPop(context)) Navigator.pop(context);
+
+    if (resultado.success) {
+      await _carregarDados();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${resultado.message}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ ${resultado.message}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  void _mostrarProgresso(String mensagem) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(mensagem),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // CARREGAMENTO DE DADOS
+  // =========================================================================
 
   Future<void> _carregarDados() async {
     setState(() => _carregando = true);
@@ -325,7 +551,102 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
               const SizedBox(height: 24),
             ],
 
-            // Ações administrativas
+            // Ações Críticas
+            const Text(
+              'Ações Críticas',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Botão: Enviar Todos para Quarto
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _enviarTodosParaQuarto,
+                icon: const Icon(Icons.bed, size: 24),
+                label: const Text(
+                  'ENVIAR TODOS PARA QUARTO',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Botão: Encerrar Viagem
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _encerrarViagem,
+                icon: const Icon(Icons.delete_forever, size: 24),
+                label: const Text(
+                  'ENCERRAR VIAGEM',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // Aviso sobre Encerrar Viagem
+            Container(
+              padding: const EdgeInsets.all(12.0),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(12.0),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.red.shade700,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'ENCERRAR VIAGEM apaga TODOS os dados permanentemente!',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.red.shade900,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Informações
             const Text(
               'Informações',
               style: TextStyle(
