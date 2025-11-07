@@ -4,36 +4,50 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+
 	<key>CFBundleDisplayName</key>
-	<string>Embarqueellus</string>
+	<string>EmbarqueEllus</string>
+
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+
 	<key>CFBundleName</key>
 	<string>embarqueellus</string>
+
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+
+	<!-- ✅ Versões puxadas do Flutter -->
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
-	<key>CFBundleSignature</key>
-	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+
+	<key>CFBundleSignature</key>
+	<string>????</string>
+
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -41,20 +55,29 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- ✅ Permissões necessárias -->
 	<key>NSCameraUsageDescription</key>
 	<string>Este aplicativo precisa acessar a câmera para realizar o reconhecimento facial dos alunos durante o processo de embarque.</string>
+
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Este aplicativo precisa acessar a biblioteca de fotos para selecionar imagens para o reconhecimento facial.</string>
+
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Este aplicativo precisa salvar fotos na biblioteca para manter registros dos embarques.</string>
+
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Este aplicativo precisa acessar o microfone para funcionalidades de câmera.</string>
+
 	<key>NSFaceIDUsageDescription</key>
 	<string>Este aplicativo usa reconhecimento facial para identificar alunos durante o embarque.</string>
+
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Este aplicativo precisa acessar a localização para registrar onde os embarques estão ocorrendo.</string>
 </dict>
