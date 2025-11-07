@@ -1,6 +1,5 @@
 # Uncomment this line to define a global platform for your project
-# Versão mínima do iOS compatível com todas as dependências
-platform :ios, '15.5'
+platform :ios, '13.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -29,7 +28,7 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
+  use_frameworks! :linkage => :static
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
@@ -38,47 +37,26 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    
     target.build_configurations.each do |config|
-      # Configurações de deployment
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
+      # Evita erros obrigando assinatura dos Pods
+      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+      config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
 
-      # Desabilitar Bitcode (necessário para TensorFlow Lite e MLKit)
-      config.build_settings['ENABLE_BITCODE'] = 'NO'
+      # Corrige warnings com MLKit e sqflite_darwin
+      config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
 
-      # Configurações de arquitetura - PADRONIZADAS para evitar conflitos
-      config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
+      # Desativa Module Verifier (bug Xcode 15/16)
+      config.build_settings['ENABLE_MODULE_VERIFIER'] = 'NO'
 
-      # Remover configuração que causava conflito entre pods
-      # EXCLUDED_ARCHS será gerenciado individualmente pelos pods
-      config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
+      # Corrige Flutter.h not found
+      config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
+      config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/Headers/Public'
+      config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/Headers/Public/Flutter'
+      config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/../Flutter/Frameworks'
 
-      # Fix para MLKit e outras libs que não suportam simulador arm64
-      config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
-
-      # Permitir builds não modulares (necessário para alguns frameworks)
-      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-
-      # Configurações de otimização
-      config.build_settings['SWIFT_VERSION'] = '5.0'
-
-      # Otimizações apenas para Debug
-      if config.name == 'Debug'
-        config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
-        config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-      end
-
-      # Remover configuração que pode causar problemas
-      config.build_settings.delete('CODE_SIGNING_ALLOWED')
-
-      # Permite que o simulador use as bibliotecas
-      if config.base_configuration_reference
-        xcconfig_path = config.base_configuration_reference.real_path
-        if File.exist?(xcconfig_path)
-          xcconfig = File.read(xcconfig_path)
-          xcconfig_mod = xcconfig.gsub(/DT_TOOLCHAIN_DIR/, "TOOLCHAIN_DIR")
-          File.open(xcconfig_path, "w") { |file| file << xcconfig_mod }
-        end
-      end
+      # Exclui arm64 para Simulador em Apple Silicon
+      config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
     end
   end
 end
