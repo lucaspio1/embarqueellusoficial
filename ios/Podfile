@@ -37,7 +37,7 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
-    
+
     target.build_configurations.each do |config|
       # Evita erros obrigando assinatura dos Pods
       config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
@@ -55,8 +55,15 @@ post_install do |installer|
       config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/Headers/Public/Flutter'
       config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/../Flutter/Frameworks'
 
-      # Exclui arm64 para Simulador em Apple Silicon (comentado para evitar conflito com MLKit)
-      # config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+      # Remove EXCLUDED_ARCHS para evitar conflitos entre pods do MLKit
+      config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
+      config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphoneos*]')
     end
+  end
+
+  # Remove EXCLUDED_ARCHS dos xcconfig dos pods para evitar conflitos de merge
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
+    config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphoneos*]')
   end
 end
