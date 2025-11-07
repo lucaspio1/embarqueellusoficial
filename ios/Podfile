@@ -34,36 +34,68 @@ target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
 
+# ========================================
+# PRE-INSTALL: Remove EXCLUDED_ARCHS antes do merge
+# ========================================
+pre_install do |installer|
+  # Remove EXCLUDED_ARCHS de todos os pods para evitar conflitos de merge
+  installer.pod_targets.each do |pod|
+    if pod.respond_to?(:user_build_configurations)
+      pod.user_build_configurations.each do |config_name, config_hash|
+        config_hash.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
+        config_hash.delete('EXCLUDED_ARCHS[sdk=iphoneos*]')
+      end
+    end
+  end
+end
+
+# ========================================
+# POST-INSTALL: Configurações finais dos pods
+# ========================================
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
 
     target.build_configurations.each do |config|
-      # Evita erros obrigando assinatura dos Pods
+      # ===== Correções de Assinatura =====
       config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
       config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
 
+      # ===== Correções de Warnings =====
       # Corrige warnings com MLKit e sqflite_darwin
       config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
 
       # Desativa Module Verifier (bug Xcode 15/16)
       config.build_settings['ENABLE_MODULE_VERIFIER'] = 'NO'
 
-      # Corrige Flutter.h not found
+      # ===== Correções de Headers =====
+      # Garante que Flutter.h seja encontrado
       config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
       config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/Headers/Public'
       config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/Headers/Public/Flutter'
       config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/../Flutter/Frameworks'
 
-      # Remove EXCLUDED_ARCHS para evitar conflitos entre pods do MLKit
+      # ===== Remoção de EXCLUDED_ARCHS =====
+      # Remove EXCLUDED_ARCHS para evitar conflitos entre pods MLKit/TensorFlow
+      # Isso permite suporte nativo para Apple Silicon (arm64)
       config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
       config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphoneos*]')
+
+      # Remove também versões sem sufixo de SDK
+      config.build_settings.delete('EXCLUDED_ARCHS')
+
+      # Define versão de deployment uniformemente (já definida no platform, mas garante)
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
     end
   end
 
-  # Remove EXCLUDED_ARCHS dos xcconfig dos pods para evitar conflitos de merge
+  # Remove EXCLUDED_ARCHS das configurações globais do projeto de Pods
   installer.pods_project.build_configurations.each do |config|
     config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
     config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphoneos*]')
+    config.build_settings.delete('EXCLUDED_ARCHS')
   end
+
+  # Força regeneração de xcconfig sem EXCLUDED_ARCHS
+  installer.pods_project.save
 end
