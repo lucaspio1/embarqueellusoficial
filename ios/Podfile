@@ -35,21 +35,6 @@ target 'Runner' do
 end
 
 # ========================================
-# PRE-INSTALL: Remove EXCLUDED_ARCHS antes do merge
-# ========================================
-pre_install do |installer|
-  # Remove EXCLUDED_ARCHS de todos os pods para evitar conflitos de merge
-  installer.pod_targets.each do |pod|
-    if pod.respond_to?(:user_build_configurations)
-      pod.user_build_configurations.each do |config_name, config_hash|
-        config_hash.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
-        config_hash.delete('EXCLUDED_ARCHS[sdk=iphoneos*]')
-      end
-    end
-  end
-end
-
-# ========================================
 # POST-INSTALL: Configurações finais dos pods
 # ========================================
 post_install do |installer|
