@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-platform :ios, '13.0'
+platform :ios, '15.5'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -55,8 +55,8 @@ post_install do |installer|
       config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/Headers/Public/Flutter'
       config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/../Flutter/Frameworks'
 
-      # Exclui arm64 para Simulador em Apple Silicon
-      config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+      # Exclui arm64 para Simulador em Apple Silicon (comentado para evitar conflito com MLKit)
+      # config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
     end
   end
 end
