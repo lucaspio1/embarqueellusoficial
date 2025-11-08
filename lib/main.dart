@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -16,8 +17,10 @@ Future<void> main() async {
     (options) {
       options.dsn = 'https://16c773f79c6fc2a3a4951733ce3570ed@o4504103203045376.ingest.us.sentry.io/4510326779740160';
       options.tracesSampleRate = 1.0;
-      options.debug = true;
-      options.environment = 'production';
+      // ✅ Debug habilitado apenas em modo Debug, desabilitado em Release/Profile
+      options.debug = kDebugMode;
+      // ✅ Environment correto: production em release, development em debug
+      options.environment = kReleaseMode ? 'production' : 'development';
     },
     appRunner: () async {
       await Sentry.captureMessage('App iniciado com sucesso!');

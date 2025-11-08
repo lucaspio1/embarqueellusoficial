@@ -80,5 +80,33 @@
 
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Este aplicativo precisa acessar a localização para registrar onde os embarques estão ocorrendo.</string>
+
+	<!-- ✅ Configuração de segurança de rede para permitir Sentry -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Permite conexões HTTPS com configurações específicas -->
+		<key>NSExceptionDomains</key>
+		<dict>
+			<!-- Configuração para Sentry -->
+			<key>ingest.us.sentry.io</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
+			</dict>
+			<key>sentry.io</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>
