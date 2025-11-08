@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/face_image_processor.dart';
@@ -98,12 +99,42 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       setState(() => _processando = false);
 
       if (resultado != null) {
+        await Sentry.captureMessage(
+          'Reconhecimento facial bem-sucedido (tela completa)',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('screen', 'reconhecimento_facial_completo');
+            scope.setTag('resultado', 'sucesso');
+            scope.setContexts('aluno', {
+              'nome': resultado['nome'],
+              'cpf': resultado['cpf'],
+            });
+          },
+        );
         await _selecionarTipoAcesso(resultado);
       } else {
+        await Sentry.captureMessage(
+          'Facial não encontrada na tela de reconhecimento completo',
+          level: SentryLevel.warning,
+          withScope: (scope) {
+            scope.setTag('screen', 'reconhecimento_facial_completo');
+            scope.setTag('resultado', 'nao_reconhecido');
+            scope.setContexts('info', {
+              'message': 'Usuário verá dialog oferecendo busca manual',
+            });
+          },
+        );
         _mostrarDialogNaoReconhecido();
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Erro ao reconhecer aluno: $e');
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro crítico no reconhecimento (tela ReconhecimentoFacialScreen)',
+        }),
+      );
       if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);
 
@@ -215,7 +246,15 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         imageFile,
         outputSize: FaceRecognitionService.INPUT_SIZE,
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao processar imagem para modelo (FaceImageProcessor)',
+          'file_path': imageFile.path,
+        }),
+      );
       throw Exception('Falha ao preparar imagem facial: $e');
     }
   }
