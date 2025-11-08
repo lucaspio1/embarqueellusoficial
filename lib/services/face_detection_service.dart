@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// Singleton responsável por detectar rostos utilizando o Google MLKit.
 ///
@@ -28,21 +29,83 @@ class FaceDetectionService {
   }
 
   /// Detecta rostos em uma [InputImage].
-  Future<List<Face>> detect(InputImage image) {
-    final detector = _ensureDetector();
-    return detector.processImage(image);
+  Future<List<Face>> detect(InputImage image) async {
+    try {
+      final detector = _ensureDetector();
+      final faces = await detector.processImage(image);
+
+      if (faces.isEmpty) {
+        await Sentry.captureMessage(
+          'Nenhuma face detectada na imagem',
+          level: SentryLevel.warning,
+          withScope: (scope) {
+            scope.setTag('face_detection', 'no_faces_found');
+            scope.setContexts('detection_info', {
+              'faces_detected': 0,
+              'message': 'Google MLKit não detectou nenhuma face na imagem',
+            });
+          },
+        );
+      } else {
+        await Sentry.captureMessage(
+          'Face(s) detectada(s) com sucesso',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('face_detection', 'success');
+            scope.setContexts('detection_info', {
+              'faces_detected': faces.length,
+            });
+          },
+        );
+      }
+
+      return faces;
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao detectar faces com Google MLKit',
+        }),
+      );
+      rethrow;
+    }
   }
 
   /// Detecta rostos em uma imagem de arquivo físico.
-  Future<List<Face>> detectFromFile(File file) {
-    final input = InputImage.fromFile(file);
-    return detect(input);
+  Future<List<Face>> detectFromFile(File file) async {
+    try {
+      final input = InputImage.fromFile(file);
+      return await detect(input);
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao detectar faces a partir de arquivo',
+          'file_path': file.path,
+        }),
+      );
+      rethrow;
+    }
   }
 
   /// Detecta rostos a partir de um caminho de arquivo.
-  Future<List<Face>> detectFromPath(String path) {
-    final input = InputImage.fromFilePath(path);
-    return detect(input);
+  Future<List<Face>> detectFromPath(String path) async {
+    try {
+      final input = InputImage.fromFilePath(path);
+      return await detect(input);
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao detectar faces a partir de caminho',
+          'file_path': path,
+        }),
+      );
+      rethrow;
+    }
   }
 
   /// Libera recursos do detector.

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/widgets/camera_preview_widget.dart';
 
@@ -36,8 +37,15 @@ class _ReconhecerAlunoScreenState extends State<ReconhecerAlunoScreen> {
     try {
       await FaceRecognitionService.instance.init();
       print('✅ Face Recognition Service inicializado');
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Erro ao inicializar: $e');
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao inicializar Face Recognition Service na tela de reconhecimento',
+        }),
+      );
       if (mounted) {
         setState(() {
           status = 'Erro ao inicializar reconhecimento facial';
@@ -86,7 +94,15 @@ class _ReconhecerAlunoScreenState extends State<ReconhecerAlunoScreen> {
       final decoded = img.decodeImage(bytes);
 
       if (decoded == null) {
-        throw Exception('Erro ao ler imagem');
+        final error = Exception('Erro ao decodificar imagem capturada');
+        await Sentry.captureException(
+          error,
+          hint: Hint.withMap({
+            'context': 'Falha ao decodificar imagem na tela de reconhecimento',
+            'image_path': imagePath,
+          }),
+        );
+        throw error;
       }
 
       setState(() => status = "Comparando com banco de dados...");
@@ -101,6 +117,19 @@ class _ReconhecerAlunoScreenState extends State<ReconhecerAlunoScreen> {
           alunoReconhecido = resultado;
         });
 
+        await Sentry.captureMessage(
+          'Aluno reconhecido com sucesso na tela de reconhecimento',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('screen', 'reconhecer_aluno');
+            scope.setTag('resultado', 'sucesso');
+            scope.setContexts('aluno', {
+              'nome': resultado['nome'],
+              'cpf': resultado['cpf'],
+            });
+          },
+        );
+
         // Aguardar 2 segundos mostrando resultado
         await Future.delayed(const Duration(seconds: 2));
 
@@ -114,12 +143,33 @@ class _ReconhecerAlunoScreenState extends State<ReconhecerAlunoScreen> {
           status = "Aluno não reconhecido";
         });
 
+        await Sentry.captureMessage(
+          'Falha no reconhecimento facial - Usuário verá dialog de não reconhecido',
+          level: SentryLevel.warning,
+          withScope: (scope) {
+            scope.setTag('screen', 'reconhecer_aluno');
+            scope.setTag('resultado', 'nao_reconhecido');
+            scope.setContexts('info', {
+              'message': 'Nenhum aluno correspondente foi encontrado no banco de dados',
+            });
+          },
+        );
+
         if (mounted) {
           _mostrarDialogNaoReconhecido();
         }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Erro ao reconhecer: $e');
+
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro crítico no processo de reconhecimento (tela ReconhecerAlunoScreen)',
+        }),
+      );
+
       setState(() {
         processando = false;
         reconhecido = false;

@@ -2,6 +2,7 @@
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 
 /// Serviço de Reconhecimento Facial com ArcFace
@@ -59,8 +60,18 @@ class FaceRecognitionService {
 
       final embedding = _normalizeL2(output[0]);
       return embedding;
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Erro no extractEmbedding: $e');
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao extrair embedding facial',
+          'image_width': image.width,
+          'image_height': image.height,
+          'image_channels': image.numChannels,
+        }),
+      );
       rethrow;
     }
   }
@@ -129,6 +140,17 @@ class FaceRecognitionService {
       final known = await DatabaseHelper.instance.getTodosAlunosComFacial();
       if (known.isEmpty) {
         print('📭 Nenhum aluno com facial cadastrada');
+        await Sentry.captureMessage(
+          'Tentativa de reconhecimento facial sem alunos cadastrados',
+          level: SentryLevel.warning,
+          withScope: (scope) {
+            scope.setTag('facial_error_type', 'no_students_registered');
+            scope.setContexts('info', {
+              'total_students': 0,
+              'message': 'Nenhum aluno com facial cadastrada no banco de dados',
+            });
+          },
+        );
         return null;
       }
 
@@ -152,16 +174,54 @@ class FaceRecognitionService {
 
       if (bestDistance <= DISTANCE_THRESHOLD && best != null) {
         print('✅ RECONHECIDO: ${best['nome']}');
+        await Sentry.captureMessage(
+          'Reconhecimento facial bem-sucedido',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('facial_result', 'success');
+            scope.setContexts('recognition', {
+              'student_name': best!['nome'],
+              'student_cpf': best['cpf'],
+              'distance_l2': bestDistance,
+              'confidence': normalizedConfidence,
+              'threshold': DISTANCE_THRESHOLD,
+              'total_students_checked': known.length,
+            });
+          },
+        );
         return {
           ...best,
           'similarity_score': normalizedConfidence,
           'distance_l2': bestDistance,
         };
       }
+
       print('❌ Não reconhecido (distância acima de ${DISTANCE_THRESHOLD.toStringAsFixed(2)})');
+      await Sentry.captureMessage(
+        'Facial não encontrada - Nenhum aluno reconhecido',
+        level: SentryLevel.warning,
+        withScope: (scope) {
+          scope.setTag('facial_error_type', 'face_not_recognized');
+          scope.setContexts('recognition_attempt', {
+            'best_distance': bestDistance,
+            'threshold': DISTANCE_THRESHOLD,
+            'distance_difference': bestDistance - DISTANCE_THRESHOLD,
+            'total_students_checked': known.length,
+            'best_match_name': best?['nome'] ?? 'N/A',
+            'best_match_cpf': best?['cpf'] ?? 'N/A',
+          });
+        },
+      );
       return null;
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Erro no reconhecimento: $e');
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro crítico no processo de reconhecimento facial',
+        }),
+      );
       return null;
     }
   }
