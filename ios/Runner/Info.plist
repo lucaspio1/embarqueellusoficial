@@ -81,7 +81,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Este aplicativo precisa acessar a localização para registrar onde os embarques estão ocorrendo.</string>
 
-	<!-- ✅ Configuração de segurança de rede para permitir Sentry -->
+	<!-- ✅ Configuração de segurança de rede para permitir Sentry e APIs do Google -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- Permite conexões HTTPS com configurações específicas -->
@@ -98,6 +98,36 @@
 				<false/>
 			</dict>
 			<key>sentry.io</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
+			</dict>
+			<!-- Configuração para Google Apps Script (Backend) -->
+			<key>script.google.com</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
+			</dict>
+			<!-- Configuração para Google Docs/Sheets -->
+			<key>docs.google.com</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
+			</dict>
+			<!-- Configuração para APIs do Google -->
+			<key>googleapis.com</key>
 			<dict>
 				<key>NSIncludesSubdomains</key>
 				<true/>

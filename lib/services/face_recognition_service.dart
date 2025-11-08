@@ -1,4 +1,5 @@
 // lib/services/face_recognition_service.dart - COMPLETAMENTE REFEITO (CORRIGIDO)
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
@@ -25,8 +26,24 @@ class FaceRecognitionService {
 
   Future<void> _loadModel() async {
     try {
+      final platform = Platform.isIOS ? 'iOS' : (Platform.isAndroid ? 'Android' : 'Desconhecido');
       print('🧠 Carregando modelo ArcFace...');
+      print('📱 Plataforma: $platform');
+
       final options = InterpreterOptions();
+
+      // ✅ Log específico para iOS
+      if (Platform.isIOS) {
+        print('🍎 [iOS] Tentando carregar modelo TensorFlow Lite...');
+        await Sentry.captureMessage(
+          'iOS: Iniciando carregamento do modelo ArcFace',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('platform', 'iOS');
+            scope.setTag('model_loading', 'start');
+          },
+        );
+      }
 
       _interpreter = await Interpreter.fromAsset(
         'assets/models/arcface.tflite',
@@ -40,9 +57,43 @@ class FaceRecognitionService {
       print('📊 Input: ${inputTensor.shape}');
       print('📊 Output: ${outputTensor.shape}');
       print('🎯 Embedding size: $EMBEDDING_SIZE');
+
+      // ✅ Log específico para iOS
+      if (Platform.isIOS) {
+        print('🍎 [iOS] Modelo carregado com sucesso!');
+        await Sentry.captureMessage(
+          'iOS: Modelo ArcFace carregado com sucesso',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('platform', 'iOS');
+            scope.setTag('model_loading', 'success');
+            scope.setContexts('model_info', {
+              'input_shape': inputTensor.shape.toString(),
+              'output_shape': outputTensor.shape.toString(),
+              'embedding_size': EMBEDDING_SIZE,
+            });
+          },
+        );
+      }
+
       _modelLoaded = true;
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Erro ao carregar ArcFace: $e');
+
+      // ✅ Log específico para iOS
+      if (Platform.isIOS) {
+        print('🍎 [iOS] ERRO CRÍTICO ao carregar modelo: $e');
+        await Sentry.captureException(
+          e,
+          stackTrace: stackTrace,
+          hint: Hint.withMap({
+            'context': 'iOS: Falha ao carregar modelo ArcFace',
+            'platform': 'iOS',
+            'model_path': 'assets/models/arcface.tflite',
+          }),
+        );
+      }
+
       rethrow;
     }
   }
@@ -51,6 +102,11 @@ class FaceRecognitionService {
   Future<List<double>> extractEmbedding(img.Image image) async {
     if (!_modelLoaded) await init();
     try {
+      // ✅ Log específico para iOS
+      if (Platform.isIOS) {
+        print('🍎 [iOS] Extraindo embedding - Imagem ${image.width}x${image.height}, ${image.numChannels} canais');
+      }
+
       final rgb = _ensureRGB(image);
       final resized = img.copyResize(rgb, width: INPUT_SIZE, height: INPUT_SIZE);
       final input = _preprocessArcFace(resized);
@@ -59,19 +115,43 @@ class FaceRecognitionService {
       _interpreter!.run(input, output);
 
       final embedding = _normalizeL2(output[0]);
+
+      // ✅ Log específico para iOS
+      if (Platform.isIOS) {
+        print('🍎 [iOS] Embedding extraído com sucesso! Tamanho: ${embedding.length}');
+      }
+
       return embedding;
     } catch (e, stackTrace) {
       print('❌ Erro no extractEmbedding: $e');
-      await Sentry.captureException(
-        e,
-        stackTrace: stackTrace,
-        hint: Hint.withMap({
-          'context': 'Erro ao extrair embedding facial',
-          'image_width': image.width,
-          'image_height': image.height,
-          'image_channels': image.numChannels,
-        }),
-      );
+
+      // ✅ Log específico para iOS
+      if (Platform.isIOS) {
+        print('🍎 [iOS] ERRO ao extrair embedding: $e');
+        await Sentry.captureException(
+          e,
+          stackTrace: stackTrace,
+          hint: Hint.withMap({
+            'context': 'iOS: Erro ao extrair embedding facial',
+            'platform': 'iOS',
+            'image_width': image.width,
+            'image_height': image.height,
+            'image_channels': image.numChannels,
+            'model_loaded': _modelLoaded,
+          }),
+        );
+      } else {
+        await Sentry.captureException(
+          e,
+          stackTrace: stackTrace,
+          hint: Hint.withMap({
+            'context': 'Erro ao extrair embedding facial',
+            'image_width': image.width,
+            'image_height': image.height,
+            'image_channels': image.numChannels,
+          }),
+        );
+      }
       rethrow;
     }
   }
@@ -135,22 +215,60 @@ class FaceRecognitionService {
   Future<Map<String, dynamic>?> recognize(img.Image faceImage) async {
     try {
       print('🔍 Iniciando reconhecimento com ArcFace...');
+
+      // ✅ Log específico para iOS
+      if (Platform.isIOS) {
+        print('🍎 [iOS] Iniciando reconhecimento facial');
+        await Sentry.captureMessage(
+          'iOS: Iniciando reconhecimento facial',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('platform', 'iOS');
+            scope.setTag('recognition', 'start');
+          },
+        );
+      }
+
       final probe = await extractEmbedding(faceImage);
 
       final known = await DatabaseHelper.instance.getTodosAlunosComFacial();
+
+      // ✅ Log específico para iOS
+      if (Platform.isIOS) {
+        print('🍎 [iOS] Alunos cadastrados: ${known.length}');
+      }
+
       if (known.isEmpty) {
         print('📭 Nenhum aluno com facial cadastrada');
-        await Sentry.captureMessage(
-          'Tentativa de reconhecimento facial sem alunos cadastrados',
-          level: SentryLevel.warning,
-          withScope: (scope) {
-            scope.setTag('facial_error_type', 'no_students_registered');
-            scope.setContexts('info', {
-              'total_students': 0,
-              'message': 'Nenhum aluno com facial cadastrada no banco de dados',
-            });
-          },
-        );
+
+        // ✅ Log específico para iOS
+        if (Platform.isIOS) {
+          print('🍎 [iOS] AVISO: Nenhum aluno cadastrado no banco de dados');
+          await Sentry.captureMessage(
+            'iOS: Tentativa de reconhecimento sem alunos cadastrados',
+            level: SentryLevel.warning,
+            withScope: (scope) {
+              scope.setTag('platform', 'iOS');
+              scope.setTag('facial_error_type', 'no_students_registered');
+              scope.setContexts('info', {
+                'total_students': 0,
+                'message': 'Nenhum aluno com facial cadastrada no banco de dados',
+              });
+            },
+          );
+        } else {
+          await Sentry.captureMessage(
+            'Tentativa de reconhecimento facial sem alunos cadastrados',
+            level: SentryLevel.warning,
+            withScope: (scope) {
+              scope.setTag('facial_error_type', 'no_students_registered');
+              scope.setContexts('info', {
+                'total_students': 0,
+                'message': 'Nenhum aluno com facial cadastrada no banco de dados',
+              });
+            },
+          );
+        }
         return null;
       }
 
@@ -172,23 +290,51 @@ class FaceRecognitionService {
 
       print('🎯 Menor distância L2: ${bestDistance.toStringAsFixed(4)}');
 
+      // ✅ Log específico para iOS
+      if (Platform.isIOS) {
+        print('🍎 [iOS] Melhor match: ${best?['nome'] ?? 'N/A'} - Distância: ${bestDistance.toStringAsFixed(4)} (Threshold: ${DISTANCE_THRESHOLD.toStringAsFixed(2)})');
+      }
+
       if (bestDistance <= DISTANCE_THRESHOLD && best != null) {
         print('✅ RECONHECIDO: ${best['nome']}');
-        await Sentry.captureMessage(
-          'Reconhecimento facial bem-sucedido',
-          level: SentryLevel.info,
-          withScope: (scope) {
-            scope.setTag('facial_result', 'success');
-            scope.setContexts('recognition', {
-              'student_name': best!['nome'],
-              'student_cpf': best['cpf'],
-              'distance_l2': bestDistance,
-              'confidence': normalizedConfidence,
-              'threshold': DISTANCE_THRESHOLD,
-              'total_students_checked': known.length,
-            });
-          },
-        );
+
+        // ✅ Log específico para iOS
+        if (Platform.isIOS) {
+          print('🍎 [iOS] ✅ SUCESSO: Face reconhecida - ${best['nome']}');
+          await Sentry.captureMessage(
+            'iOS: Reconhecimento facial bem-sucedido - ${best['nome']}',
+            level: SentryLevel.info,
+            withScope: (scope) {
+              scope.setTag('platform', 'iOS');
+              scope.setTag('facial_result', 'success');
+              scope.setContexts('recognition', {
+                'student_name': best['nome'],
+                'student_cpf': best['cpf'],
+                'distance_l2': bestDistance,
+                'confidence': normalizedConfidence,
+                'threshold': DISTANCE_THRESHOLD,
+                'total_students_checked': known.length,
+              });
+            },
+          );
+        } else {
+          await Sentry.captureMessage(
+            'Reconhecimento facial bem-sucedido',
+            level: SentryLevel.info,
+            withScope: (scope) {
+              scope.setTag('facial_result', 'success');
+              scope.setContexts('recognition', {
+                'student_name': best['nome'],
+                'student_cpf': best['cpf'],
+                'distance_l2': bestDistance,
+                'confidence': normalizedConfidence,
+                'threshold': DISTANCE_THRESHOLD,
+                'total_students_checked': known.length,
+              });
+            },
+          );
+        }
+
         return {
           ...best,
           'similarity_score': normalizedConfidence,
@@ -197,21 +343,43 @@ class FaceRecognitionService {
       }
 
       print('❌ Não reconhecido (distância acima de ${DISTANCE_THRESHOLD.toStringAsFixed(2)})');
-      await Sentry.captureMessage(
-        'Facial não encontrada - Nenhum aluno reconhecido',
-        level: SentryLevel.warning,
-        withScope: (scope) {
-          scope.setTag('facial_error_type', 'face_not_recognized');
-          scope.setContexts('recognition_attempt', {
-            'best_distance': bestDistance,
-            'threshold': DISTANCE_THRESHOLD,
-            'distance_difference': bestDistance - DISTANCE_THRESHOLD,
-            'total_students_checked': known.length,
-            'best_match_name': best?['nome'] ?? 'N/A',
-            'best_match_cpf': best?['cpf'] ?? 'N/A',
-          });
-        },
-      );
+
+      // ✅ Log específico para iOS
+      if (Platform.isIOS) {
+        print('🍎 [iOS] ❌ FALHA: Face não reconhecida - Melhor match: ${best?['nome'] ?? 'N/A'} com distância ${bestDistance.toStringAsFixed(4)}');
+        await Sentry.captureMessage(
+          'iOS: Face não reconhecida',
+          level: SentryLevel.warning,
+          withScope: (scope) {
+            scope.setTag('platform', 'iOS');
+            scope.setTag('facial_error_type', 'face_not_recognized');
+            scope.setContexts('recognition_attempt', {
+              'best_distance': bestDistance,
+              'threshold': DISTANCE_THRESHOLD,
+              'distance_difference': bestDistance - DISTANCE_THRESHOLD,
+              'total_students_checked': known.length,
+              'best_match_name': best?['nome'] ?? 'N/A',
+              'best_match_cpf': best?['cpf'] ?? 'N/A',
+            });
+          },
+        );
+      } else {
+        await Sentry.captureMessage(
+          'Facial não encontrada - Nenhum aluno reconhecido',
+          level: SentryLevel.warning,
+          withScope: (scope) {
+            scope.setTag('facial_error_type', 'face_not_recognized');
+            scope.setContexts('recognition_attempt', {
+              'best_distance': bestDistance,
+              'threshold': DISTANCE_THRESHOLD,
+              'distance_difference': bestDistance - DISTANCE_THRESHOLD,
+              'total_students_checked': known.length,
+              'best_match_name': best?['nome'] ?? 'N/A',
+              'best_match_cpf': best?['cpf'] ?? 'N/A',
+            });
+          },
+        );
+      }
       return null;
     } catch (e, stackTrace) {
       print('❌ Erro no reconhecimento: $e');

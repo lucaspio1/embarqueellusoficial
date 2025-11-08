@@ -2,6 +2,7 @@
 
 **Data:** 08/11/2025
 **Status:** ✅ RESOLVIDO
+**Versão:** 1.0.7
 
 ---
 
@@ -12,15 +13,25 @@
 - **Impacto:** iOS bloqueia conexões HTTPS sem configuração explícita
 - **Resultado:** Nenhum log do Sentry chega ao servidor
 
-### 2. 🔴 CRÍTICO: Sentry não funciona em modo Debug no iOS
+### 2. 🔴 CRÍTICO: Backend bloqueado (Google Apps Script)
+- **Causa:** URLs do Google Apps Script não configuradas no `Info.plist`
+- **Impacto:** iOS bloqueia chamadas API para `script.google.com`
+- **Resultado:** App não consegue buscar alunos, sincronizar dados
+
+### 3. 🔴 CRÍTICO: Sentry não funciona em modo Debug no iOS
 - **Causa:** Limitação do iOS em modo Debug
 - **Impacto:** Logs não são enviados durante desenvolvimento
 - **Resultado:** Impossível debugar problemas
 
-### 3. 🟡 MÉDIO: Configuração incorreta de debug/production
+### 4. 🟡 MÉDIO: Configuração incorreta de debug/production
 - **Causa:** `options.debug = true` sempre, mesmo em produção
 - **Impacto:** Performance reduzida e logs excessivos
 - **Resultado:** App mais lento
+
+### 5. 🟡 MÉDIO: Falta de logs específicos para iOS
+- **Causa:** Código não diferenciava iOS de Android
+- **Impacto:** Difícil diagnosticar problemas específicos do iOS
+- **Resultado:** Impossível saber onde falha o reconhecimento facial
 
 ---
 
@@ -31,13 +42,12 @@
 **Arquivo:** `ios/Runner/Info.plist`
 
 ```xml
-<!-- ✅ Configuração de segurança de rede para permitir Sentry -->
+<!-- ✅ Configuração de segurança de rede para permitir Sentry e APIs do Google -->
 <key>NSAppTransportSecurity</key>
 <dict>
-    <!-- Permite conexões HTTPS com configurações específicas -->
     <key>NSExceptionDomains</key>
     <dict>
-        <!-- Configuração para Sentry -->
+        <!-- Sentry -->
         <key>ingest.us.sentry.io</key>
         <dict>
             <key>NSIncludesSubdomains</key>
@@ -56,15 +66,47 @@
             <key>NSExceptionRequiresForwardSecrecy</key>
             <false/>
         </dict>
+        <!-- Google Apps Script (Backend) -->
+        <key>script.google.com</key>
+        <dict>
+            <key>NSIncludesSubdomains</key>
+            <true/>
+            <key>NSExceptionAllowsInsecureHTTPLoads</key>
+            <false/>
+            <key>NSExceptionRequiresForwardSecrecy</key>
+            <false/>
+        </dict>
+        <!-- Google Docs/Sheets -->
+        <key>docs.google.com</key>
+        <dict>
+            <key>NSIncludesSubdomains</key>
+            <true/>
+            <key>NSExceptionAllowsInsecureHTTPLoads</key>
+            <false/>
+            <key>NSExceptionRequiresForwardSecrecy</key>
+            <false/>
+        </dict>
+        <!-- Google APIs -->
+        <key>googleapis.com</key>
+        <dict>
+            <key>NSIncludesSubdomains</key>
+            <true/>
+            <key>NSExceptionAllowsInsecureHTTPLoads</key>
+            <false/>
+            <key>NSExceptionRequiresForwardSecrecy</key>
+            <false/>
+        </dict>
     </dict>
 </dict>
 ```
 
 **O que faz:**
-- Permite explicitamente conexões HTTPS para `ingest.us.sentry.io` e `sentry.io`
-- Mantém segurança (não permite HTTP inseguro)
-- Permite subdomínios do Sentry
-- Desabilita Forward Secrecy apenas para Sentry (necessário para compatibilidade)
+- ✅ Permite conexões HTTPS para `ingest.us.sentry.io` e `sentry.io` (Sentry)
+- ✅ Permite conexões HTTPS para `script.google.com` (Google Apps Script - Backend)
+- ✅ Permite conexões HTTPS para `docs.google.com` (Google Sheets)
+- ✅ Permite conexões HTTPS para `googleapis.com` (APIs do Google)
+- ✅ Mantém segurança (não permite HTTP inseguro)
+- ✅ Desabilita Forward Secrecy apenas para compatibilidade
 
 ---
 
@@ -103,6 +145,39 @@ await SentryFlutter.init(
 - `kReleaseMode`: true apenas em Release, false em Debug/Profile
 - Logs do Sentry apenas em desenvolvimento
 - Performance máxima em produção
+
+---
+
+### Correção 3: Adicionados logs específicos para iOS
+
+**Arquivo:** `lib/services/face_recognition_service.dart`
+
+**Mudanças:**
+- ✅ Importado `dart:io` para detectar plataforma
+- ✅ Logs específicos `🍎 [iOS]` para facilitar debug
+- ✅ Tags `platform: iOS` em todos os eventos Sentry
+- ✅ Logs detalhados em cada etapa:
+  - Carregamento do modelo TensorFlow Lite
+  - Extração de embeddings
+  - Reconhecimento facial (início, quantidade de alunos, resultados)
+  - Mensagens de sucesso/falha específicas para iOS
+
+**Exemplo de logs iOS:**
+```
+🍎 [iOS] Tentando carregar modelo TensorFlow Lite...
+🍎 [iOS] Modelo carregado com sucesso!
+🍎 [iOS] Iniciando reconhecimento facial
+🍎 [iOS] Alunos cadastrados: 15
+🍎 [iOS] Extraindo embedding - Imagem 640x480, 3 canais
+🍎 [iOS] Embedding extraído com sucesso! Tamanho: 512
+🍎 [iOS] Melhor match: João Silva - Distância: 0.8523 (Threshold: 1.10)
+🍎 [iOS] ✅ SUCESSO: Face reconhecida - João Silva
+```
+
+**Benefícios:**
+- Fácil identificar problemas específicos do iOS nos logs do Sentry
+- Todos os eventos iOS têm tag `platform: iOS` para filtrar
+- Possível ver exatamente onde o reconhecimento falha
 
 ---
 
