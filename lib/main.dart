@@ -13,6 +13,27 @@ import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/config/app_config.dart';
 
 Future<void> main() async {
+  // ✅ DIAGNÓSTICO: Verificar modo de build ANTES de inicializar Sentry
+  print('');
+  print('🔍 ========================================');
+  print('🔍 DIAGNÓSTICO DE BUILD iOS');
+  print('🔍 ========================================');
+  print('📱 kDebugMode: $kDebugMode');
+  print('📱 kReleaseMode: $kReleaseMode');
+  print('📱 kProfileMode: $kProfileMode');
+
+  if (kDebugMode) {
+    print('⚠️  ATENÇÃO: App em modo DEBUG');
+    print('⚠️  Sentry NÃO funciona em Debug no iOS!');
+    print('⚠️  Use: flutter run --profile ou flutter run --release');
+  } else if (kProfileMode) {
+    print('✅ App em modo PROFILE - Sentry funcionará');
+  } else if (kReleaseMode) {
+    print('✅ App em modo RELEASE - Sentry funcionará');
+  }
+  print('🔍 ========================================');
+  print('');
+
   await SentryFlutter.init(
     (options) {
       options.dsn = 'https://16c773f79c6fc2a3a4951733ce3570ed@o4504103203045376.ingest.us.sentry.io/4510326779740160';
@@ -21,10 +42,55 @@ Future<void> main() async {
       options.debug = kDebugMode;
       // ✅ Environment correto: production em release, development em debug
       options.environment = kReleaseMode ? 'production' : 'development';
+
+      // ✅ Callback para verificar se Sentry está enviando eventos
+      options.beforeSend = (event, hint) {
+        print('📤 Sentry: Tentando enviar evento: ${event.message?.formatted ?? event.exception}');
+        return event;
+      };
     },
     appRunner: () async {
-      await Sentry.captureMessage('App iniciado com sucesso!');
-      print('✅ Sentry inicializado e evento de teste enviado');
+      print('');
+      print('🔍 ========================================');
+      print('🔍 TESTE DE INICIALIZAÇÃO DO SENTRY');
+      print('🔍 ========================================');
+
+      try {
+        // ✅ Teste 1: Enviar mensagem de teste
+        print('🧪 Teste 1: Enviando mensagem de teste...');
+        await Sentry.captureMessage(
+          'iOS: App iniciado - Teste de conectividade Sentry (v1.0.7)',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('platform', 'iOS');
+            scope.setTag('test_type', 'initialization');
+            scope.setTag('build_mode', kReleaseMode ? 'release' : (kProfileMode ? 'profile' : 'debug'));
+          },
+        );
+        print('✅ Mensagem de teste enviada ao Sentry');
+
+        // ✅ Teste 2: Enviar exceção de teste
+        print('🧪 Teste 2: Enviando exceção de teste...');
+        await Sentry.captureException(
+          Exception('iOS: Teste de exceção - Verificando conectividade Sentry'),
+          stackTrace: StackTrace.current,
+          hint: Hint.withMap({
+            'platform': 'iOS',
+            'test_type': 'exception_test',
+            'build_mode': kReleaseMode ? 'release' : (kProfileMode ? 'profile' : 'debug'),
+          }),
+        );
+        print('✅ Exceção de teste enviada ao Sentry');
+
+        print('✅ Sentry inicializado e eventos de teste enviados');
+        print('🔍 ========================================');
+        print('');
+      } catch (e) {
+        print('❌ ERRO ao enviar eventos de teste para Sentry: $e');
+        print('🔍 ========================================');
+        print('');
+      }
+
       WidgetsFlutterBinding.ensureInitialized();
 
       // Carregar arquivo .env
