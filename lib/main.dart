@@ -20,6 +20,8 @@ Future<void> main() async {
       options.environment = 'production';
     },
     appRunner: () async {
+      await Sentry.captureMessage('App iniciado com sucesso!');
+      print('✅ Sentry inicializado e evento de teste enviado');
       WidgetsFlutterBinding.ensureInitialized();
 
       // Carregar arquivo .env
