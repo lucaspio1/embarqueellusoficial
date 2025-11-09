@@ -61,8 +61,9 @@ class _ReconhecerAlunoScreenState extends State<ReconhecerAlunoScreen> {
         throw Exception('Nenhuma câmera disponível');
       }
 
+      // 🎯 CÂMERA TRASEIRA para melhor qualidade de reconhecimento
       final camera = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.front,
+        (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
 

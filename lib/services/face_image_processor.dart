@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' show Rect, Size;
+import 'dart:ui' show Rect;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -11,7 +11,8 @@ import 'package:image/image.dart' as img;
 
 import 'face_detection_service.dart';
 import 'yuv_converter.dart';
-import 'face_validation_service.dart';
+import 'camera_image_converter.dart';
+import 'platform_camera_utils.dart';
 
 /// Responsável por preparar imagens para a extração de embeddings:
 ///  * Detecta rostos via MLKit.
@@ -23,15 +24,21 @@ class FaceImageProcessor {
   static final FaceImageProcessor instance = FaceImageProcessor._();
 
   final FaceDetectionService _detection = FaceDetectionService.instance;
+  final CameraImageConverter _converter = CameraImageConverter.instance;
+  final PlatformCameraUtils _platformUtils = PlatformCameraUtils.instance;
 
   /// Processa um arquivo de imagem (por exemplo, foto capturada) e retorna a
   /// imagem já recortada/normalizada para uso pelo ArcFace.
   Future<img.Image> processFile(File file, {int outputSize = 112}) async {
+    debugPrint('\n[🖼️ FaceImageProcessor] Processando arquivo: ${file.path}');
+    debugPrint('[🖼️ FaceImageProcessor] Plataforma: ${_platformUtils.platformDescription}');
+
     final faces = await _detection.detectFromFile(file);
     if (faces.isEmpty) {
       throw Exception('Nenhum rosto detectado na imagem.');
     }
 
+    debugPrint('[✅ FaceImageProcessor] ${faces.length} rosto(s) detectado(s)');
     final bytes = await file.readAsBytes();
     return _processBytes(bytes, faces, outputSize: outputSize);
   }
@@ -39,17 +46,35 @@ class FaceImageProcessor {
   /// Processa a imagem de câmera em tempo real.
   ///
   /// Retorna `null` quando nenhum rosto é detectado no quadro.
+  ///
+  /// [camera] - Descrição da câmera usada (necessário para calcular rotação correta)
+  /// [enableDebugLogs] - Habilita logs detalhados de debug (útil para troubleshooting)
   Future<img.Image?> processCameraImage(
     CameraImage image, {
-    required InputImageRotation rotation,
+    required CameraDescription camera,
+    bool enableDebugLogs = false,
     int outputSize = 112,
   }) async {
-    final input = _inputImageFromCameraImage(image, rotation);
+    // Usar conversor centralizado que aplica rotação correta automaticamente
+    final input = _converter.convert(
+      image: image,
+      camera: camera,
+      enableDebugLogs: enableDebugLogs,
+    );
+
     final faces = await _detection.detect(input);
     if (faces.isEmpty) {
+      if (enableDebugLogs) {
+        debugPrint('[⚠️ FaceImageProcessor] Nenhum rosto detectado no frame');
+      }
       return null;
     }
 
+    if (enableDebugLogs) {
+      debugPrint('[✅ FaceImageProcessor] ${faces.length} rosto(s) detectado(s)');
+    }
+
+    // Converter CameraImage para RGBA usando YuvConverter
     final Uint8List rgba = YuvConverter.instance.toRgba(image);
     img.Image base = img.Image.fromBytes(
       width: image.width,
@@ -59,9 +84,14 @@ class FaceImageProcessor {
       order: img.ChannelOrder.rgba,
     );
 
+    // Aplicar rotação calculada pelo conversor
+    final rotation = _platformUtils.getImageRotation(camera: camera);
     base = _applyRotation(base, rotation);
+
+    // Ajustar bounding boxes dos rostos para a rotação aplicada
     final List<Face> rotatedFaces =
         faces.map((f) => _rotateFaceBoundingBox(f, rotation, image)).toList();
+
     return _cropFace(base, rotatedFaces, outputSize: outputSize);
   }
 
@@ -184,45 +214,6 @@ class FaceImageProcessor {
       }
     }
     return rgb;
-  }
-
-  InputImage _inputImageFromCameraImage(
-      CameraImage image, InputImageRotation rotation) {
-    final WriteBuffer buffer = WriteBuffer();
-    for (final Plane plane in image.planes) {
-      buffer.putUint8List(plane.bytes);
-    }
-    final Uint8List bytes = buffer.done().buffer.asUint8List();
-
-    final InputImageFormat? format = _mapInputFormat(image.format.raw);
-    if (format == null) {
-      throw Exception('Formato de imagem não suportado: ${image.format.raw}');
-    }
-
-    return InputImage.fromBytes(
-      bytes: bytes,
-      metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: rotation,
-        format: format,
-        bytesPerRow: image.planes.first.bytesPerRow,
-      ),
-    );
-  }
-
-  InputImageFormat? _mapInputFormat(int raw) {
-    switch (raw) {
-      case 17:
-        return InputImageFormat.nv21;
-      case 35:
-        return InputImageFormat.yuv_420_888;
-      case 842094169:
-        return InputImageFormat.yuv420;
-      case 1111970369:
-        return InputImageFormat.bgra8888;
-      default:
-        return null;
-    }
   }
 
   img.Image _applyRotation(img.Image image, InputImageRotation rotation) {

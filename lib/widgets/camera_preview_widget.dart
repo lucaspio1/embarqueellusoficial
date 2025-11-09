@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 
@@ -56,11 +57,18 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
     try {
       if (_cameras.isEmpty) return;
 
+      // 📱 Formato de imagem baseado na plataforma
+      // iOS: BGRA8888 (nativo)
+      // Android: YUV420 (padrão)
+      final imageFormat = Platform.isIOS
+          ? ImageFormatGroup.bgra8888
+          : ImageFormatGroup.yuv420;
+
       controller = CameraController(
         _cameras[_currentCameraIndex],
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.yuv420,
+        imageFormatGroup: imageFormat,
       );
 
       await controller!.initialize();
