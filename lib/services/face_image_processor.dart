@@ -227,27 +227,27 @@ class FaceImageProcessor {
       level: SentryLevel.info,
       withScope: (scope) {
         scope.setContexts('decoded_image', {
-          'width': decoded.width,
-          'height': decoded.height,
-          'channels': decoded.numChannels,
+          'width': decoded!.width,
+          'height': decoded!.height,
+          'channels': decoded!.numChannels,
         });
       },
     );
 
-    decoded = img.bakeOrientation(decoded);
+    final img.Image baked = img.bakeOrientation(decoded!);
 
     Sentry.captureMessage(
       '🔄 PROCESSOR: Orientação da imagem normalizada',
       level: SentryLevel.info,
       withScope: (scope) {
         scope.setContexts('baked_image', {
-          'width': decoded.width,
-          'height': decoded.height,
+          'width': baked.width,
+          'height': baked.height,
         });
       },
     );
 
-    return _cropFace(decoded, faces, outputSize: outputSize);
+    return _cropFace(baked, faces, outputSize: outputSize);
   }
 
   img.Image _cropFace(img.Image image, List<Face> faces,
