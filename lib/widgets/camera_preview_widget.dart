@@ -37,7 +37,32 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
 
   Future<void> _loadCamerasAndInitialize() async {
     try {
+      await Sentry.captureMessage(
+        '📱 INIT: Carregando câmeras disponíveis',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('platform', Platform.isIOS ? 'iOS' : 'Android');
+          scope.setTag('widget', 'camera_preview');
+        },
+      );
+
       _cameras = await availableCameras();
+
+      await Sentry.captureMessage(
+        '📱 INIT: Câmeras carregadas com sucesso',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('platform', Platform.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('cameras', {
+            'total_cameras': _cameras.length,
+            'cameras_list': _cameras
+                .map((c) =>
+                    '${c.name} - ${c.lensDirection} - sensor:${c.sensorOrientation}°')
+                .join(', '),
+            'requested_direction': widget.camera.lensDirection.toString(),
+          });
+        },
+      );
 
       // Encontrar o índice da câmera passada
       _currentCameraIndex = _cameras.indexWhere(
@@ -46,7 +71,16 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
       if (_currentCameraIndex == -1) _currentCameraIndex = 0;
 
       await _initializeCamera();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao carregar câmeras disponíveis',
+          'platform': Platform.isIOS ? 'iOS' : 'Android',
+        }),
+      );
+
       if (mounted) {
         Navigator.pop(context);
       }
@@ -55,7 +89,15 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
 
   Future<void> _initializeCamera() async {
     try {
-      if (_cameras.isEmpty) return;
+      if (_cameras.isEmpty) {
+        await Sentry.captureMessage(
+          '❌ ERRO: Nenhuma câmera disponível no dispositivo',
+          level: SentryLevel.error,
+        );
+        return;
+      }
+
+      final selectedCamera = _cameras[_currentCameraIndex];
 
       // 📱 Formato de imagem baseado na plataforma
       // iOS: BGRA8888 (nativo)
@@ -64,8 +106,24 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
           ? ImageFormatGroup.bgra8888
           : ImageFormatGroup.yuv420;
 
+      await Sentry.captureMessage(
+        '🎥 CAMERA: Inicializando câmera',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('platform', Platform.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('camera_config', {
+            'camera_name': selectedCamera.name,
+            'camera_direction': selectedCamera.lensDirection.toString(),
+            'sensor_orientation': '${selectedCamera.sensorOrientation}°',
+            'resolution': 'high',
+            'image_format': imageFormat.toString(),
+            'audio_enabled': false,
+          });
+        },
+      );
+
       controller = CameraController(
-        _cameras[_currentCameraIndex],
+        selectedCamera,
         ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: imageFormat,
@@ -73,10 +131,36 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
 
       await controller!.initialize();
 
+      await Sentry.captureMessage(
+        '✅ CAMERA: Câmera inicializada com sucesso',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('platform', Platform.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('camera_initialized', {
+            'preview_size': controller!.value.previewSize.toString(),
+            'aspect_ratio': controller!.value.aspectRatio.toString(),
+            'is_initialized': controller!.value.isInitialized,
+            'camera_name': selectedCamera.name,
+            'lens_direction': selectedCamera.lensDirection.toString(),
+          });
+        },
+      );
+
       if (mounted && !_disposed) {
         setState(() {});
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro crítico ao inicializar câmera',
+          'platform': Platform.isIOS ? 'iOS' : 'Android',
+          'camera_index': _currentCameraIndex,
+          'total_cameras': _cameras.length,
+        }),
+      );
+
       if (mounted) {
         Navigator.pop(context);
       }
@@ -109,32 +193,62 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
   }
 
   Future<void> _tirarFoto() async {
-    if (_tirandoFoto || controller == null || !controller!.value.isInitialized) return;
+    if (_tirandoFoto || controller == null || !controller!.value.isInitialized) {
+      await Sentry.captureMessage(
+        '⚠️ CAPTURE: Tentativa de captura bloqueada',
+        level: SentryLevel.warning,
+        withScope: (scope) {
+          scope.setContexts('capture_blocked', {
+            'is_taking_photo': _tirandoFoto,
+            'controller_null': controller == null,
+            'is_initialized': controller?.value.isInitialized ?? false,
+          });
+        },
+      );
+      return;
+    }
 
     setState(() => _tirandoFoto = true);
 
     try {
-      Sentry.addBreadcrumb(Breadcrumb(
-        message: '📸 Iniciando captura de foto',
-        category: 'camera',
+      final selectedCamera = _cameras[_currentCameraIndex];
+
+      await Sentry.captureMessage(
+        '📸 CAPTURE: Iniciando captura de foto',
         level: SentryLevel.info,
-        data: {
-          'camera_name': _cameras[_currentCameraIndex].name,
-          'camera_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
-          'resolution': controller!.value.previewSize.toString(),
+        withScope: (scope) {
+          scope.setTag('platform', Platform.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('capture_start', {
+            'camera_name': selectedCamera.name,
+            'camera_direction': selectedCamera.lensDirection.toString(),
+            'sensor_orientation': '${selectedCamera.sensorOrientation}°',
+            'preview_size': controller!.value.previewSize.toString(),
+            'aspect_ratio': controller!.value.aspectRatio.toString(),
+          });
         },
-      ));
+      );
 
       final image = await controller!.takePicture();
 
-      Sentry.addBreadcrumb(Breadcrumb(
-        message: '✅ Foto capturada com sucesso',
-        category: 'camera',
+      // Obter informações do arquivo capturado
+      final imageFile = File(image.path);
+      final fileSize = await imageFile.length();
+      final fileExists = await imageFile.exists();
+
+      await Sentry.captureMessage(
+        '✅ CAPTURE: Foto capturada com sucesso',
         level: SentryLevel.info,
-        data: {
-          'image_path': image.path,
+        withScope: (scope) {
+          scope.setTag('platform', Platform.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('capture_success', {
+            'image_path': image.path,
+            'file_size_bytes': fileSize,
+            'file_size_kb': (fileSize / 1024).toStringAsFixed(2),
+            'file_exists': fileExists,
+            'camera_used': selectedCamera.name,
+          });
         },
-      ));
+      );
 
       if (mounted && !_disposed) {
         Navigator.pop(context, image.path);
@@ -144,10 +258,14 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
         e,
         stackTrace: stackTrace,
         hint: Hint.withMap({
-          'context': 'Erro ao capturar foto com câmera',
+          'context': 'Erro crítico ao capturar foto com câmera',
+          'platform': Platform.isIOS ? 'iOS' : 'Android',
           'camera_name': _cameras.isNotEmpty ? _cameras[_currentCameraIndex].name : 'N/A',
           'camera_direction': _cameras.isNotEmpty
               ? _cameras[_currentCameraIndex].lensDirection.toString()
+              : 'N/A',
+          'sensor_orientation': _cameras.isNotEmpty
+              ? '${_cameras[_currentCameraIndex].sensorOrientation}°'
               : 'N/A',
         }),
       );
