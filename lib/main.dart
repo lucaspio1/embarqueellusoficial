@@ -1,5 +1,7 @@
 // lib/main.dart
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -13,18 +15,60 @@ import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/config/app_config.dart';
 
 Future<void> main() async {
+  // ✅ CRÍTICO: Capturar TODOS os erros não tratados (Flutter + Dart)
+  FlutterError.onError = (FlutterErrorDetails details) async {
+    print('❌ [Flutter Error] ${details.exception}');
+    await Sentry.captureException(
+      details.exception,
+      stackTrace: details.stack,
+      hint: Hint.withMap({'context': 'Flutter Framework Error'}),
+    );
+  };
+
+  // ✅ Capturar erros assíncronos não tratados
+  PlatformDispatcher.instance.onError = (error, stack) {
+    print('❌ [Async Error] $error');
+    Sentry.captureException(
+      error,
+      stackTrace: stack,
+      hint: Hint.withMap({'context': 'Async Unhandled Error'}),
+    );
+    return true;
+  };
+
   await SentryFlutter.init(
     (options) {
       options.dsn = 'https://16c773f79c6fc2a3a4951733ce3570ed@o4504103203045376.ingest.us.sentry.io/4510326779740160';
       options.tracesSampleRate = 1.0;
-      // ✅ Debug habilitado apenas em modo Debug, desabilitado em Release/Profile
-      options.debug = kDebugMode;
+
+      // ✅ CRÍTICO: SEMPRE habilitar debug para diagnóstico (remover depois que funcionar)
+      options.debug = true;
+
       // ✅ Environment correto: production em release, development em debug
       options.environment = kReleaseMode ? 'production' : 'development';
+
+      // ✅ Configurações extras para iOS
+      options.enableAutoSessionTracking = true;
+      options.sessionTrackingIntervalMillis = 30000;
+      options.attachScreenshot = true;
+      options.screenshotQuality = SentryScreenshotQuality.low;
+      options.attachViewHierarchy = true;
+
+      print('🔵 [Sentry Flutter] Configurando Sentry...');
+      print('🔵 [Sentry Flutter] DSN: ${options.dsn}');
+      print('🔵 [Sentry Flutter] Debug: ${options.debug}');
+      print('🔵 [Sentry Flutter] Environment: ${options.environment}');
+      print('🔵 [Sentry Flutter] Platform: ${Platform.isIOS ? "iOS" : "Android"}');
     },
     appRunner: () async {
-      await Sentry.captureMessage('App iniciado com sucesso!');
-      print('✅ Sentry inicializado e evento de teste enviado');
+      print('🔵 [Sentry Flutter] Iniciando app runner...');
+
+      // ✅ TESTE IMEDIATO: Enviar evento de teste
+      await Sentry.captureMessage(
+        '✅ App Flutter iniciado com sucesso! Platform: ${Platform.isIOS ? "iOS" : "Android"}',
+        level: SentryLevel.info,
+      );
+      print('✅ [Sentry Flutter] Evento de teste enviado!');
       WidgetsFlutterBinding.ensureInitialized();
 
       // Carregar arquivo .env

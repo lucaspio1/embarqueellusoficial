@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// Widget compartilhado para captura de fotos com layout moderno e profissional
 /// Usado em: cadastro facial, reconhecimento facial, etc.
@@ -116,13 +117,36 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
     setState(() => _tirandoFoto = true);
 
     try {
+      print('📸 [CameraPreview] ====== INÍCIO CAPTURA ======');
+      print('📸 [CameraPreview] Câmera: ${_cameras[_currentCameraIndex].name}');
+      print('📸 [CameraPreview] Direção: ${_cameras[_currentCameraIndex].lensDirection}');
+      print('📸 [CameraPreview] Resolução: ${controller!.value.previewSize}');
+
       final image = await controller!.takePicture();
+
+      print('✅ [CameraPreview] Foto capturada: ${image.path}');
+      print('📸 [CameraPreview] ====== CAPTURA CONCLUÍDA ======');
 
       if (mounted && !_disposed) {
         Navigator.pop(context, image.path);
       }
-    } catch (e) {
-      print('❌ Erro ao tirar foto: $e');
+    } catch (e, stackTrace) {
+      print('❌ [CameraPreview] ERRO ao tirar foto: $e');
+      print('❌ [CameraPreview] StackTrace: $stackTrace');
+
+      // ✅ Enviar para Sentry
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao capturar foto com câmera',
+          'camera_name': _cameras.isNotEmpty ? _cameras[_currentCameraIndex].name : 'N/A',
+          'camera_direction': _cameras.isNotEmpty
+              ? _cameras[_currentCameraIndex].lensDirection.toString()
+              : 'N/A',
+        }),
+      );
+
       if (mounted && !_disposed) {
         setState(() => _tirandoFoto = false);
         ScaffoldMessenger.of(context).showSnackBar(
