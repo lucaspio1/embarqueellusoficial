@@ -30,6 +30,9 @@ class FaceImageProcessor {
 
   /// Processa um arquivo de imagem (por exemplo, foto capturada) e retorna a
   /// imagem já recortada/normalizada para uso pelo ArcFace.
+  ///
+  /// IMPORTANTE: Este método lê e decodifica a imagem ANTES de detectar faces,
+  /// garantindo que a rotação EXIF seja aplicada corretamente no iOS.
   Future<img.Image> processFile(File file, {int outputSize = 112}) async {
     try {
       await Sentry.captureMessage(
@@ -72,7 +75,93 @@ class FaceImageProcessor {
         },
       );
 
-      final faces = await _detection.detectFromFile(file);
+      // ⚠️ CORREÇÃO iOS 15.5:
+      // Ler e decodificar a imagem PRIMEIRO para aplicar rotação EXIF
+      // ANTES de detectar faces. InputImage.fromFile() nem sempre
+      // aplica EXIF corretamente no iOS.
+      final bytes = await file.readAsBytes();
+
+      await Sentry.captureMessage(
+        '📊 PROCESSOR: Bytes da imagem lidos',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('bytes_read', {
+            'total_bytes': bytes.length,
+          });
+        },
+      );
+
+      // Decodificar e aplicar orientação EXIF
+      img.Image? decoded = img.decodeImage(bytes);
+      if (decoded == null) {
+        await Sentry.captureMessage(
+          '❌ PROCESSOR: Falha ao decodificar imagem',
+          level: SentryLevel.error,
+        );
+        throw Exception('Falha ao decodificar imagem.');
+      }
+
+      await Sentry.captureMessage(
+        '🖼️ PROCESSOR: Imagem decodificada',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('decoded_image', {
+            'width': decoded!.width,
+            'height': decoded!.height,
+            'channels': decoded!.numChannels,
+            'has_exif': decoded!.exif.hasExif,
+          });
+        },
+      );
+
+      // ✅ Aplicar rotação EXIF (crítico para iOS)
+      final img.Image oriented = img.bakeOrientation(decoded);
+
+      await Sentry.captureMessage(
+        '✅ PROCESSOR: Orientação EXIF aplicada',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('oriented_image', {
+            'width': oriented.width,
+            'height': oriented.height,
+            'rotation_applied': oriented.width != decoded!.width || oriented.height != decoded.height,
+          });
+        },
+      );
+
+      // Salvar imagem orientada em arquivo temporário para detecção
+      // (necessário porque InputImage.fromBytes pode ter problemas de formato)
+      final tempDir = file.parent.path;
+      final tempFile = File('$tempDir/temp_oriented_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+      List<Face> faces;
+      try {
+        final orientedBytes = img.encodeJpg(oriented, quality: 95);
+        await tempFile.writeAsBytes(orientedBytes);
+
+        await Sentry.captureMessage(
+          '💾 PROCESSOR: Imagem orientada salva temporariamente',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setContexts('temp_file', {
+              'path': tempFile.path,
+              'size_bytes': orientedBytes.length,
+            });
+          },
+        );
+
+        // Criar InputImage do arquivo orientado (método mais confiável)
+        final inputImage = InputImage.fromFilePath(tempFile.path);
+
+        // Agora detectar faces na imagem ORIENTADA
+        faces = await _detection.detect(inputImage);
+
+      } finally {
+        // Garantir limpeza do arquivo temporário
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
+      }
 
       if (faces.isEmpty) {
         await Sentry.captureMessage(
@@ -84,8 +173,11 @@ class FaceImageProcessor {
             scope.setContexts('detection_failed', {
               'file_size_kb': (fileSize / 1024).toStringAsFixed(2),
               'file_path': file.path,
+              'image_width': oriented.width,
+              'image_height': oriented.height,
               'message': 'Google MLKit não encontrou nenhuma face na imagem capturada',
               'platform': _platformUtils.platformDescription,
+              'exif_applied': true,
             });
           },
         );
@@ -102,23 +194,14 @@ class FaceImageProcessor {
             'faces_count': faces.length,
             'file_size_kb': (fileSize / 1024).toStringAsFixed(2),
             'primary_face_bbox': '${faces.first.boundingBox.width.toInt()}x${faces.first.boundingBox.height.toInt()}',
+            'image_width': oriented.width,
+            'image_height': oriented.height,
           });
         },
       );
 
-      final bytes = await file.readAsBytes();
-
-      await Sentry.captureMessage(
-        '📊 PROCESSOR: Bytes da imagem lidos',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setContexts('bytes_read', {
-            'total_bytes': bytes.length,
-          });
-        },
-      );
-
-      final result = _processBytes(bytes, faces, outputSize: outputSize);
+      // Processar com a imagem já orientada
+      final result = _cropFace(oriented, faces, outputSize: outputSize);
 
       await Sentry.captureMessage(
         '✅ PROCESSOR: PROCESSAMENTO CONCLUÍDO - Face recortada e normalizada',
