@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/face_image_processor.dart';
@@ -139,6 +140,21 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         await DataService().fetchData(nomeAba, onibus: numeroOnibus);
         await _carregarAlunos();
 
+        await Sentry.captureMessage(
+          'Lista de embarque sincronizada com sucesso',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('screen', 'controle_alunos');
+            scope.setTag('sync_type', 'lista_embarque');
+            scope.setContexts('sync_stats', {
+              'total_alunos': _todosAlunos.length,
+              'alunos_com_facial': _alunosComFacial.length,
+              'nome_aba': nomeAba,
+              'numero_onibus': numeroOnibus,
+            });
+          },
+        );
+
         if (mounted && mostrarMensagem) {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -161,8 +177,18 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           );
         }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ [ControleAlunos] Erro ao sincronizar: $e');
+
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao sincronizar lista de embarque',
+          'screen': 'controle_alunos',
+        }),
+      );
+
       if (mounted && mostrarMensagem) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -217,6 +243,19 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
       final faces = await FaceDetectionService.instance.detect(inputImage);
 
       if (faces.isEmpty) {
+        await Sentry.captureMessage(
+          'Nenhum rosto detectado no cadastro facial',
+          level: SentryLevel.warning,
+          withScope: (scope) {
+            scope.setTag('screen', 'controle_alunos');
+            scope.setTag('error_type', 'no_face_detected');
+            scope.setContexts('aluno', {
+              'cpf': aluno['cpf'],
+              'nome': aluno['nome'],
+            });
+          },
+        );
+
         if (Navigator.canPop(context)) Navigator.pop(context);
         setState(() => _processando = false);
 
@@ -231,6 +270,20 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
       }
 
       if (faces.length > 1) {
+        await Sentry.captureMessage(
+          'Múltiplos rostos detectados no cadastro facial',
+          level: SentryLevel.warning,
+          withScope: (scope) {
+            scope.setTag('screen', 'controle_alunos');
+            scope.setTag('error_type', 'multiple_faces');
+            scope.setContexts('aluno', {
+              'cpf': aluno['cpf'],
+              'nome': aluno['nome'],
+              'faces_count': faces.length,
+            });
+          },
+        );
+
         if (Navigator.canPop(context)) Navigator.pop(context);
         setState(() => _processando = false);
 
@@ -269,6 +322,20 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('✅ [CadastroFacial] Salvo na tabela pessoas_facial com movimentação QUARTO');
 
+      await Sentry.captureMessage(
+        'Facial cadastrada com sucesso',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('screen', 'controle_alunos');
+          scope.setTag('tipo_cadastro', 'simples');
+          scope.setContexts('aluno', {
+            'cpf': aluno['cpf'],
+            'nome': aluno['nome'],
+            'embedding_dimensions': embedding.length,
+          });
+        },
+      );
+
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
         nome: aluno['nome'],
@@ -306,8 +373,19 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           duration: Duration(seconds: 4),
         ),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Erro ao cadastrar facial: $e');
+
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao cadastrar facial (cadastro simples)',
+          'aluno_cpf': aluno['cpf'],
+          'aluno_nome': aluno['nome'],
+        }),
+      );
+
       if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -395,6 +473,21 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('✅ [CadastroFacialAvançado] Salvo na tabela pessoas_facial com movimentação QUARTO');
 
+      await Sentry.captureMessage(
+        'Facial avançada cadastrada com sucesso',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('screen', 'controle_alunos');
+          scope.setTag('tipo_cadastro', 'avancado');
+          scope.setContexts('aluno', {
+            'cpf': aluno['cpf'],
+            'nome': aluno['nome'],
+            'embedding_dimensions': embedding.length,
+            'fotos_processadas': faces.length,
+          });
+        },
+      );
+
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
         nome: aluno['nome'],
@@ -433,8 +526,19 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           duration: Duration(seconds: 4),
         ),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Erro ao cadastrar facial avançada: $e');
+
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao cadastrar facial (cadastro avançado - 3 fotos)',
+          'aluno_cpf': aluno['cpf'],
+          'aluno_nome': aluno['nome'],
+        }),
+      );
+
       if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);
 
