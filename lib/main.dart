@@ -49,10 +49,9 @@ Future<void> main() async {
 
       // ✅ Configurações extras para iOS
       options.enableAutoSessionTracking = true;
-      options.sessionTrackingIntervalMillis = 30000;
-      options.attachScreenshot = true;
-      options.screenshotQuality = SentryScreenshotQuality.low;
-      options.attachViewHierarchy = true;
+      // options.attachScreenshot = true;  // Disponível em versões mais recentes
+      // options.screenshotQuality = SentryScreenshotQuality.low;
+      // options.attachViewHierarchy = true;  // Disponível em versões mais recentes
 
       print('🔵 [Sentry Flutter] Configurando Sentry...');
       print('🔵 [Sentry Flutter] DSN: ${options.dsn}');

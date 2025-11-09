@@ -18,7 +18,6 @@ import Sentry
       // ✅ Capturar TODOS os crashes nativos do iOS
       options.enableCaptureFailedRequests = true
       options.enableAutoSessionTracking = true
-      options.sessionTrackingIntervalMillis = 30000
 
       print("✅ [iOS Native] Sentry inicializado nativamente no AppDelegate")
       print("✅ [iOS Native] DSN configurado: \(options.dsn ?? "N/A")")
