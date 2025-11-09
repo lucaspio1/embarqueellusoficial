@@ -86,14 +86,35 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     try {
       print('\n🎯 [Reconhecimento] ====== INÍCIO FLUXO RECONHECIMENTO ======');
 
+      // ✅ SENTRY: Enviar evento explícito de início
+      await Sentry.captureMessage(
+        '🎯 ETAPA 1/4: Iniciando reconhecimento facial - Abrindo câmera',
+        level: SentryLevel.info,
+      );
+
       // ✅ Etapa 1: Abrir câmera
       print('🎯 [Reconhecimento] Etapa 1/3: Abrindo câmera...');
       final imagePath = await _abrirCameraTela(frontal: false);
       if (imagePath == null) {
         print('⚠️ [Reconhecimento] Usuário cancelou captura');
+        await Sentry.captureMessage(
+          '⚠️ ETAPA 1/4: Usuário CANCELOU captura de foto',
+          level: SentryLevel.warning,
+        );
         return;
       }
       print('✅ [Reconhecimento] Imagem capturada: $imagePath');
+
+      // ✅ SENTRY: Foto capturada
+      await Sentry.captureMessage(
+        '✅ ETAPA 2/4: Foto CAPTURADA com sucesso - Iniciando processamento',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('camera', {
+            'image_path': imagePath,
+          });
+        },
+      );
 
       setState(() => _processando = true);
       _mostrarProgresso('Reconhecendo rosto...');
@@ -103,9 +124,28 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       final processedImage = await _processarImagemParaModelo(File(imagePath));
       print('✅ [Reconhecimento] Imagem processada: ${processedImage.width}x${processedImage.height}');
 
+      // ✅ SENTRY: Imagem processada
+      await Sentry.captureMessage(
+        '✅ ETAPA 3/4: Imagem PROCESSADA - Face detectada e recortada',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('processamento', {
+            'width': processedImage.width,
+            'height': processedImage.height,
+            'channels': processedImage.numChannels,
+          });
+        },
+      );
+
       // ✅ Etapa 3: Reconhecer
       _atualizarProgresso('Comparando com banco de dados...');
       print('🎯 [Reconhecimento] Etapa 3/3: Comparando com banco de dados...');
+
+      await Sentry.captureMessage(
+        '🎯 ETAPA 4/4: COMPARANDO com banco de dados de alunos',
+        level: SentryLevel.info,
+      );
+
       final resultado = await _faceService.recognize(processedImage);
       print('✅ [Reconhecimento] Comparação concluída');
 

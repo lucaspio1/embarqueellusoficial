@@ -122,10 +122,32 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
       print('📸 [CameraPreview] Direção: ${_cameras[_currentCameraIndex].lensDirection}');
       print('📸 [CameraPreview] Resolução: ${controller!.value.previewSize}');
 
+      // ✅ SENTRY: Breadcrumb de início de captura
+      Sentry.addBreadcrumb(Breadcrumb(
+        message: '📸 Iniciando captura de foto',
+        category: 'camera',
+        level: SentryLevel.info,
+        data: {
+          'camera_name': _cameras[_currentCameraIndex].name,
+          'camera_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
+          'resolution': controller!.value.previewSize.toString(),
+        },
+      ));
+
       final image = await controller!.takePicture();
 
       print('✅ [CameraPreview] Foto capturada: ${image.path}');
       print('📸 [CameraPreview] ====== CAPTURA CONCLUÍDA ======');
+
+      // ✅ SENTRY: Breadcrumb de captura bem-sucedida
+      Sentry.addBreadcrumb(Breadcrumb(
+        message: '✅ Foto capturada com sucesso',
+        category: 'camera',
+        level: SentryLevel.info,
+        data: {
+          'image_path': image.path,
+        },
+      ));
 
       if (mounted && !_disposed) {
         Navigator.pop(context, image.path);

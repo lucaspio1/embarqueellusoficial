@@ -37,6 +37,19 @@ class FaceImageProcessor {
       debugPrint('[🖼️ FaceImageProcessor] Plataforma: ${_platformUtils.platformDescription}');
       debugPrint('[🖼️ FaceImageProcessor] Tamanho de saída: ${outputSize}x$outputSize');
 
+      // ✅ SENTRY: Início do processamento
+      await Sentry.captureMessage(
+        '🖼️ INICIANDO processamento de imagem facial',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('processamento', {
+            'file_path': file.path,
+            'platform': _platformUtils.platformDescription,
+            'output_size': '${outputSize}x$outputSize',
+          });
+        },
+      );
+
       // ✅ Verificar se arquivo existe
       if (!await file.exists()) {
         throw Exception('❌ Arquivo não existe: ${file.path}');
@@ -51,10 +64,36 @@ class FaceImageProcessor {
 
       if (faces.isEmpty) {
         debugPrint('[❌ FaceImageProcessor] NENHUM ROSTO DETECTADO!');
+
+        // ✅ SENTRY: Erro crítico - nenhuma face detectada
+        await Sentry.captureMessage(
+          '❌ CRÍTICO: NENHUM ROSTO DETECTADO na imagem!',
+          level: SentryLevel.error,
+          withScope: (scope) {
+            scope.setContexts('deteccao', {
+              'file_size_kb': (fileSize / 1024).toStringAsFixed(2),
+              'file_path': file.path,
+              'message': 'Google MLKit não encontrou nenhuma face na imagem capturada',
+            });
+          },
+        );
+
         throw Exception('Nenhum rosto detectado na imagem.');
       }
 
       debugPrint('[✅ FaceImageProcessor] ${faces.length} rosto(s) detectado(s)');
+
+      // ✅ SENTRY: Face(s) detectada(s) com sucesso
+      await Sentry.captureMessage(
+        '✅ FACE DETECTADA: ${faces.length} rosto(s) encontrado(s)',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('deteccao_sucesso', {
+            'faces_count': faces.length,
+            'file_size_kb': (fileSize / 1024).toStringAsFixed(2),
+          });
+        },
+      );
 
       // ✅ Processar bytes
       debugPrint('[🖼️ FaceImageProcessor] Lendo bytes da imagem...');
@@ -65,6 +104,20 @@ class FaceImageProcessor {
       final result = _processBytes(bytes, faces, outputSize: outputSize);
 
       debugPrint('[✅ FaceImageProcessor] ====== PROCESSAMENTO CONCLUÍDO ======\n');
+
+      // ✅ SENTRY: Processamento concluído
+      await Sentry.captureMessage(
+        '✅ PROCESSAMENTO CONCLUÍDO: Face recortada e normalizada',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('resultado', {
+            'width': result.width,
+            'height': result.height,
+            'channels': result.numChannels,
+          });
+        },
+      );
+
       return result;
     } catch (e, stackTrace) {
       debugPrint('[❌ FaceImageProcessor] ERRO CRÍTICO: $e');
