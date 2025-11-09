@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 /// Widget de câmera para capturar foto do rosto.
 ///
 /// 🎯 PADRÃO: Câmera traseira (melhor qualidade)
-/// Usa formato de imagem otimizado por plataforma (BGRA8888 no iOS, YUV420 no Android)
+/// Usa formato JPEG universal para captura única (compatível iOS 15.5+ e Android)
 class FaceCameraView extends StatefulWidget {
   final Function(XFile) onCapture;
   final bool useFrontCamera;
@@ -47,12 +47,13 @@ class _FaceCameraViewState extends State<FaceCameraView> {
         orElse: () => cameras.first,
       );
 
-      // 📱 Formato de imagem baseado na plataforma
-      // iOS: BGRA8888 (nativo)
-      // Android: YUV420 (padrão)
-      final imageFormat = Platform.isIOS
-          ? ImageFormatGroup.bgra8888
-          : ImageFormatGroup.yuv420;
+      // 📱 Formato JPEG para captura única (universal iOS/Android)
+      // ⚠️ IMPORTANTE para iOS 15.5+:
+      // - BGRA8888 funciona apenas para STREAMING (startImageStream)
+      // - Para takePicture(), sempre usa JPEG independente do imageFormatGroup
+      // - Usar JPEG diretamente evita problemas de rotação e metadados EXIF
+      // - É o formato mais confiável para captura única em ambas plataformas
+      final imageFormat = ImageFormatGroup.jpeg;
 
       _cameraController = CameraController(
         selectedCamera,
