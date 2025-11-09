@@ -53,19 +53,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
 
       // Apenas sincronizar na primeira vez (quando não há dados locais) ou se forçado
       if (alunosLocais.isEmpty || forcarSync) {
-        if (forcarSync) {
-          print('🔄 [Reconhecimento] Sincronização forçada - atualizando pessoas com facial...');
-        } else {
-          print('🔄 [Reconhecimento] Primeira abertura - sincronizando pessoas com facial...');
-        }
-        final syncResult = await AlunosSyncService.instance.syncPessoasFromSheets();
-        if (syncResult.success) {
-          print('✅ [Reconhecimento] ${syncResult.message}');
-        } else {
-          print('⚠️ [Reconhecimento] Erro ao sincronizar: ${syncResult.message}');
-        }
-      } else {
-        print('📱 [Reconhecimento] Carregando dados locais (${alunosLocais.length} alunos com facial)');
+        await AlunosSyncService.instance.syncPessoasFromSheets();
       }
 
       final alunos = await _db.getTodosAlunosComFacial();
@@ -77,35 +65,26 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         _carregando = false;
       });
     } catch (e) {
-      print("❌ Erro ao carregar dados: $e");
       setState(() => _carregando = false);
     }
   }
 
   Future<void> _iniciarReconhecimento() async {
     try {
-      print('\n🎯 [Reconhecimento] ====== INÍCIO FLUXO RECONHECIMENTO ======');
-
-      // ✅ SENTRY: Enviar evento explícito de início
       await Sentry.captureMessage(
         '🎯 ETAPA 1/4: Iniciando reconhecimento facial - Abrindo câmera',
         level: SentryLevel.info,
       );
 
-      // ✅ Etapa 1: Abrir câmera
-      print('🎯 [Reconhecimento] Etapa 1/3: Abrindo câmera...');
       final imagePath = await _abrirCameraTela(frontal: false);
       if (imagePath == null) {
-        print('⚠️ [Reconhecimento] Usuário cancelou captura');
         await Sentry.captureMessage(
           '⚠️ ETAPA 1/4: Usuário CANCELOU captura de foto',
           level: SentryLevel.warning,
         );
         return;
       }
-      print('✅ [Reconhecimento] Imagem capturada: $imagePath');
 
-      // ✅ SENTRY: Foto capturada
       await Sentry.captureMessage(
         '✅ ETAPA 2/4: Foto CAPTURADA com sucesso - Iniciando processamento',
         level: SentryLevel.info,
@@ -119,12 +98,8 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       setState(() => _processando = true);
       _mostrarProgresso('Reconhecendo rosto...');
 
-      // ✅ Etapa 2: Processar imagem
-      print('🎯 [Reconhecimento] Etapa 2/3: Processando imagem para modelo...');
       final processedImage = await _processarImagemParaModelo(File(imagePath));
-      print('✅ [Reconhecimento] Imagem processada: ${processedImage.width}x${processedImage.height}');
 
-      // ✅ SENTRY: Imagem processada
       await Sentry.captureMessage(
         '✅ ETAPA 3/4: Imagem PROCESSADA - Face detectada e recortada',
         level: SentryLevel.info,
@@ -137,9 +112,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         },
       );
 
-      // ✅ Etapa 3: Reconhecer
       _atualizarProgresso('Comparando com banco de dados...');
-      print('🎯 [Reconhecimento] Etapa 3/3: Comparando com banco de dados...');
 
       await Sentry.captureMessage(
         '🎯 ETAPA 4/4: COMPARANDO com banco de dados de alunos',
@@ -147,7 +120,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       );
 
       final resultado = await _faceService.recognize(processedImage);
-      print('✅ [Reconhecimento] Comparação concluída');
 
       if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);
@@ -181,7 +153,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         _mostrarDialogNaoReconhecido();
       }
     } catch (e, stackTrace) {
-      print('❌ Erro ao reconhecer aluno: $e');
       await Sentry.captureException(
         e,
         stackTrace: stackTrace,
@@ -256,16 +227,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       );
 
       // 🔄 Sincronizar embeddings em segundo plano após envio da movimentação
-      print('🔄 [Reconhecimento] Iniciando sincronização em segundo plano...');
-      AlunosSyncService.instance.syncPessoasFromSheets().then((result) {
-        if (result.success) {
-          print('✅ [Reconhecimento] Sincronização em segundo plano concluída: ${result.message}');
-        } else {
-          print('⚠️ [Reconhecimento] Erro na sincronização em segundo plano: ${result.message}');
-        }
-      }).catchError((e) {
-        print('❌ [Reconhecimento] Erro na sincronização em segundo plano: $e');
-      });
+      AlunosSyncService.instance.syncPessoasFromSheets();
 
       if (Navigator.canPop(context)) Navigator.pop(context);
 
@@ -337,7 +299,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
 
       return imagePath;
     } catch (e) {
-      print('❌ Erro ao abrir câmera: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao abrir câmera: $e')),
       );

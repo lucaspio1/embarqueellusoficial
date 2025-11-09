@@ -25,7 +25,6 @@ class FaceRecognitionService {
 
   Future<void> _loadModel() async {
     try {
-      print('🧠 Carregando modelo ArcFace...');
       final options = InterpreterOptions();
 
       _interpreter = await Interpreter.fromAsset(
@@ -33,16 +32,8 @@ class FaceRecognitionService {
         options: options,
       );
 
-      final inputTensor = _interpreter!.getInputTensors().first;
-      final outputTensor = _interpreter!.getOutputTensors().first;
-
-      print('✅ ArcFace carregado!');
-      print('📊 Input: ${inputTensor.shape}');
-      print('📊 Output: ${outputTensor.shape}');
-      print('🎯 Embedding size: $EMBEDDING_SIZE');
       _modelLoaded = true;
     } catch (e) {
-      print('❌ Erro ao carregar ArcFace: $e');
       rethrow;
     }
   }
@@ -61,7 +52,6 @@ class FaceRecognitionService {
       final embedding = _normalizeL2(output[0]);
       return embedding;
     } catch (e, stackTrace) {
-      print('❌ Erro no extractEmbedding: $e');
       await Sentry.captureException(
         e,
         stackTrace: stackTrace,
@@ -134,12 +124,10 @@ class FaceRecognitionService {
   /// Reconhecimento principal – consulta embeddings do SQLite
   Future<Map<String, dynamic>?> recognize(img.Image faceImage) async {
     try {
-      print('🔍 Iniciando reconhecimento com ArcFace...');
       final probe = await extractEmbedding(faceImage);
 
       final known = await DatabaseHelper.instance.getTodosAlunosComFacial();
       if (known.isEmpty) {
-        print('📭 Nenhum aluno com facial cadastrada');
         await Sentry.captureMessage(
           'Tentativa de reconhecimento facial sem alunos cadastrados',
           level: SentryLevel.warning,
@@ -170,10 +158,7 @@ class FaceRecognitionService {
           (DISTANCE_THRESHOLD - bestDistance) / DISTANCE_THRESHOLD;
       final double normalizedConfidence = confidence.clamp(0.0, 1.0);
 
-      print('🎯 Menor distância L2: ${bestDistance.toStringAsFixed(4)}');
-
       if (bestDistance <= DISTANCE_THRESHOLD && best != null) {
-        print('✅ RECONHECIDO: ${best['nome']}');
         await Sentry.captureMessage(
           'Reconhecimento facial bem-sucedido',
           level: SentryLevel.info,
@@ -196,7 +181,6 @@ class FaceRecognitionService {
         };
       }
 
-      print('❌ Não reconhecido (distância acima de ${DISTANCE_THRESHOLD.toStringAsFixed(2)})');
       await Sentry.captureMessage(
         'Facial não encontrada - Nenhum aluno reconhecido',
         level: SentryLevel.warning,
@@ -214,7 +198,6 @@ class FaceRecognitionService {
       );
       return null;
     } catch (e, stackTrace) {
-      print('❌ Erro no reconhecimento: $e');
       await Sentry.captureException(
         e,
         stackTrace: stackTrace,
@@ -254,9 +237,7 @@ class FaceRecognitionService {
         'nome': nome,
         'embedding': embedding,
       });
-      print('✅ Embedding salvo para: $nome');
     } catch (e) {
-      print('❌ Erro ao salvar embedding: $e');
       rethrow;
     }
   }
@@ -268,11 +249,9 @@ class FaceRecognitionService {
 
   Future<void> saveEmbeddingEnhanced(String cpf, String nome, List<img.Image> faces) async {
     if (faces.isEmpty) throw Exception('Nenhuma imagem fornecida');
-    print('📸 Processando ${faces.length} imagens para embedding avançado...');
 
     final acc = List<double>.filled(EMBEDDING_SIZE, 0.0);
     for (int i = 0; i < faces.length; i++) {
-      print('   -> Imagem ${i + 1}/${faces.length}');
       final emb = await extractEmbedding(faces[i]);
       for (int j = 0; j < EMBEDDING_SIZE; j++) {
         acc[j] += emb[j];
@@ -283,7 +262,6 @@ class FaceRecognitionService {
     }
     final normalized = _normalizeL2(acc);
     await saveEmbedding(cpf, nome, normalized);
-    print('✅ Embedding avançado salvo');
   }
 
   void dispose() {

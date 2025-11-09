@@ -17,7 +17,6 @@ import 'package:embarqueellus/config/app_config.dart';
 Future<void> main() async {
   // ✅ CRÍTICO: Capturar TODOS os erros não tratados (Flutter + Dart)
   FlutterError.onError = (FlutterErrorDetails details) async {
-    print('❌ [Flutter Error] ${details.exception}');
     await Sentry.captureException(
       details.exception,
       stackTrace: details.stack,
@@ -27,7 +26,6 @@ Future<void> main() async {
 
   // ✅ Capturar erros assíncronos não tratados
   PlatformDispatcher.instance.onError = (error, stack) {
-    print('❌ [Async Error] $error');
     Sentry.captureException(
       error,
       stackTrace: stack,
@@ -52,100 +50,51 @@ Future<void> main() async {
       // options.attachScreenshot = true;  // Disponível em versões mais recentes
       // options.screenshotQuality = SentryScreenshotQuality.low;
       // options.attachViewHierarchy = true;  // Disponível em versões mais recentes
-
-      print('🔵 [Sentry Flutter] Configurando Sentry...');
-      print('🔵 [Sentry Flutter] DSN: ${options.dsn}');
-      print('🔵 [Sentry Flutter] Debug: ${options.debug}');
-      print('🔵 [Sentry Flutter] Environment: ${options.environment}');
-      print('🔵 [Sentry Flutter] Platform: ${Platform.isIOS ? "iOS" : "Android"}');
     },
     appRunner: () async {
-      print('🔵 [Sentry Flutter] Iniciando app runner...');
-
       // ✅ TESTE IMEDIATO: Enviar evento de teste
       await Sentry.captureMessage(
         '✅ App Flutter iniciado com sucesso! Platform: ${Platform.isIOS ? "iOS" : "Android"}',
         level: SentryLevel.info,
       );
-      print('✅ [Sentry Flutter] Evento de teste enviado!');
       WidgetsFlutterBinding.ensureInitialized();
 
       // Carregar arquivo .env
       try {
         await dotenv.load(fileName: ".env");
-        print('✅ Arquivo .env carregado com sucesso');
       } catch (e) {
-        print('⚠️  Erro ao carregar .env: $e');
-        print('   Certifique-se que o arquivo .env existe na raiz do projeto');
         await Sentry.captureException(e, hint: Hint.withMap({'context': 'Erro ao carregar .env'}));
       }
 
       try {
-        print('🚀 ========================================');
-        print('🚀 ELLUS - Inicializando Aplicação');
-        print('🚀 ========================================');
-
-        print('');
-        print('⚙️  [1/5] Validando Configurações...');
         AppConfig.instance.printConfig();
         if (!AppConfig.instance.isValid) {
-          print('❌ ERRO: Configurações inválidas!');
-          print('   Verifique o arquivo .env na raiz do projeto');
           await Sentry.captureMessage(
             'Configurações inválidas no AppConfig',
             level: SentryLevel.error,
           );
-        } else {
-          print('✅ Configurações válidas!');
         }
 
-        print('');
-        print('💾 [2/5] Inicializando Banco de Dados...');
         final db = DatabaseHelper.instance;
         await db.database;
         await db.ensureFacialSchema();
-        print('✅ Banco de dados pronto!');
-        print('   - Tabelas: passageiros, alunos, embeddings, logs, sync_queue');
 
-        print('');
-        print('🧠 [3/5] Carregando Modelo ArcFace...');
         try {
           await FaceRecognitionService.instance.init();
-          print('✅ Modelo ArcFace carregado!');
-          print('   - Pronto para reconhecimento offline');
-          print('   - Limiar L2: ${FaceRecognitionService.DISTANCE_THRESHOLD.toStringAsFixed(2)}');
         } catch (e) {
-          print('⚠️  Aviso: Modelo ArcFace não encontrado');
-          print('   Certifique-se que o arquivo existe em:');
-          print('   assets/models/arcface.tflite');
-          print('   O app funcionará, mas reconhecimento estará desabilitado.');
           await Sentry.captureException(
             e,
             hint: Hint.withMap({'context': 'Erro ao carregar modelo ArcFace'}),
           );
         }
 
-        print('');
-        print('🔄 [4/5] Inicializando Sincronização Offline...');
         OfflineSyncService.instance.init();
-        print('✅ Sincronização ativa!');
-        print('   - Detecta conectividade automaticamente');
-        print('   - Fila de sincronização funcionando');
-
-        print('');
-        print('📱 [5/5] Iniciando interface...');
         runApp(const MyApp());
-        print('✅ Aplicação iniciada com sucesso!');
-        print('🚀 ========================================');
-        print('');
 
         Future.delayed(Duration(seconds: 2), () async {
           try {
-            print('🔄 Tentando sincronização inicial em background...');
             OfflineSyncService.instance.trySyncInBackground();
-            print('✅ Sincronização inicial iniciada em background');
           } catch (e) {
-            print('❌ Erro na sincronização inicial: $e');
             await Sentry.captureException(
               e,
               hint: Hint.withMap({'context': 'Erro na sincronização inicial'}),
@@ -153,7 +102,6 @@ Future<void> main() async {
           }
         });
       } catch (e, stackTrace) {
-        print('❌ ERRO CRÍTICO: $e');
         await Sentry.captureException(
           e,
           stackTrace: stackTrace,
