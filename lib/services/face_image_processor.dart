@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'face_detection_service.dart';
 import 'yuv_converter.dart';
@@ -30,17 +31,58 @@ class FaceImageProcessor {
   /// Processa um arquivo de imagem (por exemplo, foto capturada) e retorna a
   /// imagem já recortada/normalizada para uso pelo ArcFace.
   Future<img.Image> processFile(File file, {int outputSize = 112}) async {
-    debugPrint('\n[🖼️ FaceImageProcessor] Processando arquivo: ${file.path}');
-    debugPrint('[🖼️ FaceImageProcessor] Plataforma: ${_platformUtils.platformDescription}');
+    try {
+      debugPrint('\n[🖼️ FaceImageProcessor] ====== INÍCIO PROCESSAMENTO ======');
+      debugPrint('[🖼️ FaceImageProcessor] Arquivo: ${file.path}');
+      debugPrint('[🖼️ FaceImageProcessor] Plataforma: ${_platformUtils.platformDescription}');
+      debugPrint('[🖼️ FaceImageProcessor] Tamanho de saída: ${outputSize}x$outputSize');
 
-    final faces = await _detection.detectFromFile(file);
-    if (faces.isEmpty) {
-      throw Exception('Nenhum rosto detectado na imagem.');
+      // ✅ Verificar se arquivo existe
+      if (!await file.exists()) {
+        throw Exception('❌ Arquivo não existe: ${file.path}');
+      }
+
+      final fileSize = await file.length();
+      debugPrint('[🖼️ FaceImageProcessor] Tamanho do arquivo: ${(fileSize / 1024).toStringAsFixed(2)} KB');
+
+      // ✅ Detectar faces
+      debugPrint('[🖼️ FaceImageProcessor] Iniciando detecção de faces...');
+      final faces = await _detection.detectFromFile(file);
+
+      if (faces.isEmpty) {
+        debugPrint('[❌ FaceImageProcessor] NENHUM ROSTO DETECTADO!');
+        throw Exception('Nenhum rosto detectado na imagem.');
+      }
+
+      debugPrint('[✅ FaceImageProcessor] ${faces.length} rosto(s) detectado(s)');
+
+      // ✅ Processar bytes
+      debugPrint('[🖼️ FaceImageProcessor] Lendo bytes da imagem...');
+      final bytes = await file.readAsBytes();
+      debugPrint('[✅ FaceImageProcessor] ${bytes.length} bytes lidos');
+
+      debugPrint('[🖼️ FaceImageProcessor] Processando e recortando face...');
+      final result = _processBytes(bytes, faces, outputSize: outputSize);
+
+      debugPrint('[✅ FaceImageProcessor] ====== PROCESSAMENTO CONCLUÍDO ======\n');
+      return result;
+    } catch (e, stackTrace) {
+      debugPrint('[❌ FaceImageProcessor] ERRO CRÍTICO: $e');
+      debugPrint('[❌ FaceImageProcessor] StackTrace: $stackTrace');
+
+      // ✅ Enviar para Sentry
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao processar arquivo de imagem',
+          'file_path': file.path,
+          'platform': _platformUtils.platformDescription,
+        }),
+      );
+
+      rethrow;
     }
-
-    debugPrint('[✅ FaceImageProcessor] ${faces.length} rosto(s) detectado(s)');
-    final bytes = await file.readAsBytes();
-    return _processBytes(bytes, faces, outputSize: outputSize);
   }
 
   /// Processa a imagem de câmera em tempo real.

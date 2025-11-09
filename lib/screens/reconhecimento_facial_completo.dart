@@ -84,16 +84,30 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
 
   Future<void> _iniciarReconhecimento() async {
     try {
+      print('\n🎯 [Reconhecimento] ====== INÍCIO FLUXO RECONHECIMENTO ======');
+
+      // ✅ Etapa 1: Abrir câmera
+      print('🎯 [Reconhecimento] Etapa 1/3: Abrindo câmera...');
       final imagePath = await _abrirCameraTela(frontal: false);
-      if (imagePath == null) return;
+      if (imagePath == null) {
+        print('⚠️ [Reconhecimento] Usuário cancelou captura');
+        return;
+      }
+      print('✅ [Reconhecimento] Imagem capturada: $imagePath');
 
       setState(() => _processando = true);
       _mostrarProgresso('Reconhecendo rosto...');
 
+      // ✅ Etapa 2: Processar imagem
+      print('🎯 [Reconhecimento] Etapa 2/3: Processando imagem para modelo...');
       final processedImage = await _processarImagemParaModelo(File(imagePath));
+      print('✅ [Reconhecimento] Imagem processada: ${processedImage.width}x${processedImage.height}');
 
+      // ✅ Etapa 3: Reconhecer
       _atualizarProgresso('Comparando com banco de dados...');
+      print('🎯 [Reconhecimento] Etapa 3/3: Comparando com banco de dados...');
       final resultado = await _faceService.recognize(processedImage);
+      print('✅ [Reconhecimento] Comparação concluída');
 
       if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);
