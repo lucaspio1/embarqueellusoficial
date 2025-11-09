@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
-/// Widget de câmera para capturar foto do rosto
-/// Usa o mesmo sistema que o QR Code (que já funciona!)
+/// Widget de câmera para capturar foto do rosto.
+///
+/// 🎯 PADRÃO: Câmera traseira (melhor qualidade)
+/// Usa formato de imagem otimizado por plataforma (BGRA8888 no iOS, YUV420 no Android)
 class FaceCameraView extends StatefulWidget {
   final Function(XFile) onCapture;
   final bool useFrontCamera;
@@ -11,7 +14,7 @@ class FaceCameraView extends StatefulWidget {
   const FaceCameraView({
     super.key,
     required this.onCapture,
-    this.useFrontCamera = true,
+    this.useFrontCamera = false, // 🎯 PADRÃO: câmera traseira
   });
 
   @override
@@ -33,7 +36,7 @@ class _FaceCameraViewState extends State<FaceCameraView> {
     try {
       final cameras = await availableCameras();
 
-      // 🎯 Priorizar câmera traseira por padrão (melhor qualidade)
+      // 🎯 Selecionar câmera (traseira por padrão para melhor qualidade)
       final selectedCamera = widget.useFrontCamera
           ? cameras.firstWhere(
             (c) => c.lensDirection == CameraLensDirection.front,
@@ -44,11 +47,18 @@ class _FaceCameraViewState extends State<FaceCameraView> {
         orElse: () => cameras.first,
       );
 
+      // 📱 Formato de imagem baseado na plataforma
+      // iOS: BGRA8888 (nativo)
+      // Android: YUV420 (padrão)
+      final imageFormat = Platform.isIOS
+          ? ImageFormatGroup.bgra8888
+          : ImageFormatGroup.yuv420;
+
       _cameraController = CameraController(
         selectedCamera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.yuv420,
+        imageFormatGroup: imageFormat,
       );
 
       await _cameraController!.initialize();
