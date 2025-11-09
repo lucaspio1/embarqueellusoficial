@@ -32,12 +32,6 @@ class FaceImageProcessor {
   /// imagem já recortada/normalizada para uso pelo ArcFace.
   Future<img.Image> processFile(File file, {int outputSize = 112}) async {
     try {
-      debugPrint('\n[🖼️ FaceImageProcessor] ====== INÍCIO PROCESSAMENTO ======');
-      debugPrint('[🖼️ FaceImageProcessor] Arquivo: ${file.path}');
-      debugPrint('[🖼️ FaceImageProcessor] Plataforma: ${_platformUtils.platformDescription}');
-      debugPrint('[🖼️ FaceImageProcessor] Tamanho de saída: ${outputSize}x$outputSize');
-
-      // ✅ SENTRY: Início do processamento
       await Sentry.captureMessage(
         '🖼️ INICIANDO processamento de imagem facial',
         level: SentryLevel.info,
@@ -50,22 +44,14 @@ class FaceImageProcessor {
         },
       );
 
-      // ✅ Verificar se arquivo existe
       if (!await file.exists()) {
-        throw Exception('❌ Arquivo não existe: ${file.path}');
+        throw Exception('Arquivo não existe: ${file.path}');
       }
 
       final fileSize = await file.length();
-      debugPrint('[🖼️ FaceImageProcessor] Tamanho do arquivo: ${(fileSize / 1024).toStringAsFixed(2)} KB');
-
-      // ✅ Detectar faces
-      debugPrint('[🖼️ FaceImageProcessor] Iniciando detecção de faces...');
       final faces = await _detection.detectFromFile(file);
 
       if (faces.isEmpty) {
-        debugPrint('[❌ FaceImageProcessor] NENHUM ROSTO DETECTADO!');
-
-        // ✅ SENTRY: Erro crítico - nenhuma face detectada
         await Sentry.captureMessage(
           '❌ CRÍTICO: NENHUM ROSTO DETECTADO na imagem!',
           level: SentryLevel.error,
@@ -81,9 +67,6 @@ class FaceImageProcessor {
         throw Exception('Nenhum rosto detectado na imagem.');
       }
 
-      debugPrint('[✅ FaceImageProcessor] ${faces.length} rosto(s) detectado(s)');
-
-      // ✅ SENTRY: Face(s) detectada(s) com sucesso
       await Sentry.captureMessage(
         '✅ FACE DETECTADA: ${faces.length} rosto(s) encontrado(s)',
         level: SentryLevel.info,
@@ -95,17 +78,9 @@ class FaceImageProcessor {
         },
       );
 
-      // ✅ Processar bytes
-      debugPrint('[🖼️ FaceImageProcessor] Lendo bytes da imagem...');
       final bytes = await file.readAsBytes();
-      debugPrint('[✅ FaceImageProcessor] ${bytes.length} bytes lidos');
-
-      debugPrint('[🖼️ FaceImageProcessor] Processando e recortando face...');
       final result = _processBytes(bytes, faces, outputSize: outputSize);
 
-      debugPrint('[✅ FaceImageProcessor] ====== PROCESSAMENTO CONCLUÍDO ======\n');
-
-      // ✅ SENTRY: Processamento concluído
       await Sentry.captureMessage(
         '✅ PROCESSAMENTO CONCLUÍDO: Face recortada e normalizada',
         level: SentryLevel.info,
@@ -120,10 +95,6 @@ class FaceImageProcessor {
 
       return result;
     } catch (e, stackTrace) {
-      debugPrint('[❌ FaceImageProcessor] ERRO CRÍTICO: $e');
-      debugPrint('[❌ FaceImageProcessor] StackTrace: $stackTrace');
-
-      // ✅ Enviar para Sentry
       await Sentry.captureException(
         e,
         stackTrace: stackTrace,
@@ -159,14 +130,7 @@ class FaceImageProcessor {
 
     final faces = await _detection.detect(input);
     if (faces.isEmpty) {
-      if (enableDebugLogs) {
-        debugPrint('[⚠️ FaceImageProcessor] Nenhum rosto detectado no frame');
-      }
       return null;
-    }
-
-    if (enableDebugLogs) {
-      debugPrint('[✅ FaceImageProcessor] ${faces.length} rosto(s) detectado(s)');
     }
 
     // Converter CameraImage para RGBA usando YuvConverter

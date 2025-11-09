@@ -47,7 +47,6 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
 
       await _initializeCamera();
     } catch (e) {
-      print('❌ Erro ao carregar câmeras: $e');
       if (mounted) {
         Navigator.pop(context);
       }
@@ -78,7 +77,6 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
         setState(() {});
       }
     } catch (e) {
-      print('❌ Erro ao inicializar câmera: $e');
       if (mounted) {
         Navigator.pop(context);
       }
@@ -99,7 +97,6 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
 
       setState(() => _tirandoFoto = false);
     } catch (e) {
-      print('❌ Erro ao trocar câmera: $e');
       setState(() => _tirandoFoto = false);
     }
   }
@@ -117,12 +114,6 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
     setState(() => _tirandoFoto = true);
 
     try {
-      print('📸 [CameraPreview] ====== INÍCIO CAPTURA ======');
-      print('📸 [CameraPreview] Câmera: ${_cameras[_currentCameraIndex].name}');
-      print('📸 [CameraPreview] Direção: ${_cameras[_currentCameraIndex].lensDirection}');
-      print('📸 [CameraPreview] Resolução: ${controller!.value.previewSize}');
-
-      // ✅ SENTRY: Breadcrumb de início de captura
       Sentry.addBreadcrumb(Breadcrumb(
         message: '📸 Iniciando captura de foto',
         category: 'camera',
@@ -136,10 +127,6 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
 
       final image = await controller!.takePicture();
 
-      print('✅ [CameraPreview] Foto capturada: ${image.path}');
-      print('📸 [CameraPreview] ====== CAPTURA CONCLUÍDA ======');
-
-      // ✅ SENTRY: Breadcrumb de captura bem-sucedida
       Sentry.addBreadcrumb(Breadcrumb(
         message: '✅ Foto capturada com sucesso',
         category: 'camera',
@@ -153,10 +140,6 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
         Navigator.pop(context, image.path);
       }
     } catch (e, stackTrace) {
-      print('❌ [CameraPreview] ERRO ao tirar foto: $e');
-      print('❌ [CameraPreview] StackTrace: $stackTrace');
-
-      // ✅ Enviar para Sentry
       await Sentry.captureException(
         e,
         stackTrace: stackTrace,

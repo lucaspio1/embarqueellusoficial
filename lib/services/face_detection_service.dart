@@ -22,13 +22,6 @@ class FaceDetectionService {
   FaceDetector _ensureDetector() {
     if (_faceDetector != null) return _faceDetector!;
 
-    debugPrint('\n[🔧 FaceDetection] Inicializando FaceDetector...');
-    debugPrint('[🔧 FaceDetection] Plataforma: ${_platformUtils.platformDescription}');
-    debugPrint('[🔧 FaceDetection] Modo: FAST');
-    debugPrint('[🔧 FaceDetection] Landmarks: HABILITADO');
-    debugPrint('[🔧 FaceDetection] Classification: HABILITADO');
-    debugPrint('[🔧 FaceDetection] Tracking: HABILITADO\n');
-
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
         performanceMode: FaceDetectorMode.fast,
@@ -43,21 +36,12 @@ class FaceDetectionService {
   /// Detecta rostos em uma [InputImage].
   Future<List<Face>> detect(InputImage image) async {
     try {
-      debugPrint('[👁️ FaceDetection] Iniciando detecção de rostos...');
-      debugPrint('[👁️ FaceDetection] Tamanho da imagem: ${image.metadata?.size}');
-      debugPrint('[👁️ FaceDetection] Rotação: ${image.metadata?.rotation}');
-      debugPrint('[👁️ FaceDetection] Formato: ${image.metadata?.format}');
-
       final detector = _ensureDetector();
       final stopwatch = Stopwatch()..start();
       final faces = await detector.processImage(image);
       stopwatch.stop();
 
-      debugPrint('[👁️ FaceDetection] Detecção concluída em ${stopwatch.elapsedMilliseconds}ms');
-      debugPrint('[👁️ FaceDetection] ${faces.length} rosto(s) detectado(s)');
-
       if (faces.isEmpty) {
-        debugPrint('[⚠️ FaceDetection] Nenhuma face encontrada!');
         await Sentry.captureMessage(
           'Nenhuma face detectada na imagem',
           level: SentryLevel.warning,
@@ -75,18 +59,6 @@ class FaceDetectionService {
           },
         );
       } else {
-        // Log detalhado de cada face detectada
-        for (int i = 0; i < faces.length; i++) {
-          final face = faces[i];
-          debugPrint('[👁️ FaceDetection] Face ${i + 1}:');
-          debugPrint('   - BoundingBox: ${face.boundingBox}');
-          debugPrint('   - Head Euler Angles: X=${face.headEulerAngleX?.toStringAsFixed(1)}°, '
-              'Y=${face.headEulerAngleY?.toStringAsFixed(1)}°, '
-              'Z=${face.headEulerAngleZ?.toStringAsFixed(1)}°');
-          debugPrint('   - Landmarks: ${face.landmarks.length}');
-          debugPrint('   - Tracking ID: ${face.trackingId}');
-        }
-
         await Sentry.captureMessage(
           'Face(s) detectada(s) com sucesso',
           level: SentryLevel.info,
@@ -106,7 +78,6 @@ class FaceDetectionService {
 
       return faces;
     } catch (e, stackTrace) {
-      debugPrint('[❌ FaceDetection] Erro ao detectar faces: $e');
       await Sentry.captureException(
         e,
         stackTrace: stackTrace,
