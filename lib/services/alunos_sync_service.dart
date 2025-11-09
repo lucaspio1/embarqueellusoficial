@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/config/app_config.dart';
 
@@ -16,6 +17,15 @@ class AlunosSyncService {
   /// Sincroniza PESSOAS da aba PESSOAS do Google Sheets (todos com embeddings)
   Future<SyncResult> syncPessoasFromSheets() async {
     try {
+      await Sentry.captureMessage(
+        'Iniciando sincronização de pessoas com embeddings',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('sync_type', 'pessoas');
+          scope.setTag('source', 'google_sheets');
+        },
+      );
+
       print('🔄 [PessoasSync] Iniciando sincronização de PESSOAS (com embeddings)...');
 
       final client = http.Client();
@@ -64,6 +74,13 @@ class AlunosSyncService {
           }
         } catch (e) {
           print('❌ [Redirected] Erro ao seguir redirect: $e');
+          await Sentry.captureException(
+            e,
+            hint: Hint.withMap({
+              'context': 'Erro ao seguir redirect na sincronização de pessoas',
+              'redirected_url': redirectedUrl,
+            }),
+          );
           return SyncResult(success: false, count: 0, message: 'Erro ao seguir redirect: $e');
         }
 
@@ -83,12 +100,29 @@ class AlunosSyncService {
     } catch (e, stack) {
       print('❌ [PessoasSync] Erro geral: $e');
       print(stack);
+      await Sentry.captureException(
+        e,
+        stackTrace: stack,
+        hint: Hint.withMap({
+          'context': 'Erro geral na sincronização de pessoas',
+          'api_url': _apiUrl,
+        }),
+      );
       return SyncResult(success: false, count: 0, message: e.toString());
     }
   }
 
   Future<SyncResult> syncAlunosFromSheets() async {
     try {
+      await Sentry.captureMessage(
+        'Iniciando sincronização de alunos',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('sync_type', 'alunos');
+          scope.setTag('source', 'google_sheets');
+        },
+      );
+
       print('🔄 [AlunosSync] Iniciando sincronização de alunos...');
 
       final client = http.Client();
@@ -137,6 +171,13 @@ class AlunosSyncService {
           }
         } catch (e) {
           print('❌ [Redirected] Erro ao seguir redirect: $e');
+          await Sentry.captureException(
+            e,
+            hint: Hint.withMap({
+              'context': 'Erro ao seguir redirect na sincronização de alunos',
+              'redirected_url': redirectedUrl,
+            }),
+          );
           return SyncResult(success: false, count: 0, message: 'Erro ao seguir redirect: $e');
         }
 
@@ -156,6 +197,14 @@ class AlunosSyncService {
     } catch (e, stack) {
       print('❌ [AlunosSync] Erro geral: $e');
       print(stack);
+      await Sentry.captureException(
+        e,
+        stackTrace: stack,
+        hint: Hint.withMap({
+          'context': 'Erro geral na sincronização de alunos',
+          'api_url': _apiUrl,
+        }),
+      );
       return SyncResult(success: false, count: 0, message: e.toString());
     }
   }
@@ -258,6 +307,21 @@ class AlunosSyncService {
       }
 
       print('✅ [$countPessoas] pessoas sincronizadas | [$countEmbeddings] embeddings salvos');
+
+      await Sentry.captureMessage(
+        'Sincronização de pessoas concluída com sucesso',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('sync_type', 'pessoas');
+          scope.setTag('sync_result', 'success');
+          scope.setContexts('sync_stats', {
+            'total_pessoas': countPessoas,
+            'total_embeddings': countEmbeddings,
+            'total_recebidas': pessoas.length,
+          });
+        },
+      );
+
       return SyncResult(
         success: true,
         count: countPessoas,
@@ -266,6 +330,13 @@ class AlunosSyncService {
     } catch (e) {
       print('❌ [ProcessarRespostaPessoas] Erro: $e');
       print(response.body);
+      await Sentry.captureException(
+        e,
+        hint: Hint.withMap({
+          'context': 'Erro ao processar resposta de sincronização de pessoas',
+          'response_body_length': response.body.length,
+        }),
+      );
       return SyncResult(success: false, count: 0, message: e.toString());
     }
   }
@@ -308,10 +379,31 @@ class AlunosSyncService {
       }
 
       print('✅ [$count] alunos sincronizados com sucesso');
+
+      await Sentry.captureMessage(
+        'Sincronização de alunos concluída com sucesso',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('sync_type', 'alunos');
+          scope.setTag('sync_result', 'success');
+          scope.setContexts('sync_stats', {
+            'total_sincronizados': count,
+            'total_recebidos': alunos.length,
+          });
+        },
+      );
+
       return SyncResult(success: true, count: count, message: 'Alunos sincronizados');
     } catch (e) {
       print('❌ [ProcessarResposta] Erro: $e');
       print(response.body);
+      await Sentry.captureException(
+        e,
+        hint: Hint.withMap({
+          'context': 'Erro ao processar resposta de sincronização de alunos',
+          'response_body_length': response.body.length,
+        }),
+      );
       return SyncResult(success: false, count: 0, message: e.toString());
     }
   }
