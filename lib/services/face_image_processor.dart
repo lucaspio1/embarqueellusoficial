@@ -33,10 +33,11 @@ class FaceImageProcessor {
   Future<img.Image> processFile(File file, {int outputSize = 112}) async {
     try {
       await Sentry.captureMessage(
-        '🖼️ INICIANDO processamento de imagem facial',
+        '🖼️ PROCESSOR: Iniciando processamento de imagem facial',
         level: SentryLevel.info,
         withScope: (scope) {
-          scope.setContexts('processamento', {
+          scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('processor_start', {
             'file_path': file.path,
             'platform': _platformUtils.platformDescription,
             'output_size': '${outputSize}x$outputSize',
@@ -45,21 +46,46 @@ class FaceImageProcessor {
       );
 
       if (!await file.exists()) {
+        await Sentry.captureMessage(
+          '❌ PROCESSOR: Arquivo de imagem não existe',
+          level: SentryLevel.error,
+          withScope: (scope) {
+            scope.setContexts('file_error', {
+              'file_path': file.path,
+            });
+          },
+        );
         throw Exception('Arquivo não existe: ${file.path}');
       }
 
       final fileSize = await file.length();
+
+      await Sentry.captureMessage(
+        '📁 PROCESSOR: Arquivo validado',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('file_info', {
+            'file_size_bytes': fileSize,
+            'file_size_kb': (fileSize / 1024).toStringAsFixed(2),
+            'file_size_mb': (fileSize / (1024 * 1024)).toStringAsFixed(2),
+          });
+        },
+      );
+
       final faces = await _detection.detectFromFile(file);
 
       if (faces.isEmpty) {
         await Sentry.captureMessage(
-          '❌ CRÍTICO: NENHUM ROSTO DETECTADO na imagem!',
+          '❌ PROCESSOR: CRÍTICO - NENHUM ROSTO DETECTADO na imagem!',
           level: SentryLevel.error,
           withScope: (scope) {
-            scope.setContexts('deteccao', {
+            scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
+            scope.setTag('processor_error', 'no_face_detected');
+            scope.setContexts('detection_failed', {
               'file_size_kb': (fileSize / 1024).toStringAsFixed(2),
               'file_path': file.path,
               'message': 'Google MLKit não encontrou nenhuma face na imagem capturada',
+              'platform': _platformUtils.platformDescription,
             });
           },
         );
@@ -68,27 +94,42 @@ class FaceImageProcessor {
       }
 
       await Sentry.captureMessage(
-        '✅ FACE DETECTADA: ${faces.length} rosto(s) encontrado(s)',
+        '✅ PROCESSOR: FACE DETECTADA - ${faces.length} rosto(s) encontrado(s)',
         level: SentryLevel.info,
         withScope: (scope) {
-          scope.setContexts('deteccao_sucesso', {
+          scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('faces_detected', {
             'faces_count': faces.length,
             'file_size_kb': (fileSize / 1024).toStringAsFixed(2),
+            'primary_face_bbox': '${faces.first.boundingBox.width.toInt()}x${faces.first.boundingBox.height.toInt()}',
           });
         },
       );
 
       final bytes = await file.readAsBytes();
+
+      await Sentry.captureMessage(
+        '📊 PROCESSOR: Bytes da imagem lidos',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('bytes_read', {
+            'total_bytes': bytes.length,
+          });
+        },
+      );
+
       final result = _processBytes(bytes, faces, outputSize: outputSize);
 
       await Sentry.captureMessage(
-        '✅ PROCESSAMENTO CONCLUÍDO: Face recortada e normalizada',
+        '✅ PROCESSOR: PROCESSAMENTO CONCLUÍDO - Face recortada e normalizada',
         level: SentryLevel.info,
         withScope: (scope) {
-          scope.setContexts('resultado', {
-            'width': result.width,
-            'height': result.height,
-            'channels': result.numChannels,
+          scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('processing_complete', {
+            'output_width': result.width,
+            'output_height': result.height,
+            'output_channels': result.numChannels,
+            'expected_size': '${outputSize}x$outputSize',
           });
         },
       );
@@ -99,7 +140,7 @@ class FaceImageProcessor {
         e,
         stackTrace: stackTrace,
         hint: Hint.withMap({
-          'context': 'Erro ao processar arquivo de imagem',
+          'context': 'Erro CRÍTICO ao processar arquivo de imagem',
           'file_path': file.path,
           'platform': _platformUtils.platformDescription,
         }),
@@ -156,18 +197,87 @@ class FaceImageProcessor {
 
   img.Image _processBytes(Uint8List bytes, List<Face> faces,
       {required int outputSize}) {
+    Sentry.captureMessage(
+      '🔄 PROCESSOR: Decodificando bytes da imagem',
+      level: SentryLevel.info,
+      withScope: (scope) {
+        scope.setContexts('decode_start', {
+          'bytes_length': bytes.length,
+        });
+      },
+    );
+
     img.Image? decoded = img.decodeImage(bytes);
     if (decoded == null) {
+      Sentry.captureMessage(
+        '❌ PROCESSOR: Falha ao decodificar imagem',
+        level: SentryLevel.error,
+        withScope: (scope) {
+          scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('decode_error', {
+            'bytes_length': bytes.length,
+          });
+        },
+      );
       throw Exception('Falha ao decodificar imagem.');
     }
 
+    Sentry.captureMessage(
+      '✅ PROCESSOR: Imagem decodificada',
+      level: SentryLevel.info,
+      withScope: (scope) {
+        scope.setContexts('decoded_image', {
+          'width': decoded.width,
+          'height': decoded.height,
+          'channels': decoded.numChannels,
+        });
+      },
+    );
+
     decoded = img.bakeOrientation(decoded);
+
+    Sentry.captureMessage(
+      '🔄 PROCESSOR: Orientação da imagem normalizada',
+      level: SentryLevel.info,
+      withScope: (scope) {
+        scope.setContexts('baked_image', {
+          'width': decoded.width,
+          'height': decoded.height,
+        });
+      },
+    );
+
     return _cropFace(decoded, faces, outputSize: outputSize);
   }
 
   img.Image _cropFace(img.Image image, List<Face> faces,
       {required int outputSize}) {
+    Sentry.captureMessage(
+      '✂️ PROCESSOR: Iniciando crop e alinhamento da face',
+      level: SentryLevel.info,
+      withScope: (scope) {
+        scope.setContexts('crop_start', {
+          'total_faces': faces.length,
+          'image_width': image.width,
+          'image_height': image.height,
+        });
+      },
+    );
+
     final Face target = _selectPrimaryFace(faces);
+
+    Sentry.captureMessage(
+      '🎯 PROCESSOR: Face primária selecionada',
+      level: SentryLevel.info,
+      withScope: (scope) {
+        scope.setContexts('primary_face', {
+          'bbox_width': target.boundingBox.width.toInt(),
+          'bbox_height': target.boundingBox.height.toInt(),
+          'bbox_left': target.boundingBox.left.toInt(),
+          'bbox_top': target.boundingBox.top.toInt(),
+        });
+      },
+    );
 
     // 🔧 Alinhamento automático baseado em landmarks dos olhos
     final alignedImage = _alignFace(image, target);
@@ -176,6 +286,19 @@ class FaceImageProcessor {
       target.boundingBox,
       alignedImage.width,
       alignedImage.height,
+    );
+
+    Sentry.captureMessage(
+      '📐 PROCESSOR: Bounding box expandido',
+      level: SentryLevel.info,
+      withScope: (scope) {
+        scope.setContexts('expanded_bounds', {
+          'left': bounds.left,
+          'top': bounds.top,
+          'width': bounds.width,
+          'height': bounds.height,
+        });
+      },
     );
 
     final img.Image cropped = img.copyCrop(
@@ -189,6 +312,18 @@ class FaceImageProcessor {
     final img.Image square = img.copyResizeCropSquare(
       cropped,
       size: outputSize,
+    );
+
+    Sentry.captureMessage(
+      '✅ PROCESSOR: Face cropada e redimensionada',
+      level: SentryLevel.info,
+      withScope: (scope) {
+        scope.setContexts('final_crop', {
+          'output_width': square.width,
+          'output_height': square.height,
+          'expected_size': outputSize,
+        });
+      },
     );
 
     return _ensureRgb(square);

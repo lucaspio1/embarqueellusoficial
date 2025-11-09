@@ -20,7 +20,30 @@ class FaceDetectionService {
   final PlatformCameraUtils _platformUtils = PlatformCameraUtils.instance;
 
   FaceDetector _ensureDetector() {
-    if (_faceDetector != null) return _faceDetector!;
+    if (_faceDetector != null) {
+      Sentry.captureMessage(
+        '✅ DETECTOR: Reutilizando detector existente',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
+        },
+      );
+      return _faceDetector!;
+    }
+
+    Sentry.captureMessage(
+      '🔧 DETECTOR: Criando novo FaceDetector do Google MLKit',
+      level: SentryLevel.info,
+      withScope: (scope) {
+        scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
+        scope.setContexts('detector_config', {
+          'performance_mode': 'fast',
+          'landmarks_enabled': true,
+          'classification_enabled': true,
+          'tracking_enabled': true,
+        });
+      },
+    );
 
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
@@ -30,47 +53,94 @@ class FaceDetectionService {
         enableTracking: true,
       ),
     );
+
+    Sentry.captureMessage(
+      '✅ DETECTOR: FaceDetector criado com sucesso',
+      level: SentryLevel.info,
+      withScope: (scope) {
+        scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
+      },
+    );
+
     return _faceDetector!;
   }
 
   /// Detecta rostos em uma [InputImage].
   Future<List<Face>> detect(InputImage image) async {
     try {
+      await Sentry.captureMessage(
+        '🔍 DETECTION: Iniciando detecção de faces com Google MLKit',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('detection_start', {
+            'image_width': image.metadata?.size.width.toInt(),
+            'image_height': image.metadata?.size.height.toInt(),
+            'image_rotation': image.metadata?.rotation.toString(),
+            'image_format': image.metadata?.format.toString(),
+            'bytes_per_row': image.metadata?.bytesPerRow,
+          });
+        },
+      );
+
       final detector = _ensureDetector();
       final stopwatch = Stopwatch()..start();
+
       final faces = await detector.processImage(image);
+
       stopwatch.stop();
 
       if (faces.isEmpty) {
         await Sentry.captureMessage(
-          'Nenhuma face detectada na imagem',
+          '❌ DETECTION: NENHUMA FACE DETECTADA',
           level: SentryLevel.warning,
           withScope: (scope) {
             scope.setTag('face_detection', 'no_faces_found');
             scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
-            scope.setContexts('detection_info', {
+            scope.setContexts('detection_failed', {
               'faces_detected': 0,
               'processing_time_ms': stopwatch.elapsedMilliseconds,
-              'image_size': image.metadata?.size.toString(),
-              'rotation': image.metadata?.rotation.toString(),
-              'format': image.metadata?.format.toString(),
+              'image_width': image.metadata?.size.width.toInt(),
+              'image_height': image.metadata?.size.height.toInt(),
+              'image_rotation': image.metadata?.rotation.toString(),
+              'image_format': image.metadata?.format.toString(),
+              'bytes_per_row': image.metadata?.bytesPerRow,
               'message': 'Google MLKit não detectou nenhuma face na imagem',
+              'possible_causes': 'Imagem muito escura, face muito pequena, rotação incorreta, ou formato inválido',
             });
           },
         );
       } else {
+        // Coletar informações detalhadas de todas as faces detectadas
+        final facesInfo = faces.map((face) {
+          return {
+            'bounding_box': '${face.boundingBox.width.toInt()}x${face.boundingBox.height.toInt()}',
+            'bounding_box_position': '(${face.boundingBox.left.toInt()}, ${face.boundingBox.top.toInt()})',
+            'head_euler_x': face.headEulerAngleX?.toStringAsFixed(2),
+            'head_euler_y': face.headEulerAngleY?.toStringAsFixed(2),
+            'head_euler_z': face.headEulerAngleZ?.toStringAsFixed(2),
+            'left_eye_open_prob': face.leftEyeOpenProbability?.toStringAsFixed(2),
+            'right_eye_open_prob': face.rightEyeOpenProbability?.toStringAsFixed(2),
+            'smiling_prob': face.smilingProbability?.toStringAsFixed(2),
+            'tracking_id': face.trackingId,
+            'landmarks_count': face.landmarks.length,
+          };
+        }).toList();
+
         await Sentry.captureMessage(
-          'Face(s) detectada(s) com sucesso',
+          '✅ DETECTION: Face(s) detectada(s) com SUCESSO',
           level: SentryLevel.info,
           withScope: (scope) {
             scope.setTag('face_detection', 'success');
             scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
-            scope.setContexts('detection_info', {
+            scope.setContexts('detection_success', {
               'faces_detected': faces.length,
               'processing_time_ms': stopwatch.elapsedMilliseconds,
-              'image_size': image.metadata?.size.toString(),
-              'rotation': image.metadata?.rotation.toString(),
-              'format': image.metadata?.format.toString(),
+              'image_width': image.metadata?.size.width.toInt(),
+              'image_height': image.metadata?.size.height.toInt(),
+              'image_rotation': image.metadata?.rotation.toString(),
+              'image_format': image.metadata?.format.toString(),
+              'faces_details': facesInfo.toString(),
             });
           },
         );
@@ -82,8 +152,12 @@ class FaceDetectionService {
         e,
         stackTrace: stackTrace,
         hint: Hint.withMap({
-          'context': 'Erro ao detectar faces com Google MLKit',
+          'context': 'Erro CRÍTICO ao detectar faces com Google MLKit',
           'platform': _platformUtils.platformDescription,
+          'image_width': image.metadata?.size.width.toInt(),
+          'image_height': image.metadata?.size.height.toInt(),
+          'image_rotation': image.metadata?.rotation.toString(),
+          'image_format': image.metadata?.format.toString(),
         }),
       );
       rethrow;
