@@ -82,6 +82,11 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
     try {
       _cameras = await availableCameras();
 
+      print('📷 Câmeras disponíveis: ${_cameras.length}');
+      for (var i = 0; i < _cameras.length; i++) {
+        print('  [$i] ${_cameras[i].name} - ${_cameras[i].lensDirection}');
+      }
+
       if (_cameras.isEmpty) {
         setState(() {
           _errorMessage = 'Nenhuma câmera disponível';
@@ -97,6 +102,8 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
             : c.lensDirection == CameraLensDirection.back,
       );
       if (_currentCameraIndex == -1) _currentCameraIndex = 0;
+
+      print('📷 Câmera selecionada: [${_currentCameraIndex}] ${_cameras[_currentCameraIndex].name}');
 
       await _setupCamera(_cameras[_currentCameraIndex]);
 
@@ -147,12 +154,19 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
   }
 
   Future<void> _switchCamera() async {
-    if (_cameras.length <= 1 || _isSwitchingCamera) return;
+    if (_cameras.length <= 1 || _isSwitchingCamera) {
+      print('⚠️ Não é possível trocar câmera: ${_cameras.length} câmera(s) disponível(is)');
+      return;
+    }
 
     setState(() => _isSwitchingCamera = true);
 
     try {
+      final previousIndex = _currentCameraIndex;
       _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
+
+      print('🔄 Trocando câmera: ${_cameras[previousIndex].name} -> ${_cameras[_currentCameraIndex].name}');
+
       await _setupCamera(_cameras[_currentCameraIndex]);
 
       await Sentry.captureMessage(
@@ -160,13 +174,43 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
         level: SentryLevel.info,
         withScope: (scope) {
           scope.setContexts('camera_switch', {
+            'previous_camera': _cameras[previousIndex].name,
             'new_camera': _cameras[_currentCameraIndex].name,
             'lens_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
           });
         },
       );
-    } catch (e) {
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Câmera trocada: ${_cameras[_currentCameraIndex].lensDirection == CameraLensDirection.front ? "Frontal" : "Traseira"}'),
+            duration: const Duration(seconds: 1),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
       print('❌ Erro ao trocar câmera: $e');
+
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao trocar câmera',
+          'cameras_available': _cameras.length,
+        }),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao trocar câmera: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isSwitchingCamera = false);
@@ -423,18 +467,25 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
         ),
         actions: [
           if (widget.options.showCameraSwitchButton && _cameras.length > 1)
-            IconButton(
-              icon: _isSwitchingCamera
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: _isSwitchingCamera
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.flip_camera_ios,
+                        size: 28,
                       ),
-                    )
-                  : const Icon(Icons.flip_camera_ios),
-              onPressed: (_isProcessing || _isSwitchingCamera) ? null : _switchCamera,
+                tooltip: 'Trocar câmera',
+                onPressed: (_isProcessing || _isSwitchingCamera) ? null : _switchCamera,
+              ),
             ),
         ],
       ),
@@ -477,9 +528,11 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
       children: [
         // Preview da câmera
         if (_cameraController?.value.isInitialized == true)
-          Center(
-            child: AspectRatio(
-              aspectRatio: _cameraController!.value.aspectRatio,
+          FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width,
+              height: MediaQuery.of(context).size.width * _cameraController!.value.aspectRatio,
               child: CameraPreview(_cameraController!),
             ),
           ),
