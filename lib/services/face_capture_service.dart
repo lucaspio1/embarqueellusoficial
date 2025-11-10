@@ -13,7 +13,7 @@ import 'face_detection_service.dart';
 import 'face_image_processor.dart';
 import 'platform_camera_utils.dart';
 
-/// Serviço para captura única de foto com detecção facial.
+/// Serviço PRINCIPAL para captura única de foto com detecção facial.
 ///
 /// Este serviço implementa o fluxo completo de:
 /// 1. Inicialização da câmera
@@ -22,7 +22,15 @@ import 'platform_camera_utils.dart';
 /// 4. Recorte da face detectada
 /// 5. Retorno do recorte como Uint8List pronto para embeddings
 ///
-/// Compatível com iOS 15.5+ e Android.
+/// FASE 2: Consolidado como serviço único de captura facial.
+/// - SingleFaceCaptureService foi removido (100% redundante)
+/// - FaceImageProcessor mantido como utilitário (usado por este serviço)
+/// - Compatível com iOS 15.5+ e Android
+///
+/// DEPENDÊNCIAS:
+/// - FaceDetectionService: detecção de faces
+/// - FaceImageProcessor: processamento e crop de imagens
+/// - PlatformCameraUtils: utilitários multiplataforma
 class FaceCaptureService {
   FaceCaptureService._();
 

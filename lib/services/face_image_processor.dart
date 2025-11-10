@@ -15,10 +15,19 @@ import 'yuv_converter.dart';
 import 'camera_image_converter.dart';
 import 'platform_camera_utils.dart';
 
-/// Responsável por preparar imagens para a extração de embeddings:
-///  * Detecta rostos via MLKit.
-///  * Faz crop com margem segura.
-///  * Normaliza orientação e converte para RGB.
+/// Utilitário especializado para processamento de imagens faciais.
+///
+/// RESPONSABILIDADES:
+///  * Detecta rostos via ML Kit (usando FaceDetectionService)
+///  * Faz crop com margem de segurança (20% padding)
+///  * Normaliza orientação (aplica rotação EXIF)
+///  * Converte para RGB (compatível com ArcFace)
+///  * Suporta múltiplas estratégias de detecção (enhanced, resized)
+///
+/// IMPORTANTE: Este é um UTILITÁRIO, não um serviço duplicado.
+/// É usado por FaceCaptureService e outros serviços de captura.
+///
+/// FASE 2: Consolidado como utilitário único.
 class FaceImageProcessor {
   FaceImageProcessor._();
 
