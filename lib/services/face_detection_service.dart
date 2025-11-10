@@ -37,20 +37,22 @@ class FaceDetectionService {
       withScope: (scope) {
         scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
         scope.setContexts('detector_config', {
-          'performance_mode': 'fast',
-          'landmarks_enabled': true,
-          'classification_enabled': true,
-          'tracking_enabled': true,
+          'performance_mode': 'accurate',
+          'contours_enabled': false,
+          'landmarks_enabled': false,
+          'classification_enabled': false,
+          'min_face_size': 0.1,
         });
       },
     );
 
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
-        performanceMode: FaceDetectorMode.fast,
-        enableLandmarks: true,
-        enableClassification: true,
-        enableTracking: true,
+        performanceMode: FaceDetectorMode.accurate,
+        enableContours: false,
+        enableLandmarks: false,
+        enableClassification: false,
+        minFaceSize: 0.1,
       ),
     );
 

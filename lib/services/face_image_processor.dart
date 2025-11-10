@@ -336,7 +336,7 @@ class FaceImageProcessor {
   img.Image _cropFace(img.Image image, List<Face> faces,
       {required int outputSize}) {
     Sentry.captureMessage(
-      '✂️ PROCESSOR: Iniciando crop e alinhamento da face',
+      '✂️ PROCESSOR: Iniciando crop da face',
       level: SentryLevel.info,
       withScope: (scope) {
         scope.setContexts('crop_start', {
@@ -362,13 +362,10 @@ class FaceImageProcessor {
       },
     );
 
-    // 🔧 Alinhamento automático baseado em landmarks dos olhos
-    final alignedImage = _alignFace(image, target);
-
     final RectBounds bounds = _expandBoundingBox(
       target.boundingBox,
-      alignedImage.width,
-      alignedImage.height,
+      image.width,
+      image.height,
     );
 
     Sentry.captureMessage(
@@ -385,7 +382,7 @@ class FaceImageProcessor {
     );
 
     final img.Image cropped = img.copyCrop(
-      alignedImage,
+      image,
       x: bounds.left,
       y: bounds.top,
       width: bounds.width,
@@ -412,28 +409,39 @@ class FaceImageProcessor {
     return _ensureRgb(square);
   }
 
-  /// Alinha a face automaticamente baseado nos landmarks dos olhos
-  img.Image _alignFace(img.Image image, Face face) {
-    final leftEye = face.landmarks[FaceLandmarkType.leftEye];
-    final rightEye = face.landmarks[FaceLandmarkType.rightEye];
+  /// Processa um arquivo e retorna diretamente o recorte facial em Uint8List
+  /// Pronto para gerar embeddings faciais.
+  Future<Uint8List> cropFaceToBytes(String imagePath, {int outputSize = 112}) async {
+    try {
+      final file = File(imagePath);
+      final processedImage = await processFile(file, outputSize: outputSize);
 
-    // Se não tiver landmarks dos olhos, retorna imagem original
-    if (leftEye == null || rightEye == null) {
-      return image;
+      // Converter para JPEG com alta qualidade
+      final bytes = Uint8List.fromList(img.encodeJpg(processedImage, quality: 95));
+
+      await Sentry.captureMessage(
+        '✅ PROCESSOR: Face recortada convertida para Uint8List',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('bytes_conversion', {
+            'total_bytes': bytes.length,
+            'size_kb': (bytes.length / 1024).toStringAsFixed(2),
+          });
+        },
+      );
+
+      return bytes;
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao recortar face e converter para Uint8List',
+          'image_path': imagePath,
+        }),
+      );
+      rethrow;
     }
-
-    // Calcular ângulo de rotação necessário para alinhar os olhos horizontalmente
-    final dx = rightEye.position.x - leftEye.position.x;
-    final dy = rightEye.position.y - leftEye.position.y;
-    final angle = math.atan2(dy, dx) * 180 / math.pi;
-
-    // Só rotacionar se o ângulo for significativo (> 2°)
-    if (angle.abs() < 2.0) {
-      return image;
-    }
-
-    // Rotacionar a imagem para alinhar os olhos
-    return img.copyRotate(image, angle: -angle);
   }
 
   Face _selectPrimaryFace(List<Face> faces) {
