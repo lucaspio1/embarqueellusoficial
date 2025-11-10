@@ -25,11 +25,11 @@ google_mlkit_face_detection: ^0.13.1
 # DEPOIS
 camera: ^0.11.0+1
 image: ^4.2.0
-google_mlkit_face_detection: ^0.11.0
-google_mlkit_commons: ^0.7.0  # Adicionado
+google_mlkit_face_detection: ^0.13.1
+google_mlkit_commons: ^0.11.0  # Adicionado (necessário para compatibilidade)
 ```
 
-**Motivo**: Versões mais recentes com melhor estabilidade e correções de bugs.
+**Motivo**: Versões mais recentes com melhor estabilidade e correções de bugs. `google_mlkit_commons: ^0.11.0` é necessária para compatibilidade com `google_mlkit_barcode_scanning: ^0.14.1`.
 
 ---
 
