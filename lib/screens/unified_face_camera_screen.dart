@@ -39,6 +39,7 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
 
   bool _isInitializing = true;
   bool _isProcessing = false;
+  bool _isSwitchingCamera = false;
   String? _errorMessage;
   String _statusMessage = '';
 
@@ -146,25 +147,31 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
   }
 
   Future<void> _switchCamera() async {
-    if (_cameras.length <= 1) return;
+    if (_cameras.length <= 1 || _isSwitchingCamera) return;
 
-    setState(() => _isProcessing = true);
+    setState(() => _isSwitchingCamera = true);
 
-    _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
-    await _setupCamera(_cameras[_currentCameraIndex]);
+    try {
+      _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
+      await _setupCamera(_cameras[_currentCameraIndex]);
 
-    setState(() => _isProcessing = false);
-
-    await Sentry.captureMessage(
-      '🔄 Câmera trocada',
-      level: SentryLevel.info,
-      withScope: (scope) {
-        scope.setContexts('camera_switch', {
-          'new_camera': _cameras[_currentCameraIndex].name,
-          'lens_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
-        });
-      },
-    );
+      await Sentry.captureMessage(
+        '🔄 Câmera trocada',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('camera_switch', {
+            'new_camera': _cameras[_currentCameraIndex].name,
+            'lens_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
+          });
+        },
+      );
+    } catch (e) {
+      print('❌ Erro ao trocar câmera: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isSwitchingCamera = false);
+      }
+    }
   }
 
   Future<void> _capturePhoto() async {
@@ -417,8 +424,17 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
         actions: [
           if (widget.options.showCameraSwitchButton && _cameras.length > 1)
             IconButton(
-              icon: const Icon(Icons.flip_camera_ios),
-              onPressed: _isProcessing ? null : _switchCamera,
+              icon: _isSwitchingCamera
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.flip_camera_ios),
+              onPressed: (_isProcessing || _isSwitchingCamera) ? null : _switchCamera,
             ),
         ],
       ),
@@ -461,7 +477,12 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
       children: [
         // Preview da câmera
         if (_cameraController?.value.isInitialized == true)
-          CameraPreview(_cameraController!),
+          Center(
+            child: AspectRatio(
+              aspectRatio: _cameraController!.value.aspectRatio,
+              child: CameraPreview(_cameraController!),
+            ),
+          ),
 
         // Overlay de guia facial
         if (widget.options.showFaceGuide) _buildFaceGuide(),
