@@ -156,6 +156,29 @@ class FaceImageProcessor {
         // Agora detectar faces na imagem ORIENTADA
         faces = await _detection.detect(inputImage);
 
+        // Se não detectar faces, tentar com melhorias de imagem
+        if (faces.isEmpty) {
+          await Sentry.captureMessage(
+            '⚠️ PROCESSOR: Primeira tentativa não detectou faces, tentando com ajustes...',
+            level: SentryLevel.warning,
+          );
+
+          // Tentar com aumento de contraste e brilho
+          final enhanced = _enhanceImage(oriented);
+          final enhancedBytes = img.encodeJpg(enhanced, quality: 95);
+          await tempFile.writeAsBytes(enhancedBytes);
+
+          final enhancedInput = InputImage.fromFilePath(tempFile.path);
+          faces = await _detection.detect(enhancedInput);
+
+          if (faces.isNotEmpty) {
+            await Sentry.captureMessage(
+              '✅ PROCESSOR: Faces detectadas após ajuste de imagem!',
+              level: SentryLevel.info,
+            );
+          }
+        }
+
       } finally {
         // Garantir limpeza do arquivo temporário
         if (await tempFile.exists()) {
@@ -512,6 +535,30 @@ class FaceImageProcessor {
       case InputImageRotation.rotation270deg:
         return img.copyRotate(image, angle: 270);
     }
+  }
+
+  /// Melhora a imagem aumentando contraste e brilho para facilitar detecção
+  img.Image _enhanceImage(img.Image source) {
+    // Aumentar contraste (1.3 = 30% mais contraste)
+    img.Image enhanced = img.adjustColor(
+      source,
+      contrast: 1.3,
+      brightness: 1.1,
+      saturation: 1.1,
+    );
+
+    // Aplicar sharpening para melhorar bordas
+    enhanced = img.convolution(
+      enhanced,
+      filter: [
+        0, -1, 0,
+        -1, 5, -1,
+        0, -1, 0,
+      ],
+      div: 1,
+    );
+
+    return enhanced;
   }
 
   Face _rotateFaceBoundingBox(
