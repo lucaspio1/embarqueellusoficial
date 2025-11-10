@@ -222,25 +222,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     }
   }
 
-  Future<img.Image> _processarImagemParaModelo(File imageFile) async {
-    try {
-      return await FaceImageProcessor.instance.processFile(
-        imageFile,
-        outputSize: FaceRecognitionService.INPUT_SIZE,
-      );
-    } catch (e, stackTrace) {
-      await Sentry.captureException(
-        e,
-        stackTrace: stackTrace,
-        hint: Hint.withMap({
-          'context': 'Erro ao processar imagem para modelo (FaceImageProcessor)',
-          'file_path': imageFile.path,
-        }),
-      );
-      throw Exception('Falha ao preparar imagem facial: $e');
-    }
-  }
-
   Future<FaceCameraResult?> _abrirCameraTela({bool frontal = false}) async {
     try {
       // Usa tela unificada no modo de reconhecimento
