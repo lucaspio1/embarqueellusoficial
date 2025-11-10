@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:image/image.dart' as img;
 
 /// Utilitário para conversão de quadros da câmera (YUV/BGRA) em RGBA.
 ///
@@ -140,5 +141,61 @@ class YuvConverter {
   bool _isNV21(int rawFormat) {
     const nv21Formats = {17, 256};
     return nv21Formats.contains(rawFormat);
+  }
+
+  // ==================== CONVERSÃO DIRETA PARA img.Image ====================
+
+  /// Converte CameraImage diretamente para img.Image (RGBA)
+  ///
+  /// [cameraImage] - Frame da câmera a ser convertido
+  ///
+  /// Retorna img.Image pronto para processamento (4 canais RGBA).
+  ///
+  /// Este método é mais eficiente que chamar toRgba() e depois
+  /// img.Image.fromBytes() separadamente, pois elimina duplicação de código.
+  ///
+  /// FASE 3: Método adicionado para consolidar conversões e eliminar duplicação.
+  img.Image toImage(CameraImage cameraImage) {
+    final Uint8List rgba = toRgba(cameraImage);
+    return img.Image.fromBytes(
+      width: cameraImage.width,
+      height: cameraImage.height,
+      bytes: rgba.buffer,
+      numChannels: 4,
+      order: img.ChannelOrder.rgba,
+    );
+  }
+
+  /// Converte CameraImage diretamente para img.Image RGB (3 canais)
+  ///
+  /// [cameraImage] - Frame da câmera a ser convertido
+  ///
+  /// Retorna img.Image com 3 canais (RGB), descartando o canal alpha.
+  /// Use este método quando precisar de RGB puro (por exemplo, para ArcFace).
+  ///
+  /// FASE 3: Método adicionado para consolidar conversões RGB.
+  img.Image toImageRgb(CameraImage cameraImage) {
+    final img.Image rgba = toImage(cameraImage);
+
+    // Garantir que a imagem seja RGB (3 canais)
+    if (rgba.numChannels == 3) {
+      return rgba;
+    }
+
+    // Converter RGBA → RGB
+    final img.Image rgb = img.Image(
+      width: rgba.width,
+      height: rgba.height,
+      numChannels: 3,
+    );
+
+    for (int y = 0; y < rgba.height; y++) {
+      for (int x = 0; x < rgba.width; x++) {
+        final pixel = rgba.getPixel(x, y);
+        rgb.setPixel(x, y, pixel);
+      }
+    }
+
+    return rgb;
   }
 }
