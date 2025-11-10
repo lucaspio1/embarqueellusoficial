@@ -21,47 +21,28 @@ class FaceDetectionService {
 
   FaceDetector _ensureDetector() {
     if (_faceDetector != null) {
-      Sentry.captureMessage(
-        '✅ DETECTOR: Reutilizando detector existente',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
-        },
-      );
       return _faceDetector!;
     }
 
     Sentry.captureMessage(
-      '🔧 DETECTOR: Criando novo FaceDetector do Google MLKit',
+      '🔧 DETECTOR: Criando FaceDetector | mode=FAST | minSize=5% | tracking=ON',
       level: SentryLevel.info,
       withScope: (scope) {
         scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
-        scope.setContexts('detector_config', {
-          'performance_mode': 'accurate',
-          'contours_enabled': false,
-          'landmarks_enabled': false,
-          'classification_enabled': false,
-          'min_face_size': 0.1,
-        });
+        scope.setTag('detector_mode', 'fast');
+        scope.setTag('min_face_size', '0.05');
       },
     );
 
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
-        performanceMode: FaceDetectorMode.accurate,
+        performanceMode: FaceDetectorMode.fast,
         enableContours: false,
         enableLandmarks: false,
         enableClassification: false,
-        minFaceSize: 0.1,
+        enableTracking: true,
+        minFaceSize: 0.05,
       ),
-    );
-
-    Sentry.captureMessage(
-      '✅ DETECTOR: FaceDetector criado com sucesso',
-      level: SentryLevel.info,
-      withScope: (scope) {
-        scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
-      },
     );
 
     return _faceDetector!;
@@ -70,79 +51,58 @@ class FaceDetectionService {
   /// Detecta rostos em uma [InputImage].
   Future<List<Face>> detect(InputImage image) async {
     try {
-      await Sentry.captureMessage(
-        '🔍 DETECTION: Iniciando detecção de faces com Google MLKit',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
-          scope.setContexts('detection_start', {
-            'image_width': image.metadata?.size.width.toInt(),
-            'image_height': image.metadata?.size.height.toInt(),
-            'image_rotation': image.metadata?.rotation.toString(),
-            'image_format': image.metadata?.format.toString(),
-            'bytes_per_row': image.metadata?.bytesPerRow,
-          });
-        },
-      );
-
       final detector = _ensureDetector();
       final stopwatch = Stopwatch()..start();
+
+      Sentry.captureMessage(
+        '🔍 DETECTION START: ${image.metadata?.size.width}x${image.metadata?.size.height}',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('image_width', '${image.metadata?.size.width}');
+          scope.setTag('image_height', '${image.metadata?.size.height}');
+          scope.setTag('rotation', '${image.metadata?.rotation}');
+          scope.setTag('format', '${image.metadata?.format}');
+        },
+      );
 
       final faces = await detector.processImage(image);
 
       stopwatch.stop();
 
       if (faces.isEmpty) {
-        await Sentry.captureMessage(
-          '❌ DETECTION: NENHUMA FACE DETECTADA',
+        Sentry.captureMessage(
+          '❌ NENHUMA FACE DETECTADA | ${stopwatch.elapsedMilliseconds}ms',
           level: SentryLevel.warning,
           withScope: (scope) {
-            scope.setTag('face_detection', 'no_faces_found');
-            scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
-            scope.setContexts('detection_failed', {
-              'faces_detected': 0,
-              'processing_time_ms': stopwatch.elapsedMilliseconds,
-              'image_width': image.metadata?.size.width.toInt(),
-              'image_height': image.metadata?.size.height.toInt(),
-              'image_rotation': image.metadata?.rotation.toString(),
-              'image_format': image.metadata?.format.toString(),
-              'bytes_per_row': image.metadata?.bytesPerRow,
-              'message': 'Google MLKit não detectou nenhuma face na imagem',
-              'possible_causes': 'Imagem muito escura, face muito pequena, rotação incorreta, ou formato inválido',
+            scope.setTag('detection_result', 'no_faces');
+            scope.setTag('processing_time_ms', '${stopwatch.elapsedMilliseconds}');
+            scope.setTag('image_size', '${image.metadata?.size.width}x${image.metadata?.size.height}');
+            scope.setContexts('possible_causes', {
+              'cause_1': 'Imagem muito escura ou clara',
+              'cause_2': 'Face < 5% da imagem',
+              'cause_3': 'Rotação incorreta',
+              'cause_4': 'Face coberta ou ângulo ruim',
             });
           },
         );
       } else {
-        // Coletar informações detalhadas de todas as faces detectadas
-        final facesInfo = faces.map((face) {
-          return {
-            'bounding_box': '${face.boundingBox.width.toInt()}x${face.boundingBox.height.toInt()}',
-            'bounding_box_position': '(${face.boundingBox.left.toInt()}, ${face.boundingBox.top.toInt()})',
-            'head_euler_x': face.headEulerAngleX?.toStringAsFixed(2),
-            'head_euler_y': face.headEulerAngleY?.toStringAsFixed(2),
-            'head_euler_z': face.headEulerAngleZ?.toStringAsFixed(2),
-            'left_eye_open_prob': face.leftEyeOpenProbability?.toStringAsFixed(2),
-            'right_eye_open_prob': face.rightEyeOpenProbability?.toStringAsFixed(2),
-            'smiling_prob': face.smilingProbability?.toStringAsFixed(2),
-            'tracking_id': face.trackingId,
-            'landmarks_count': face.landmarks.length,
-          };
-        }).toList();
+        final face = faces.first;
+        final facePercent = ((face.boundingBox.width * face.boundingBox.height) /
+                            (image.metadata!.size.width * image.metadata!.size.height) * 100).toStringAsFixed(1);
 
-        await Sentry.captureMessage(
-          '✅ DETECTION: Face(s) detectada(s) com SUCESSO',
+        Sentry.captureMessage(
+          '✅ ${faces.length} FACE(S) DETECTADA(S) | ${stopwatch.elapsedMilliseconds}ms',
           level: SentryLevel.info,
           withScope: (scope) {
-            scope.setTag('face_detection', 'success');
-            scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
-            scope.setContexts('detection_success', {
-              'faces_detected': faces.length,
-              'processing_time_ms': stopwatch.elapsedMilliseconds,
-              'image_width': image.metadata?.size.width.toInt(),
-              'image_height': image.metadata?.size.height.toInt(),
-              'image_rotation': image.metadata?.rotation.toString(),
-              'image_format': image.metadata?.format.toString(),
-              'faces_details': facesInfo.toString(),
+            scope.setTag('faces_count', '${faces.length}');
+            scope.setTag('processing_time_ms', '${stopwatch.elapsedMilliseconds}');
+            scope.setTag('face_size_percent', facePercent);
+            scope.setContexts('primary_face', {
+              'bbox_width': face.boundingBox.width.toInt(),
+              'bbox_height': face.boundingBox.height.toInt(),
+              'bbox_left': face.boundingBox.left.toInt(),
+              'bbox_top': face.boundingBox.top.toInt(),
+              'face_percent_of_image': '$facePercent%',
             });
           },
         );
@@ -154,12 +114,8 @@ class FaceDetectionService {
         e,
         stackTrace: stackTrace,
         hint: Hint.withMap({
-          'context': 'Erro CRÍTICO ao detectar faces com Google MLKit',
+          'context': 'ERRO CRÍTICO ao detectar faces',
           'platform': _platformUtils.platformDescription,
-          'image_width': image.metadata?.size.width.toInt(),
-          'image_height': image.metadata?.size.height.toInt(),
-          'image_rotation': image.metadata?.rotation.toString(),
-          'image_format': image.metadata?.format.toString(),
         }),
       );
       rethrow;
@@ -172,14 +128,7 @@ class FaceDetectionService {
       final input = InputImage.fromFile(file);
       return await detect(input);
     } catch (e, stackTrace) {
-      await Sentry.captureException(
-        e,
-        stackTrace: stackTrace,
-        hint: Hint.withMap({
-          'context': 'Erro ao detectar faces a partir de arquivo',
-          'file_path': file.path,
-        }),
-      );
+      await Sentry.captureException(e, stackTrace: stackTrace);
       rethrow;
     }
   }
@@ -190,14 +139,7 @@ class FaceDetectionService {
       final input = InputImage.fromFilePath(path);
       return await detect(input);
     } catch (e, stackTrace) {
-      await Sentry.captureException(
-        e,
-        stackTrace: stackTrace,
-        hint: Hint.withMap({
-          'context': 'Erro ao detectar faces a partir de caminho',
-          'file_path': path,
-        }),
-      );
+      await Sentry.captureException(e, stackTrace: stackTrace);
       rethrow;
     }
   }
