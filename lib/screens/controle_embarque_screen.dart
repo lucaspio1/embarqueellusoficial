@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:embarqueellus/screens/embarque_screen.dart';
 import 'package:embarqueellus/services/data_service.dart';
