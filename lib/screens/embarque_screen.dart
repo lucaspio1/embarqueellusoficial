@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:embarqueellus/models/passageiro.dart';
 import 'package:embarqueellus/services/data_service.dart';
+import 'package:embarqueellus/screens/barcode_screen.dart';
 
 class EmbarqueScreen extends StatefulWidget {
   final String colegio;
@@ -39,11 +40,9 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
   void _filtrarPassageiros() => setState(() {});
 
   /// ============================================================
-  /// CONFIRMAR EMBARQUE (com pulseira) - CÓDIGO COMENTADO - NÃO MAIS EM USO
+  /// CONFIRMAR EMBARQUE (com pulseira)
   /// ============================================================
   Future<void> _confirmarEmbarque(Passageiro passageiro) async {
-    // CÓDIGO DE PULSEIRA COMENTADO - Mantido para referência futura
-    /*
     final prefs = await SharedPreferences.getInstance();
     final precisaPulseira =
         prefs.getString('pulseira')?.toUpperCase().trim() == 'SIM';
@@ -53,6 +52,9 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
     if (precisaPulseira) {
       codigoPulseira = await Navigator.push<String>(
         context,
+        MaterialPageRoute(
+          builder: (context) => const BarcodeScreen(),
+        ),
       );
 
       if (codigoPulseira == null || codigoPulseira.isEmpty) {
@@ -65,12 +67,11 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
         return;
       }
     }
-    */
 
-    // Embarque direto sem pulseira
+    // Embarque com ou sem pulseira (dependendo da configuração)
     final passageiroAtualizado = passageiro.copyWith(
       embarque: 'SIM',
-      // codigoPulseira: codigoPulseira ?? passageiro.codigoPulseira, // COMENTADO
+      codigoPulseira: codigoPulseira ?? passageiro.codigoPulseira,
     );
 
     // Atualiza localmente e sincroniza
@@ -90,9 +91,8 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
   }
 
   /// ============================================================
-  /// EDITAR PULSEIRA MANUALMENTE - CÓDIGO COMENTADO - NÃO MAIS EM USO
+  /// EDITAR PULSEIRA MANUALMENTE
   /// ============================================================
-  /*
   Future<void> _editarPulseira(Passageiro passageiro) async {
     final TextEditingController controller = TextEditingController(
       text: passageiro.codigoPulseira ?? '',
@@ -125,6 +125,7 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
                       final codigoLido = await Navigator.push<String>(
                         context,
                         MaterialPageRoute(
+                          builder: (context) => const BarcodeScreen(),
                         ),
                       );
                       if (codigoLido != null && codigoLido.isNotEmpty) {
@@ -172,7 +173,6 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
       );
     }
   }
-  */
 
   /// ============================================================
   /// CONSTRUÇÃO DA TELA
@@ -230,8 +230,6 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
                               Text('Turma: ${passageiro.turma}'),
                               Text('Ônibus: ${passageiro.onibus}'),
 
-                              // CÓDIGO DE PULSEIRA COMENTADO - NÃO MAIS EM USO
-                              /*
                               // Exibe pulseira se cadastrada
                               if (passageiro.codigoPulseira != null &&
                                   passageiro.codigoPulseira!.isNotEmpty)
@@ -253,7 +251,6 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
                                     ),
                                   ],
                                 ),
-                              */
 
                               const SizedBox(height: 10),
                               Row(
