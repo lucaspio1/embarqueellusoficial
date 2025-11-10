@@ -1,19 +1,18 @@
 // lib/screens/controle_alunos_screen.dart
-import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
-import 'package:image/image.dart' as img;
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
-import 'package:embarqueellus/services/face_image_processor.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
-import 'package:embarqueellus/services/face_detection_service.dart';
 import 'package:embarqueellus/services/data_service.dart';
-import 'package:google_mlkit_commons/google_mlkit_commons.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:embarqueellus/models/camera_mode.dart';
+import 'package:embarqueellus/models/face_camera_options.dart';
+import 'package:embarqueellus/models/face_camera_result.dart';
+import 'package:embarqueellus/screens/unified_face_camera_screen.dart';
 
 class ControleAlunosScreen extends StatefulWidget {
   const ControleAlunosScreen({super.key});
@@ -203,107 +202,31 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
     }
   }
 
-  Future<String?> _abrirCameraTela({bool frontal = true}) async {
-    final cameras = await availableCameras();
-    final camera = cameras.firstWhere(
-          (c) => frontal
-          ? c.lensDirection == CameraLensDirection.front
-          : c.lensDirection == CameraLensDirection.back,
-      orElse: () => cameras.first,
-    );
-
-    return await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CameraPreviewScreen(camera: camera),
-      ),
-    );
-  }
-
-  Future<img.Image> _processarImagemParaModelo(File imageFile) async {
-    try {
-      return await FaceImageProcessor.instance.processFile(
-        imageFile,
-        outputSize: FaceRecognitionService.INPUT_SIZE,
-      );
-    } catch (e) {
-      throw Exception('Falha ao preparar imagem facial: $e');
-    }
-  }
-
   Future<void> _cadastrarFacial(Map<String, dynamic> aluno) async {
     try {
-      final imagePath = await _abrirCameraTela(frontal: true);
-      if (imagePath == null) return;
+      // Abre tela unificada de câmera em modo de cadastro
+      final result = await Navigator.push<FaceCameraResult>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UnifiedFaceCameraScreen(
+            mode: CameraMode.enrollment,
+            options: FaceCameraOptions(
+              useFrontCamera: true,
+              title: 'Cadastrar ${aluno['nome']}',
+              subtitle: 'Posicione o rosto no centro',
+            ),
+          ),
+        ),
+      );
+
+      // Se cancelou ou erro
+      if (result == null || !result.success) return;
 
       setState(() => _processando = true);
-      _mostrarProgresso('Validando rosto na imagem...');
+      _mostrarProgresso('Extraindo características faciais...');
 
-      final inputImage = InputImage.fromFilePath(imagePath);
-      final faces = await FaceDetectionService.instance.detect(inputImage);
-
-      if (faces.isEmpty) {
-        await Sentry.captureMessage(
-          'Nenhum rosto detectado no cadastro facial',
-          level: SentryLevel.warning,
-          withScope: (scope) {
-            scope.setTag('screen', 'controle_alunos');
-            scope.setTag('error_type', 'no_face_detected');
-            scope.setContexts('aluno', {
-              'cpf': aluno['cpf'],
-              'nome': aluno['nome'],
-            });
-          },
-        );
-
-        if (Navigator.canPop(context)) Navigator.pop(context);
-        setState(() => _processando = false);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Nenhum rosto detectado na foto. Tente novamente.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
-        return;
-      }
-
-      if (faces.length > 1) {
-        await Sentry.captureMessage(
-          'Múltiplos rostos detectados no cadastro facial',
-          level: SentryLevel.warning,
-          withScope: (scope) {
-            scope.setTag('screen', 'controle_alunos');
-            scope.setTag('error_type', 'multiple_faces');
-            scope.setContexts('aluno', {
-              'cpf': aluno['cpf'],
-              'nome': aluno['nome'],
-              'faces_count': faces.length,
-            });
-          },
-        );
-
-        if (Navigator.canPop(context)) Navigator.pop(context);
-        setState(() => _processando = false);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Múltiplos rostos detectados. Certifique-se de que apenas uma pessoa está na foto.'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 3),
-          ),
-        );
-        return;
-      }
-
-      _atualizarProgresso('Processando imagem...');
-
-      final processedImage = await _processarImagemParaModelo(File(imagePath));
-
-      _atualizarProgresso('Extraindo características faciais...');
-
-      final embedding = await _faceService.extractEmbedding(processedImage);
+      // Extrair embedding da imagem processada
+      final embedding = await _faceService.extractEmbedding(result.firstProcessedImage!);
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
@@ -396,59 +319,36 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
   Future<void> _cadastrarFacialAvancado(Map<String, dynamic> aluno) async {
     try {
-      List<img.Image> faces = [];
-
-      for (int i = 1; i <= 3; i++) {
-        _mostrarProgresso('Captura $i/3: Posicione o rosto e olhe para a câmera');
-
-        final imagePath = await _abrirCameraTela(frontal: true);
-        if (imagePath == null) continue;
-
-        final inputImage = InputImage.fromFilePath(imagePath);
-        final detectedFaces = await FaceDetectionService.instance.detect(inputImage);
-
-        if (detectedFaces.isEmpty) {
-          if (Navigator.canPop(context)) Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Nenhum rosto detectado na captura $i. Tente novamente.'),
-              backgroundColor: Colors.red,
+      // Abre tela unificada em modo avançado (3 fotos)
+      final result = await Navigator.push<FaceCameraResult>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UnifiedFaceCameraScreen(
+            mode: CameraMode.enrollmentAdvanced,
+            options: FaceCameraOptions(
+              useFrontCamera: true,
+              title: 'Cadastro Avançado - ${aluno['nome']}',
+              subtitle: 'Vamos tirar 3 fotos para maior precisão',
+              showCaptureCounter: true,
             ),
-          );
-          continue;
-        }
+          ),
+        ),
+      );
 
-        if (detectedFaces.length > 1) {
-          if (Navigator.canPop(context)) Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Múltiplos rostos detectados na captura $i. Tente novamente.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-          continue;
-        }
+      // Se cancelou ou erro
+      if (result == null || !result.success) return;
 
-        final processedImage = await _processarImagemParaModelo(File(imagePath));
-        faces.add(processedImage);
+      setState(() => _processando = true);
+      _mostrarProgresso('Processando ${result.processedImages!.length} imagens...');
 
-        if (i < 3) {
-          await Future.delayed(Duration(seconds: 1));
-        }
-      }
-
-      if (faces.isEmpty) {
-        throw Exception('Nenhuma imagem capturada');
-      }
-
-      _atualizarProgresso('Processando ${faces.length} imagens...');
-
+      // Extrair embeddings de todas as imagens
       final embeddings = <List<double>>[];
-      for (final face in faces) {
+      for (final face in result.processedImages!) {
         final emb = await _faceService.extractEmbedding(face);
         embeddings.add(emb);
       }
 
+      // Fazer média dos embeddings
       final embedding = List<double>.filled(embeddings[0].length, 0.0);
       for (final emb in embeddings) {
         for (int i = 0; i < emb.length; i++) {
@@ -456,7 +356,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         }
       }
 
-      print('📤 [CadastroFacialAvançado] Embedding extraído de ${faces.length} fotos: ${embedding.length} dimensões');
+      print('📤 [CadastroFacialAvançado] Embedding extraído de ${result.processedImages!.length} fotos: ${embedding.length} dimensões');
 
       await _db.upsertPessoaFacial({
         'cpf': aluno['cpf'],
@@ -517,7 +417,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
             children: [
               Text('✅ Facial cadastrada com alta precisão!',
                   style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('${aluno['nome']} - ${faces.length} imagens processadas'),
+              Text('${aluno['nome']} - ${result.processedImages!.length} imagens processadas'),
               Text('🏠 Local inicial: QUARTO'),
               Text('☁️ Sincronizando em segundo plano...'),
             ],
@@ -861,235 +761,5 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
   void _atualizarProgresso(String mensagem) {
     if (Navigator.canPop(context)) Navigator.pop(context);
     _mostrarProgresso(mensagem);
-  }
-}
-
-// ============================================================================
-// CAMERA PREVIEW SCREEN
-// ============================================================================
-
-class CameraPreviewScreen extends StatefulWidget {
-  final CameraDescription camera;
-  const CameraPreviewScreen({required this.camera});
-
-  @override
-  State<CameraPreviewScreen> createState() => _CameraPreviewScreenState();
-}
-
-class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
-  CameraController? controller;
-  bool _tirandoFoto = false;
-  bool _disposed = false;
-  List<CameraDescription> _cameras = [];
-  int _currentCameraIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCamerasAndInitialize();
-  }
-
-  Future<void> _loadCamerasAndInitialize() async {
-    try {
-      _cameras = await availableCameras();
-
-      _currentCameraIndex = _cameras.indexWhere(
-            (c) => c.lensDirection == widget.camera.lensDirection,
-      );
-      if (_currentCameraIndex == -1) _currentCameraIndex = 0;
-
-      await _initializeCamera();
-    } catch (e) {
-      print('❌ Erro ao carregar câmeras: $e');
-      if (mounted) Navigator.pop(context);
-    }
-  }
-
-  Future<void> _initializeCamera() async {
-    try {
-      if (_cameras.isEmpty) return;
-
-      controller = CameraController(
-        _cameras[_currentCameraIndex],
-        ResolutionPreset.medium,
-        enableAudio: false,
-      );
-
-      await controller!.initialize();
-
-      if (mounted && !_disposed) {
-        setState(() {});
-      }
-    } catch (e) {
-      print('❌ Erro ao inicializar câmera: $e');
-      if (mounted) Navigator.pop(context);
-    }
-  }
-
-  Future<void> _trocarCamera() async {
-    if (_cameras.length < 2) return;
-
-    setState(() => _tirandoFoto = true);
-
-    try {
-      await controller?.dispose();
-      _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
-      await _initializeCamera();
-      setState(() => _tirandoFoto = false);
-    } catch (e) {
-      print('❌ Erro ao trocar câmera: $e');
-      setState(() => _tirandoFoto = false);
-    }
-  }
-
-  @override
-  void dispose() {
-    _disposed = true;
-    if (controller?.value.isInitialized == true) {
-      controller!.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (controller == null || !controller!.value.isInitialized) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          title: const Text('Capturar Rosto'),
-          backgroundColor: const Color(0xFF4C643C),
-        ),
-        body: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: Colors.white),
-              SizedBox(height: 20),
-              Text(
-                'Inicializando câmera...',
-                style: TextStyle(color: Colors.white, fontSize: 16),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Capturar rosto'),
-        backgroundColor: const Color(0xFF4C643C),
-        actions: [
-          if (_cameras.length > 1)
-            IconButton(
-              icon: const Icon(Icons.flip_camera_ios),
-              onPressed: _tirandoFoto ? null : _trocarCamera,
-              tooltip: 'Trocar Câmera',
-            ),
-        ],
-      ),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned.fill(
-            child: FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: controller!.value.previewSize!.height,
-                height: controller!.value.previewSize!.width,
-                child: CameraPreview(controller!),
-              ),
-            ),
-          ),
-          Center(
-            child: Container(
-              width: 280,
-              height: 360,
-              decoration: BoxDecoration(
-                shape: BoxShape.rectangle,
-                borderRadius: BorderRadius.circular(180),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.7),
-                  width: 2,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 60,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Card(
-                color: Colors.black54,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Posicione o rosto dentro da moldura',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (_cameras.length > 1) const SizedBox(height: 4),
-                      if (_cameras.length > 1)
-                        Text(
-                          _cameras[_currentCameraIndex].lensDirection ==
-                              CameraLensDirection.front
-                              ? '📷 Câmera Frontal'
-                              : '📷 Câmera Traseira',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          if (_tirandoFoto)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: Colors.white),
-                    SizedBox(height: 20),
-                    Text(
-                      'Processando...',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: _tirandoFoto ? Colors.grey : const Color(0xFF4C643C),
-        onPressed: _tirandoFoto
-            ? null
-            : () async {
-          setState(() => _tirandoFoto = true);
-          final image = await controller!.takePicture();
-
-          if (mounted && !_disposed) {
-            Navigator.pop(context, image.path);
-          }
-        },
-        child: _tirandoFoto
-            ? const CircularProgressIndicator(color: Colors.white)
-            : const Icon(Icons.camera_alt),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-    );
   }
 }

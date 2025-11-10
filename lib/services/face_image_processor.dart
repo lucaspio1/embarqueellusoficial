@@ -109,7 +109,7 @@ class FaceImageProcessor {
             'width': decoded!.width,
             'height': decoded!.height,
             'channels': decoded!.numChannels,
-            'has_exif_data': !decoded!.exif.isEmpty,
+            'has_exif_data': decoded!.exif.directories.isNotEmpty,
           });
         },
       );

@@ -1,10 +1,11 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
-import 'package:image/image.dart' as img;
 import 'package:sentry_flutter/sentry_flutter.dart';
+
 import 'package:embarqueellus/services/face_recognition_service.dart';
-import 'package:embarqueellus/widgets/camera_preview_widget.dart';
+import 'package:embarqueellus/models/camera_mode.dart';
+import 'package:embarqueellus/models/face_camera_options.dart';
+import 'package:embarqueellus/models/face_camera_result.dart';
+import 'package:embarqueellus/screens/unified_face_camera_screen.dart';
 
 /// Tela de reconhecimento facial para embarque
 /// Reconhece o aluno e retorna seus dados
@@ -56,61 +57,34 @@ class _ReconhecerAlunoScreenState extends State<ReconhecerAlunoScreen> {
 
   Future<void> _reconhecer() async {
     try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        throw Exception('Nenhuma câmera disponível');
-      }
-
-      // 🎯 CÂMERA TRASEIRA para melhor qualidade de reconhecimento
-      final camera = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.back,
-        orElse: () => cameras.first,
-      );
-
       if (!mounted) return;
 
-      final imagePath = await Navigator.push<String>(
+      // Abre tela unificada de câmera em modo de reconhecimento
+      final result = await Navigator.push<FaceCameraResult>(
         context,
         MaterialPageRoute(
-          builder: (context) => CameraPreviewWidget(
-            camera: camera,
-            title: 'Reconhecer Aluno',
+          builder: (_) => UnifiedFaceCameraScreen(
+            mode: CameraMode.recognition,
+            options: FaceCameraOptions(
+              useFrontCamera: false, // Câmera traseira para melhor qualidade
+              title: 'Reconhecer Aluno',
+              subtitle: 'Posicione o rosto do aluno',
+            ),
           ),
         ),
       );
 
-      if (imagePath == null) {
+      // Se cancelou ou não reconheceu
+      if (result == null || !result.success) {
         if (mounted) {
           Navigator.pop(context);
         }
         return;
       }
 
-      setState(() {
-        processando = true;
-        status = "Reconhecendo rosto...";
-      });
-
-      final bytes = await File(imagePath).readAsBytes();
-      final decoded = img.decodeImage(bytes);
-
-      if (decoded == null) {
-        final error = Exception('Erro ao decodificar imagem capturada');
-        await Sentry.captureException(
-          error,
-          hint: Hint.withMap({
-            'context': 'Falha ao decodificar imagem na tela de reconhecimento',
-            'image_path': imagePath,
-          }),
-        );
-        throw error;
-      }
-
-      setState(() => status = "Comparando com banco de dados...");
-
-      final resultado = await FaceRecognitionService.instance.recognize(decoded);
-
-      if (resultado != null) {
+      // Se reconheceu com sucesso
+      if (result.recognizedPerson != null) {
+        final resultado = result.recognizedPerson!;
         setState(() {
           processando = false;
           reconhecido = true;
