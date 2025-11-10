@@ -1,0 +1,607 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
+import 'package:image/image.dart' as img;
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+
+import 'package:embarqueellus/models/camera_mode.dart';
+import 'package:embarqueellus/models/face_camera_options.dart';
+import 'package:embarqueellus/models/face_camera_result.dart';
+import 'package:embarqueellus/services/face_detection_service.dart';
+import 'package:embarqueellus/services/face_image_processor.dart';
+import 'package:embarqueellus/services/face_recognition_service.dart';
+
+/// Tela unificada de câmera facial
+///
+/// Suporta 3 modos:
+/// - enrollment: Cadastro simples (1 foto)
+/// - enrollmentAdvanced: Cadastro avançado (3 fotos)
+/// - recognition: Reconhecimento facial
+class UnifiedFaceCameraScreen extends StatefulWidget {
+  final CameraMode mode;
+  final FaceCameraOptions options;
+
+  const UnifiedFaceCameraScreen({
+    super.key,
+    required this.mode,
+    this.options = const FaceCameraOptions(),
+  });
+
+  @override
+  State<UnifiedFaceCameraScreen> createState() => _UnifiedFaceCameraScreenState();
+}
+
+class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
+  CameraController? _cameraController;
+  List<CameraDescription> _cameras = [];
+  int _currentCameraIndex = 0;
+
+  bool _isInitializing = true;
+  bool _isProcessing = false;
+  String? _errorMessage;
+  String _statusMessage = '';
+
+  // Para modo avançado
+  int _currentCaptureIndex = 0;
+  final List<String> _capturedImagePaths = [];
+  final List<img.Image> _processedImages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeCamera();
+    _initializeServices();
+  }
+
+  Future<void> _initializeServices() async {
+    try {
+      await FaceRecognitionService.instance.init();
+      await Sentry.captureMessage(
+        '✅ Serviços de reconhecimento facial inicializados',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('screen', 'unified_face_camera');
+          scope.setTag('mode', widget.mode.name);
+        },
+      );
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao inicializar serviços de reconhecimento',
+          'mode': widget.mode.name,
+        }),
+      );
+    }
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      _cameras = await availableCameras();
+
+      if (_cameras.isEmpty) {
+        setState(() {
+          _errorMessage = 'Nenhuma câmera disponível';
+          _isInitializing = false;
+        });
+        return;
+      }
+
+      // Selecionar câmera inicial
+      _currentCameraIndex = _cameras.indexWhere(
+        (c) => widget.options.useFrontCamera
+            ? c.lensDirection == CameraLensDirection.front
+            : c.lensDirection == CameraLensDirection.back,
+      );
+      if (_currentCameraIndex == -1) _currentCameraIndex = 0;
+
+      await _setupCamera(_cameras[_currentCameraIndex]);
+
+      await Sentry.captureMessage(
+        '📱 Câmera inicializada com sucesso',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('platform', Platform.isIOS ? 'iOS' : 'Android');
+          scope.setContexts('camera_info', {
+            'total_cameras': _cameras.length,
+            'selected_camera': _cameras[_currentCameraIndex].name,
+            'lens_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
+          });
+        },
+      );
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao inicializar câmera',
+          'platform': Platform.isIOS ? 'iOS' : 'Android',
+        }),
+      );
+
+      setState(() {
+        _errorMessage = 'Erro ao acessar câmera: $e';
+        _isInitializing = false;
+      });
+    }
+  }
+
+  Future<void> _setupCamera(CameraDescription camera) async {
+    _cameraController?.dispose();
+
+    _cameraController = CameraController(
+      camera,
+      widget.options.resolution,
+      enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.jpeg,
+    );
+
+    await _cameraController!.initialize();
+
+    if (mounted) {
+      setState(() => _isInitializing = false);
+    }
+  }
+
+  Future<void> _switchCamera() async {
+    if (_cameras.length <= 1) return;
+
+    setState(() => _isProcessing = true);
+
+    _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
+    await _setupCamera(_cameras[_currentCameraIndex]);
+
+    setState(() => _isProcessing = false);
+
+    await Sentry.captureMessage(
+      '🔄 Câmera trocada',
+      level: SentryLevel.info,
+      withScope: (scope) {
+        scope.setContexts('camera_switch', {
+          'new_camera': _cameras[_currentCameraIndex].name,
+          'lens_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
+        });
+      },
+    );
+  }
+
+  Future<void> _capturePhoto() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    if (_isProcessing) return;
+
+    setState(() {
+      _isProcessing = true;
+      _statusMessage = 'Capturando foto...';
+    });
+
+    try {
+      final XFile image = await _cameraController!.takePicture();
+
+      await Sentry.captureMessage(
+        '📸 Foto capturada',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setContexts('capture', {
+            'path': image.path,
+            'mode': widget.mode.name,
+            'capture_index': _currentCaptureIndex + 1,
+            'total_captures': widget.mode.captureCount,
+          });
+        },
+      );
+
+      await _processCapture(image.path);
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao capturar foto',
+          'mode': widget.mode.name,
+        }),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erro ao capturar foto: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+
+      setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _processCapture(String imagePath) async {
+    try {
+      setState(() => _statusMessage = 'Detectando rosto...');
+
+      // 1. Detectar face na imagem
+      final inputImage = InputImage.fromFilePath(imagePath);
+      final faces = await FaceDetectionService.instance.detect(inputImage);
+
+      if (faces.isEmpty) {
+        await Sentry.captureMessage(
+          '⚠️ Nenhum rosto detectado',
+          level: SentryLevel.warning,
+          withScope: (scope) {
+            scope.setTag('mode', widget.mode.name);
+            scope.setTag('capture_index', '${_currentCaptureIndex + 1}');
+          },
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Nenhum rosto detectado. Tente novamente.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+
+        setState(() => _isProcessing = false);
+        return;
+      }
+
+      if (faces.length > 1) {
+        await Sentry.captureMessage(
+          '⚠️ Múltiplos rostos detectados',
+          level: SentryLevel.warning,
+          withScope: (scope) {
+            scope.setTag('mode', widget.mode.name);
+            scope.setContexts('detection', {
+              'faces_count': faces.length,
+            });
+          },
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Múltiplos rostos detectados. Certifique-se de que apenas uma pessoa está na foto.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+
+        setState(() => _isProcessing = false);
+        return;
+      }
+
+      // 2. Processar imagem (crop + normalização)
+      setState(() => _statusMessage = 'Processando imagem...');
+
+      final processedImage = await FaceImageProcessor.instance.processFile(
+        File(imagePath),
+        outputSize: FaceRecognitionService.INPUT_SIZE,
+      );
+
+      // 3. Modo de reconhecimento
+      if (widget.mode == CameraMode.recognition) {
+        setState(() => _statusMessage = 'Reconhecendo...');
+
+        final recognitionResult = await FaceRecognitionService.instance.recognize(processedImage);
+
+        if (recognitionResult != null) {
+          await Sentry.captureMessage(
+            '✅ Reconhecimento bem-sucedido',
+            level: SentryLevel.info,
+            withScope: (scope) {
+              scope.setContexts('recognition', {
+                'person_name': recognitionResult['nome'],
+                'person_cpf': recognitionResult['cpf'],
+                'confidence': recognitionResult['similarity_score'],
+                'distance': recognitionResult['distance_l2'],
+              });
+            },
+          );
+
+          final result = FaceCameraResult.recognition(
+            recognizedPerson: recognitionResult,
+            confidenceScore: recognitionResult['similarity_score'] ?? 0.0,
+            distance: recognitionResult['distance_l2'] ?? 999.0,
+            imagePath: imagePath,
+            processedImage: processedImage,
+          );
+
+          if (mounted) {
+            Navigator.pop(context, result);
+          }
+        } else {
+          await Sentry.captureMessage(
+            '⚠️ Nenhum aluno reconhecido',
+            level: SentryLevel.warning,
+          );
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('❌ Nenhum aluno reconhecido'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+
+          setState(() => _isProcessing = false);
+        }
+        return;
+      }
+
+      // 4. Modo de cadastro
+      _capturedImagePaths.add(imagePath);
+      _processedImages.add(processedImage);
+      _currentCaptureIndex++;
+
+      await Sentry.captureMessage(
+        '✅ Captura ${_currentCaptureIndex}/${widget.mode.captureCount} processada',
+        level: SentryLevel.info,
+      );
+
+      // Se completou todas as capturas
+      if (_currentCaptureIndex >= widget.mode.captureCount) {
+        final result = FaceCameraResult.enrollment(
+          imagePaths: _capturedImagePaths,
+          processedImages: _processedImages,
+        );
+
+        if (mounted) {
+          Navigator.pop(context, result);
+        }
+      } else {
+        // Mais capturas necessárias
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Captura ${_currentCaptureIndex}/${widget.mode.captureCount} concluída!'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+
+        setState(() => _isProcessing = false);
+      }
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao processar captura',
+          'mode': widget.mode.name,
+          'image_path': imagePath,
+        }),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erro ao processar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+
+      setState(() => _isProcessing = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _cameraController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = widget.options.title ?? widget.mode.defaultTitle;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: Colors.black87,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context, FaceCameraResult.cancelled()),
+        ),
+        actions: [
+          if (widget.options.showCameraSwitchButton && _cameras.length > 1)
+            IconButton(
+              icon: const Icon(Icons.flip_camera_ios),
+              onPressed: _isProcessing ? null : _switchCamera,
+            ),
+        ],
+      ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isInitializing) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Inicializando câmera...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            _errorMessage!,
+            style: const TextStyle(color: Colors.red, fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Preview da câmera
+        if (_cameraController?.value.isInitialized == true)
+          CameraPreview(_cameraController!),
+
+        // Overlay de guia facial
+        if (widget.options.showFaceGuide) _buildFaceGuide(),
+
+        // Status e instruções
+        _buildTopOverlay(),
+
+        // Controles inferiores
+        _buildBottomControls(),
+
+        // Loading overlay
+        if (_isProcessing) _buildLoadingOverlay(),
+      ],
+    );
+  }
+
+  Widget _buildFaceGuide() {
+    return Center(
+      child: Container(
+        width: 250,
+        height: 300,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+          borderRadius: BorderRadius.circular(150),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopOverlay() {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withOpacity(0.7),
+              Colors.transparent,
+            ],
+          ),
+        ),
+        child: Column(
+          children: [
+            if (widget.options.subtitle != null)
+              Text(
+                widget.options.subtitle!,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+            if (widget.mode.isMultiCapture && widget.options.showCaptureCounter)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Captura ${_currentCaptureIndex + 1}/${widget.mode.captureCount}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            if (_statusMessage.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _statusMessage,
+                  style: const TextStyle(color: Colors.yellow, fontSize: 14),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomControls() {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [
+              Colors.black.withOpacity(0.7),
+              Colors.transparent,
+            ],
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Botão de captura
+            GestureDetector(
+              onTap: _isProcessing ? null : _capturePhoto,
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _isProcessing ? Colors.grey : Colors.white,
+                  border: Border.all(color: Colors.white, width: 3),
+                ),
+                child: Icon(
+                  Icons.camera_alt,
+                  color: _isProcessing ? Colors.white : Colors.black,
+                  size: 32,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.7),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: Colors.white),
+            const SizedBox(height: 16),
+            Text(
+              _statusMessage,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

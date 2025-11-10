@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:embarqueellus/models/passageiro.dart';
 import 'package:embarqueellus/services/data_service.dart';
-import 'package:embarqueellus/screens/barcode_screen.dart'; // tela de leitura/digitação
 
 class EmbarqueScreen extends StatefulWidget {
   final String colegio;
@@ -54,7 +53,6 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
     if (precisaPulseira) {
       codigoPulseira = await Navigator.push<String>(
         context,
-        MaterialPageRoute(builder: (_) => const BarcodeScreen()),
       );
 
       if (codigoPulseira == null || codigoPulseira.isEmpty) {
@@ -127,7 +125,6 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
                       final codigoLido = await Navigator.push<String>(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const BarcodeScreen(),
                         ),
                       );
                       if (codigoLido != null && codigoLido.isNotEmpty) {
