@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' show Rect;
+import 'dart:ui' show Rect, Size;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -14,6 +14,8 @@ import 'face_detection_service.dart';
 import 'yuv_converter.dart';
 import 'camera_image_converter.dart';
 import 'platform_camera_utils.dart';
+import 'image_rotation_handler.dart';
+import 'image_file_processor.dart';
 
 /// Utilitário especializado para processamento de imagens faciais.
 ///
@@ -36,6 +38,8 @@ class FaceImageProcessor {
   final FaceDetectionService _detection = FaceDetectionService.instance;
   final CameraImageConverter _converter = CameraImageConverter.instance;
   final PlatformCameraUtils _platformUtils = PlatformCameraUtils.instance;
+  final ImageRotationHandler _rotationHandler = ImageRotationHandler.instance;
+  final ImageFileProcessor _fileProcessor = ImageFileProcessor.instance;
 
   /// Processa um arquivo de imagem (por exemplo, foto capturada) e retorna a
   /// imagem já recortada/normalizada para uso pelo ArcFace.
@@ -60,19 +64,8 @@ class FaceImageProcessor {
       );
 
       // ⚠️ CORREÇÃO iOS 15.5:
-      // Ler e decodificar a imagem PRIMEIRO para aplicar rotação EXIF
-      // ANTES de detectar faces. InputImage.fromFile() nem sempre
-      // aplica EXIF corretamente no iOS.
-      final bytes = await file.readAsBytes();
-
-      // Decodificar e aplicar orientação EXIF
-      img.Image? decoded = img.decodeImage(bytes);
-      if (decoded == null) {
-        throw Exception('Falha ao decodificar imagem.');
-      }
-
-      // ✅ Aplicar rotação EXIF (crítico para iOS)
-      final img.Image oriented = img.bakeOrientation(decoded);
+      // Usar ImageFileProcessor para carregar e aplicar EXIF automaticamente
+      final img.Image oriented = await _fileProcessor.loadAndOrient(file);
 
       Sentry.captureMessage(
         '🔄 EXIF: ${oriented.width}x${oriented.height}',
@@ -105,8 +98,7 @@ class FaceImageProcessor {
           try {
             // Aplicar melhorias
             final enhanced = _enhanceImage(oriented);
-            final enhancedBytes = img.encodeJpg(enhanced, quality: 100);
-            await tempFile.writeAsBytes(enhancedBytes);
+            await _fileProcessor.saveAsJpeg(enhanced, tempFile, quality: 100);
 
             // Usar InputImage.fromFile() novamente
             final enhancedInput = InputImage.fromFile(tempFile);
@@ -135,8 +127,7 @@ class FaceImageProcessor {
                   interpolation: img.Interpolation.cubic,
                 );
 
-                final resizedBytes = img.encodeJpg(resized, quality: 100);
-                await tempFile.writeAsBytes(resizedBytes);
+                await _fileProcessor.saveAsJpeg(resized, tempFile, quality: 100);
 
                 final resizedInput = InputImage.fromFile(tempFile);
                 faces = await _detection.detect(resizedInput);
@@ -234,78 +225,28 @@ class FaceImageProcessor {
       return null;
     }
 
-    // Converter CameraImage para RGBA usando YuvConverter
-    final Uint8List rgba = YuvConverter.instance.toRgba(image);
-    img.Image base = img.Image.fromBytes(
-      width: image.width,
-      height: image.height,
-      bytes: rgba.buffer,
-      numChannels: 4,
-      order: img.ChannelOrder.rgba,
-    );
+    // Converter CameraImage para img.Image usando YuvConverter
+    img.Image base = YuvConverter.instance.toImage(image);
 
-    // Aplicar rotação calculada pelo conversor
-    final rotation = _platformUtils.getImageRotation(camera: camera);
-    base = _applyRotation(base, rotation);
+    // Aplicar rotação usando ImageRotationHandler
+    final rotation = _rotationHandler.calculateRotation(camera: camera);
+    base = _rotationHandler.applyImageRotation(base, rotation);
 
     // Ajustar bounding boxes dos rostos para a rotação aplicada
-    final List<Face> rotatedFaces =
-        faces.map((f) => _rotateFaceBoundingBox(f, rotation, image)).toList();
+    final imageSize = Size(image.width.toDouble(), image.height.toDouble());
+    final List<Face> rotatedFaces = _rotationHandler.rotateBoundingBoxes(
+      faces,
+      rotation,
+      imageSize,
+    );
 
     return _cropFace(base, rotatedFaces, outputSize: outputSize);
   }
 
   img.Image _processBytes(Uint8List bytes, List<Face> faces,
       {required int outputSize}) {
-    Sentry.captureMessage(
-      '🔄 PROCESSOR: Decodificando bytes da imagem',
-      level: SentryLevel.info,
-      withScope: (scope) {
-        scope.setContexts('decode_start', {
-          'bytes_length': bytes.length,
-        });
-      },
-    );
-
-    img.Image? decoded = img.decodeImage(bytes);
-    if (decoded == null) {
-      Sentry.captureMessage(
-        '❌ PROCESSOR: Falha ao decodificar imagem',
-        level: SentryLevel.error,
-        withScope: (scope) {
-          scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
-          scope.setContexts('decode_error', {
-            'bytes_length': bytes.length,
-          });
-        },
-      );
-      throw Exception('Falha ao decodificar imagem.');
-    }
-
-    Sentry.captureMessage(
-      '✅ PROCESSOR: Imagem decodificada',
-      level: SentryLevel.info,
-      withScope: (scope) {
-        scope.setContexts('decoded_image', {
-          'width': decoded!.width,
-          'height': decoded!.height,
-          'channels': decoded!.numChannels,
-        });
-      },
-    );
-
-    final img.Image baked = img.bakeOrientation(decoded!);
-
-    Sentry.captureMessage(
-      '🔄 PROCESSOR: Orientação da imagem normalizada',
-      level: SentryLevel.info,
-      withScope: (scope) {
-        scope.setContexts('baked_image', {
-          'width': baked.width,
-          'height': baked.height,
-        });
-      },
-    );
+    // Usar ImageFileProcessor para decodificar e aplicar EXIF
+    final img.Image baked = _fileProcessor.decodeAndOrient(bytes);
 
     return _cropFace(baked, faces, outputSize: outputSize);
   }
@@ -415,19 +356,6 @@ class FaceImageProcessor {
     return rgb;
   }
 
-  img.Image _applyRotation(img.Image image, InputImageRotation rotation) {
-    switch (rotation) {
-      case InputImageRotation.rotation0deg:
-        return image;
-      case InputImageRotation.rotation90deg:
-        return img.copyRotate(image, angle: 90);
-      case InputImageRotation.rotation180deg:
-        return img.copyRotate(image, angle: 180);
-      case InputImageRotation.rotation270deg:
-        return img.copyRotate(image, angle: 270);
-    }
-  }
-
   /// Melhora a imagem aumentando contraste e brilho para facilitar detecção
   img.Image _enhanceImage(img.Image source) {
     // Aumentar contraste e brilho mais agressivamente
@@ -450,57 +378,6 @@ class FaceImageProcessor {
     );
 
     return enhanced;
-  }
-
-  Face _rotateFaceBoundingBox(
-      Face face, InputImageRotation rotation, CameraImage image) {
-    final Rect box = face.boundingBox;
-    final double width = image.width.toDouble();
-    final double height = image.height.toDouble();
-
-    Rect mapped;
-    switch (rotation) {
-      case InputImageRotation.rotation0deg:
-        mapped = box;
-        break;
-      case InputImageRotation.rotation90deg:
-        mapped = Rect.fromLTWH(
-          height - box.bottom,
-          box.left,
-          box.height,
-          box.width,
-        );
-        break;
-      case InputImageRotation.rotation180deg:
-        mapped = Rect.fromLTWH(
-          width - box.right,
-          height - box.bottom,
-          box.width,
-          box.height,
-        );
-        break;
-      case InputImageRotation.rotation270deg:
-        mapped = Rect.fromLTWH(
-          box.top,
-          width - box.right,
-          box.height,
-          box.width,
-        );
-        break;
-    }
-
-    return Face(
-      boundingBox: mapped,
-      headEulerAngleX: face.headEulerAngleX,
-      headEulerAngleY: face.headEulerAngleY,
-      headEulerAngleZ: face.headEulerAngleZ,
-      leftEyeOpenProbability: face.leftEyeOpenProbability,
-      rightEyeOpenProbability: face.rightEyeOpenProbability,
-      smilingProbability: face.smilingProbability,
-      trackingId: face.trackingId,
-      landmarks: face.landmarks,
-      contours: face.contours,
-    );
   }
 }
 

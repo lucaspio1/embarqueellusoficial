@@ -7,17 +7,21 @@ import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'platform_camera_utils.dart';
+import 'image_rotation_handler.dart';
 
 /// Conversor centralizado de CameraImage para InputImage.
 ///
 /// Compatível com Android (YUV420) e iOS (BGRA8888).
 /// Aplica rotação correta baseada na plataforma e câmera.
+///
+/// FASE 3: Refatorado para usar ImageRotationHandler para cálculo de rotação.
 class CameraImageConverter {
   CameraImageConverter._();
 
   static final CameraImageConverter instance = CameraImageConverter._();
 
   final PlatformCameraUtils _platformUtils = PlatformCameraUtils.instance;
+  final ImageRotationHandler _rotationHandler = ImageRotationHandler.instance;
 
   /// Converte [CameraImage] para [InputImage] compatível com MLKit.
   ///
@@ -50,8 +54,8 @@ class CameraImageConverter {
       },
     );
 
-    // Calcular rotação baseada na plataforma e câmera
-    final rotation = _platformUtils.getImageRotation(camera: camera);
+    // Calcular rotação usando ImageRotationHandler
+    final rotation = _rotationHandler.calculateRotation(camera: camera);
 
     if (enableDebugLogs) {
       _platformUtils.logCameraImageInfo(image, rotation);
