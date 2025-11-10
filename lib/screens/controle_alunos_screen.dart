@@ -383,7 +383,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
             'cpf': aluno['cpf'],
             'nome': aluno['nome'],
             'embedding_dimensions': embedding.length,
-            'fotos_processadas': faces.length,
+            'fotos_processadas': result.processedImages!.length,
           });
         },
       );

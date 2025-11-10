@@ -1,17 +1,17 @@
 // lib/screens/reconhecimento_facial_completo.dart
-import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
-import 'package:image/image.dart' as img;
 import 'package:sentry_flutter/sentry_flutter.dart';
+
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
-import 'package:embarqueellus/services/face_image_processor.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/auth_service.dart';
-import 'package:embarqueellus/widgets/camera_preview_widget.dart';
+import 'package:embarqueellus/models/camera_mode.dart';
+import 'package:embarqueellus/models/face_camera_options.dart';
+import 'package:embarqueellus/models/face_camera_result.dart';
+import 'package:embarqueellus/screens/unified_face_camera_screen.dart';
 
 class ReconhecimentoFacialScreen extends StatefulWidget {
   const ReconhecimentoFacialScreen({super.key});
@@ -72,59 +72,25 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
   Future<void> _iniciarReconhecimento() async {
     try {
       await Sentry.captureMessage(
-        '🎯 ETAPA 1/4: Iniciando reconhecimento facial - Abrindo câmera',
+        '🎯 Iniciando reconhecimento facial - Abrindo câmera unificada',
         level: SentryLevel.info,
       );
 
-      final imagePath = await _abrirCameraTela(frontal: false);
-      if (imagePath == null) {
+      // Usa tela unificada que já faz detecção + reconhecimento
+      final result = await _abrirCameraTela(frontal: false);
+
+      if (result == null || !result.success) {
         await Sentry.captureMessage(
-          '⚠️ ETAPA 1/4: Usuário CANCELOU captura de foto',
+          '⚠️ Usuário CANCELOU ou erro no reconhecimento',
           level: SentryLevel.warning,
         );
         return;
       }
 
-      await Sentry.captureMessage(
-        '✅ ETAPA 2/4: Foto CAPTURADA com sucesso - Iniciando processamento',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setContexts('camera', {
-            'image_path': imagePath,
-          });
-        },
-      );
+      // Se reconheceu alguém
+      if (result.recognizedPerson != null) {
+        final resultado = result.recognizedPerson!;
 
-      setState(() => _processando = true);
-      _mostrarProgresso('Reconhecendo rosto...');
-
-      final processedImage = await _processarImagemParaModelo(File(imagePath));
-
-      await Sentry.captureMessage(
-        '✅ ETAPA 3/4: Imagem PROCESSADA - Face detectada e recortada',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setContexts('processamento', {
-            'width': processedImage.width,
-            'height': processedImage.height,
-            'channels': processedImage.numChannels,
-          });
-        },
-      );
-
-      _atualizarProgresso('Comparando com banco de dados...');
-
-      await Sentry.captureMessage(
-        '🎯 ETAPA 4/4: COMPARANDO com banco de dados de alunos',
-        level: SentryLevel.info,
-      );
-
-      final resultado = await _faceService.recognize(processedImage);
-
-      if (Navigator.canPop(context)) Navigator.pop(context);
-      setState(() => _processando = false);
-
-      if (resultado != null) {
         await Sentry.captureMessage(
           'Reconhecimento facial bem-sucedido (tela completa)',
           level: SentryLevel.info,
@@ -134,20 +100,20 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
             scope.setContexts('aluno', {
               'nome': resultado['nome'],
               'cpf': resultado['cpf'],
+              'confidence': result.confidenceScore,
+              'distance': result.distance,
             });
           },
         );
         await _selecionarTipoAcesso(resultado);
       } else {
+        // Não reconheceu
         await Sentry.captureMessage(
           'Facial não encontrada na tela de reconhecimento completo',
           level: SentryLevel.warning,
           withScope: (scope) {
             scope.setTag('screen', 'reconhecimento_facial_completo');
             scope.setTag('resultado', 'nao_reconhecido');
-            scope.setContexts('info', {
-              'message': 'Usuário verá dialog oferecendo busca manual',
-            });
           },
         );
         _mostrarDialogNaoReconhecido();
@@ -275,29 +241,24 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
     }
   }
 
-  Future<String?> _abrirCameraTela({bool frontal = false}) async {
+  Future<FaceCameraResult?> _abrirCameraTela({bool frontal = false}) async {
     try {
-      final cameras = await availableCameras();
-      // 🎯 PADRÃO: Câmera traseira (melhor qualidade)
-      final camera = cameras.firstWhere(
-            (c) => frontal
-            ? c.lensDirection == CameraLensDirection.front
-            : c.lensDirection == CameraLensDirection.back,
-        orElse: () => cameras.first,
-      );
-
-      final imagePath = await Navigator.push<String>(
+      // Usa tela unificada no modo de reconhecimento
+      final result = await Navigator.push<FaceCameraResult>(
         context,
         MaterialPageRoute(
-          builder: (_) => CameraPreviewWidget(
-            camera: camera,
-            autoCapture: false, // ❌ Captura automática desativada - apenas botão manual
-            title: 'Reconhecer Aluno',
+          builder: (_) => UnifiedFaceCameraScreen(
+            mode: CameraMode.recognition,
+            options: FaceCameraOptions(
+              useFrontCamera: frontal,
+              title: 'Reconhecer Aluno',
+              subtitle: 'Posicione o rosto do aluno',
+            ),
           ),
         ),
       );
 
-      return imagePath;
+      return result;
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao abrir câmera: $e')),
