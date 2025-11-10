@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/screens/controle_alunos_screen.dart';
 import 'package:embarqueellus/screens/main_menu_screen.dart';
+import 'package:embarqueellus/widgets/barcode_camera_view.dart';
 
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
@@ -428,140 +429,10 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
 }
 
 // ============================================================================
-// TELA DE SCANNER DE QR CODE
+// TELA DE SCANNER USANDO GOOGLE MLKIT BARCODE SCANNING
 // ============================================================================
-class QRCodeScannerScreen extends StatefulWidget {
+class QRCodeScannerScreen extends StatelessWidget {
   const QRCodeScannerScreen({super.key});
-
-  @override
-  State<QRCodeScannerScreen> createState() => _QRCodeScannerScreenState();
-}
-
-class _QRCodeScannerScreenState extends State<QRCodeScannerScreen> {
-  CameraController? _cameraController;
-  final BarcodeScanner _barcodeScanner = BarcodeScanner();
-  bool _isProcessing = false;
-  bool _isCameraInitialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initCamera();
-  }
-
-  Future<void> _initCamera() async {
-    try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) return;
-
-      final camera = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.back,
-        orElse: () => cameras.first,
-      );
-
-      _cameraController = CameraController(
-        camera,
-        ResolutionPreset.high,
-        enableAudio: false,
-      );
-
-      await _cameraController!.initialize();
-
-      if (mounted) {
-        setState(() => _isCameraInitialized = true);
-        _startScanning();
-      }
-    } catch (e) {
-      print('❌ Erro ao inicializar câmera: $e');
-    }
-  }
-
-  void _startScanning() {
-    _cameraController?.startImageStream((CameraImage image) async {
-      if (_isProcessing) return;
-      _isProcessing = true;
-
-      try {
-        final inputImage = _convertCameraImage(image);
-        if (inputImage == null) {
-          _isProcessing = false;
-          return;
-        }
-
-        final barcodes = await _barcodeScanner.processImage(inputImage);
-
-        if (barcodes.isNotEmpty && mounted) {
-          final barcode = barcodes.first;
-          final value = barcode.displayValue ?? '';
-
-          if (value.isNotEmpty) {
-            await _cameraController?.stopImageStream();
-            _processQRCode(value);
-          }
-        }
-      } catch (e) {
-        print('❌ Erro ao processar imagem: $e');
-      }
-
-      _isProcessing = false;
-    });
-  }
-
-  InputImage? _convertCameraImage(CameraImage image) {
-    try {
-      final WriteBuffer allBytes = WriteBuffer();
-      for (final Plane plane in image.planes) {
-        allBytes.putUint8List(plane.bytes);
-      }
-      final bytes = allBytes.done().buffer.asUint8List();
-
-      final imageRotation = InputImageRotation.rotation0deg;
-
-      final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw);
-      if (inputImageFormat == null) return null;
-
-      final planeData = image.planes.map((Plane plane) {
-        return InputImageMetadata(
-          size: Size(image.width.toDouble(), image.height.toDouble()),
-          rotation: imageRotation,
-          format: inputImageFormat,
-          bytesPerRow: plane.bytesPerRow,
-        );
-      }).toList();
-
-      return InputImage.fromBytes(
-        bytes: bytes,
-        metadata: InputImageMetadata(
-          size: Size(image.width.toDouble(), image.height.toDouble()),
-          rotation: imageRotation,
-          format: inputImageFormat,
-          bytesPerRow: image.planes[0].bytesPerRow,
-        ),
-      );
-    } catch (e) {
-      print('❌ Erro ao converter imagem: $e');
-      return null;
-    }
-  }
-
-  void _processQRCode(String value) {
-    final partes = value.split(';');
-    if (partes.length >= 4) {
-      Navigator.pop(context, {
-        'nomeAba': partes[0].trim(),
-        'nomePasseio': partes[1].trim(),
-        'numeroOnibus': partes[2].trim(),
-        'pulseira': partes[3].trim(),
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _cameraController?.dispose();
-    _barcodeScanner.close();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -570,9 +441,19 @@ class _QRCodeScannerScreenState extends State<QRCodeScannerScreen> {
         title: const Text('Escanear QR Code'),
         backgroundColor: const Color(0xFF4C643C),
       ),
-      body: _isCameraInitialized
-          ? CameraPreview(_cameraController!)
-          : const Center(child: CircularProgressIndicator()),
+      body: BarcodeCameraView(
+        onScanned: (value) {
+          final partes = value.split(';');
+          if (partes.length >= 4) {
+            Navigator.pop(context, {
+              'nomeAba': partes[0].trim(),
+              'nomePasseio': partes[1].trim(),
+              'numeroOnibus': partes[2].trim(),
+              'pulseira': partes[3].trim(),
+            });
+          }
+        },
+      ),
     );
   }
 }
