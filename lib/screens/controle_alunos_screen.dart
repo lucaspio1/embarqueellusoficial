@@ -211,7 +211,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           builder: (_) => UnifiedFaceCameraScreen(
             mode: CameraMode.enrollment,
             options: FaceCameraOptions(
-              useFrontCamera: true,
+              useFrontCamera: false, // Câmera traseira para melhor qualidade
               title: 'Cadastrar ${aluno['nome']}',
               subtitle: 'Posicione o rosto no centro',
             ),
@@ -326,7 +326,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           builder: (_) => UnifiedFaceCameraScreen(
             mode: CameraMode.enrollmentAdvanced,
             options: FaceCameraOptions(
-              useFrontCamera: true,
+              useFrontCamera: false, // Câmera traseira para melhor qualidade
               title: 'Cadastro Avançado - ${aluno['nome']}',
               subtitle: 'Vamos tirar 3 fotos para maior precisão',
               showCaptureCounter: true,
