@@ -1,13 +1,13 @@
-import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
-import 'package:image/image.dart' as img;
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/offline_sync_service.dart';
-import 'package:embarqueellus/widgets/camera_preview_widget.dart';
+import 'package:embarqueellus/models/camera_mode.dart';
+import 'package:embarqueellus/models/face_camera_options.dart';
+import 'package:embarqueellus/models/face_camera_result.dart';
+import 'package:embarqueellus/screens/unified_face_camera_screen.dart';
 
 class ListaAlunosScreen extends StatefulWidget {
   const ListaAlunosScreen({super.key});
@@ -254,17 +254,28 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
   // =========================================================
   Future<void> _cadastrarFacial(Map<String, dynamic> aluno) async {
     try {
-      final imagePath = await _abrirCameraTela();
-      if (imagePath == null) return;
+      // Abre tela unificada de câmera em modo de cadastro
+      final result = await Navigator.push<FaceCameraResult>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UnifiedFaceCameraScreen(
+            mode: CameraMode.enrollment,
+            options: FaceCameraOptions(
+              useFrontCamera: false, // Câmera traseira para melhor qualidade
+              title: 'Cadastrar ${aluno['nome']}',
+              subtitle: 'Posicione o rosto do aluno',
+            ),
+          ),
+        ),
+      );
 
-      setState(() => _processando = true);
-      _mostrarProgresso('Processando imagem...');
+      // Se cancelou ou falhou
+      if (result == null || !result.success) {
+        return;
+      }
 
-      final processedImage = await _processarImagemParaModelo(File(imagePath));
-
-      _atualizarProgresso('Extraindo características faciais...');
-
-      final embedding = await _faceService.extractEmbedding(processedImage);
+      // Se capturou com sucesso
+      final embedding = result.firstEmbedding!;
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
@@ -298,7 +309,6 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
 
       await _db.updateAlunoFacial(aluno['cpf'], 'CADASTRADA');
 
-      if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);
 
       await _carregarAlunos();
@@ -323,7 +333,6 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
       }
     } catch (e) {
       print('❌ Erro ao cadastrar facial: $e');
-      if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -331,71 +340,6 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
         );
       }
     }
-  }
-
-  Future<String?> _abrirCameraTela() async {
-    final cameras = await availableCameras();
-    if (cameras.isEmpty) {
-      throw Exception('Nenhuma câmera disponível');
-    }
-
-    // ✅ CORREÇÃO: Usar câmera traseira para cadastro facial
-    final camera = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.back,
-      orElse: () => cameras.first,
-    );
-
-    if (!mounted) return null;
-
-    return await Navigator.push<String>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CameraPreviewWidget(
-          camera: camera,
-          title: 'Cadastrar Facial',
-        ),
-      ),
-    );
-  }
-
-  Future<img.Image> _processarImagemParaModelo(File imageFile) async {
-    final bytes = await imageFile.readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) throw Exception('Falha ao decodificar imagem.');
-
-    final resized = img.copyResize(decoded, width: 160, height: 160);
-
-    if (resized.numChannels != 3) {
-      throw Exception(
-          'Imagem final não possui 3 canais RGB (${resized.numChannels}).');
-    }
-
-    return resized;
-  }
-
-  void _mostrarProgresso(String mensagem) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => WillPopScope(
-        onWillPop: () async => false,
-        child: AlertDialog(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text(mensagem),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _atualizarProgresso(String mensagem) {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    _mostrarProgresso(mensagem);
   }
 
   Widget _buildAlunoCard(Map<String, dynamic> aluno) {
