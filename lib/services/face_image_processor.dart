@@ -70,64 +70,102 @@ class FaceImageProcessor {
         level: SentryLevel.info,
       );
 
-      // Salvar imagem orientada em arquivo temporário para detecção
-      // (necessário porque InputImage.fromBytes pode ter problemas de formato)
-      final tempDir = file.parent.path;
-      final tempFile = File('$tempDir/temp_oriented_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      // TENTATIVA 1: Usar arquivo ORIGINAL (recomendação do Google ML Kit)
+      // InputImage.fromFile() preserva metadados EXIF automaticamente
+      Sentry.captureMessage(
+        '🔍 TENTATIVA 1: Detectando com arquivo original (EXIF preservado)',
+        level: SentryLevel.info,
+      );
 
       List<Face> faces;
       try {
-        final orientedBytes = img.encodeJpg(oriented, quality: 95);
-        await tempFile.writeAsBytes(orientedBytes);
-
-        // Criar InputImage do arquivo orientado (método mais confiável)
-        final inputImage = InputImage.fromFilePath(tempFile.path);
-
-        // TENTATIVA 1: Detectar faces na imagem orientada original
+        // Usar InputImage.fromFile() - método recomendado pela documentação
+        final inputImage = InputImage.fromFile(file);
         faces = await _detection.detect(inputImage);
 
-        // Se não detectar faces, tentar com melhorias de imagem
+        // TENTATIVA 2: Se não detectar, salvar imagem orientada e melhorada
         if (faces.isEmpty) {
           Sentry.captureMessage(
-            '⚠️ TENTATIVA 2: Aplicando melhorias (contraste +30%, brilho +10%)',
+            '⚠️ TENTATIVA 2: Salvando imagem orientada e melhorada',
             level: SentryLevel.warning,
           );
 
-          // Tentar com aumento de contraste e brilho
-          final enhanced = _enhanceImage(oriented);
-          final enhancedBytes = img.encodeJpg(enhanced, quality: 95);
-          await tempFile.writeAsBytes(enhancedBytes);
+          final tempDir = file.parent.path;
+          final tempFile = File('$tempDir/temp_enhanced_${DateTime.now().millisecondsSinceEpoch}.jpg');
 
-          final enhancedInput = InputImage.fromFilePath(tempFile.path);
-          faces = await _detection.detect(enhancedInput);
+          try {
+            // Aplicar melhorias
+            final enhanced = _enhanceImage(oriented);
+            final enhancedBytes = img.encodeJpg(enhanced, quality: 100);
+            await tempFile.writeAsBytes(enhancedBytes);
 
-          if (faces.isNotEmpty) {
-            Sentry.captureMessage(
-              '✅ SUCESSO NA TENTATIVA 2: Face detectada com imagem melhorada!',
-              level: SentryLevel.info,
-            );
+            // Usar InputImage.fromFile() novamente
+            final enhancedInput = InputImage.fromFile(tempFile);
+            faces = await _detection.detect(enhancedInput);
+
+            if (faces.isNotEmpty) {
+              Sentry.captureMessage(
+                '✅ SUCESSO NA TENTATIVA 2: Face detectada!',
+                level: SentryLevel.info,
+              );
+            } else {
+              // TENTATIVA 3: Redimensionar imagem se for muito pequena
+              Sentry.captureMessage(
+                '⚠️ TENTATIVA 3: Redimensionando para 1920x1920',
+                level: SentryLevel.warning,
+              );
+
+              // Se a imagem for menor que 1920, aumentar
+              final maxDim = math.max(oriented.width, oriented.height);
+              if (maxDim < 1920) {
+                final scale = 1920 / maxDim;
+                final resized = img.copyResize(
+                  oriented,
+                  width: (oriented.width * scale).toInt(),
+                  height: (oriented.height * scale).toInt(),
+                  interpolation: img.Interpolation.cubic,
+                );
+
+                final resizedBytes = img.encodeJpg(resized, quality: 100);
+                await tempFile.writeAsBytes(resizedBytes);
+
+                final resizedInput = InputImage.fromFile(tempFile);
+                faces = await _detection.detect(resizedInput);
+
+                if (faces.isNotEmpty) {
+                  Sentry.captureMessage(
+                    '✅ SUCESSO NA TENTATIVA 3: Face detectada após redimensionamento!',
+                    level: SentryLevel.info,
+                  );
+                }
+              }
+            }
+          } finally {
+            // Limpar arquivo temporário
+            if (await tempFile.exists()) {
+              await tempFile.delete();
+            }
           }
         }
-
-      } finally {
-        // Garantir limpeza do arquivo temporário
-        if (await tempFile.exists()) {
-          await tempFile.delete();
-        }
+      } catch (e, stackTrace) {
+        Sentry.captureException(e, stackTrace: stackTrace);
+        rethrow;
       }
 
       if (faces.isEmpty) {
         Sentry.captureMessage(
-          '❌ FALHA TOTAL: Nenhuma face detectada após 2 tentativas',
+          '❌ FALHA TOTAL: Nenhuma face após 3 tentativas (original + enhanced + resized)',
           level: SentryLevel.error,
           withScope: (scope) {
             scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
             scope.setTag('image_size', '${oriented.width}x${oriented.height}');
             scope.setTag('file_size_kb', '${(fileSize / 1024).toStringAsFixed(1)}');
+            scope.setTag('detector_mode', 'accurate');
+            scope.setTag('min_face_size', '15%');
           },
         );
 
-        throw Exception('Nenhum rosto detectado na imagem.');
+        throw Exception('Nenhum rosto detectado. Verifique: iluminação, ângulo da câmera e distância.');
       }
 
       Sentry.captureMessage(
@@ -383,23 +421,23 @@ class FaceImageProcessor {
 
   /// Melhora a imagem aumentando contraste e brilho para facilitar detecção
   img.Image _enhanceImage(img.Image source) {
-    // Aumentar contraste (1.3 = 30% mais contraste)
+    // Aumentar contraste e brilho mais agressivamente
     img.Image enhanced = img.adjustColor(
       source,
-      contrast: 1.3,
-      brightness: 1.1,
-      saturation: 1.1,
+      contrast: 1.5,     // 50% mais contraste
+      brightness: 1.2,   // 20% mais brilho
+      saturation: 1.2,   // 20% mais saturação
     );
 
-    // Aplicar sharpening para melhorar bordas
+    // Aplicar sharpening mais forte
     enhanced = img.convolution(
       enhanced,
       filter: [
         0, -1, 0,
-        -1, 5, -1,
+        -1, 6, -1,  // Kernel mais agressivo
         0, -1, 0,
       ],
-      div: 1,
+      div: 2,
     );
 
     return enhanced;
