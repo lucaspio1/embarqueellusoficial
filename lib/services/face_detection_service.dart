@@ -25,23 +25,24 @@ class FaceDetectionService {
     }
 
     Sentry.captureMessage(
-      '🔧 DETECTOR: Criando FaceDetector | mode=FAST | minSize=5% | tracking=ON',
+      '🔧 DETECTOR: Criando FaceDetector | mode=ACCURATE | minSize=15%',
       level: SentryLevel.info,
       withScope: (scope) {
         scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
-        scope.setTag('detector_mode', 'fast');
-        scope.setTag('min_face_size', '0.05');
+        scope.setTag('detector_mode', 'accurate');
+        scope.setTag('min_face_size', '0.15');
       },
     );
 
+    // Configuração recomendada pela documentação do Google ML Kit
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
-        performanceMode: FaceDetectorMode.fast,
+        performanceMode: FaceDetectorMode.accurate,
         enableContours: false,
         enableLandmarks: false,
         enableClassification: false,
-        enableTracking: true,
-        minFaceSize: 0.05,
+        enableTracking: false,
+        minFaceSize: 0.15, // 15% da imagem - mais confiável
       ),
     );
 
