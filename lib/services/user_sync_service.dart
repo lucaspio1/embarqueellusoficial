@@ -1,92 +1,32 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:crypto/crypto.dart';
-import 'package:embarqueellus/database/database_helper.dart';
-import 'package:embarqueellus/config/app_config.dart';
+// lib/services/user_sync_service.dart — FACADE (FASE 1)
+// Mantém compatibilidade com código existente, mas delega para OfflineSyncService
+import 'package:embarqueellus/services/offline_sync_service.dart';
 
+/// Facade para sincronização de usuários
+/// Mantém interface pública mas delega para OfflineSyncService
 class UserSyncService {
   static final UserSyncService instance = UserSyncService._internal();
   UserSyncService._internal();
 
-  final _db = DatabaseHelper.instance;
+  final _offlineSync = OfflineSyncService.instance;
 
-  // URL lida do arquivo .env
-  String get _apiBase => AppConfig.instance.googleAppsScriptUrl;
-
-  String _hashSenha(String senha) => sha256.convert(utf8.encode(senha)).toString();
-
+  /// Sincroniza usuários do Google Sheets
+  /// Delega para OfflineSyncService._syncUsers()
   Future<SyncResult> syncUsuariosFromSheets() async {
-    print('🔄 [UserSync] Iniciando sincronização de usuários...');
-    final uri = Uri.parse('$_apiBase?action=getAllUsers');
-
-    http.Response resp;
-    try {
-      // GET segue redirecionamentos automaticamente
-      resp = await http
-          .get(uri, headers: {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 30));
-    } catch (e) {
-      print('❌ [UserSync] Falha de conexão: $e');
-      return SyncResult(success: false, message: 'Falha de conexão', count: 0);
-    }
-
-    print('📥 [UserSync] Status: ${resp.statusCode}');
-
-    if (resp.statusCode != 200) {
-      print('📥 [UserSync] Body (não-200): ${resp.body}');
-      return SyncResult(success: false, message: 'Erro HTTP: ${resp.statusCode}', count: 0);
-    }
-
-    dynamic data;
-    try {
-      data = jsonDecode(resp.body);
-    } catch (e) {
-      print('❌ [UserSync] JSON inválido: $e');
-      print('📥 [UserSync] Body: ${resp.body}');
-      return SyncResult(success: false, message: 'JSON inválido', count: 0);
-    }
-
-    if (data is Map && data['success'] == true && data['users'] is List) {
-      final usuarios = (data['users'] as List);
-
-      print('📥 [UserSync] Recebidos ${usuarios.length} usuários');
-      await _db.deleteAllUsuarios();
-
-      for (final u in usuarios) {
-        if (u is! Map) continue;
-        final usuario = Map<String, dynamic>.from(u);
-        final senhaOriginal = (usuario['senha'] ?? '').toString();
-        final senhaHash = _hashSenha(senhaOriginal);
-
-        await _db.upsertUsuario({
-          'user_id': (usuario['id'] ?? '').toString(),
-          'nome': usuario['nome'],
-          'cpf': (usuario['cpf'] ?? '').toString().trim(),
-          'senha_hash': senhaHash,
-          'perfil': (usuario['perfil'] ?? 'USUARIO').toString().toUpperCase(),
-          'ativo': 1,
-        });
-      }
-
-      final total = await _db.getTotalUsuarios();
-      print('✅ [UserSync] $total usuários sincronizados');
-      return SyncResult(success: true, message: '$total usuários sincronizados', count: total);
-    }
-
-    print('⚠️ [UserSync] Resposta sem usuários');
-    print('📥 [UserSync] Body: ${resp.body}');
-    return SyncResult(success: false, message: 'Nenhum usuário encontrado', count: 0);
+    print('🔄 [UserSyncService] Delegando para OfflineSyncService...');
+    return await _offlineSync.syncAll().then((result) {
+      print('✅ [UserSyncService] Sincronização completa: ${result.users}');
+      return result.users;
+    });
   }
 
-  bool verificarSenha(String senha, String senhaHash) => _hashSenha(senha) == senhaHash;
+  /// Verifica senha (delegado para OfflineSyncService)
+  bool verificarSenha(String senha, String senhaHash) {
+    return _offlineSync.verificarSenha(senha, senhaHash);
+  }
 
-  Future<bool> temUsuariosLocais() async => (await _db.getTotalUsuarios()) > 0;
-}
-
-class SyncResult {
-  final bool success;
-  final String message;
-  final int count;
-
-  SyncResult({required this.success, required this.message, required this.count});
+  /// Verifica se há usuários locais (delegado para OfflineSyncService)
+  Future<bool> temUsuariosLocais() async {
+    return await _offlineSync.temUsuariosLocais();
+  }
 }
