@@ -2,14 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'package:embarqueellus/models/camera_mode.dart';
 import 'package:embarqueellus/models/face_camera_options.dart';
 import 'package:embarqueellus/models/face_camera_result.dart';
-import 'package:embarqueellus/services/face_detection_service.dart';
-import 'package:embarqueellus/services/face_image_processor.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/native_face_service.dart';
 
