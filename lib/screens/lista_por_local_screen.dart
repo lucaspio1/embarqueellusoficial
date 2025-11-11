@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/constants/movimentacoes.dart';
 
 class ListaPorLocalScreen extends StatefulWidget {
   final String local;
@@ -40,7 +41,25 @@ class _ListaPorLocalScreenState extends State<ListaPorLocalScreen> {
     try {
       final db = await _db.database;
 
-      // Buscar pessoas que estão no local específico
+      // Obter movimentações do grupo
+      final movimentacoes = Movimentacoes.getMovimentacoesDoGrupo(widget.local);
+
+      if (movimentacoes.isEmpty) {
+        setState(() {
+          _pessoas = [];
+          _pessoasFiltradas = [];
+          _carregando = false;
+        });
+        return;
+      }
+
+      // Criar placeholders para o IN (?, ?, ...)
+      final placeholders = List.filled(movimentacoes.length, '?').join(', ');
+
+      // Criar lista de argumentos (movimentacoes para logs + movimentacoes para WHERE IN)
+      final args = [...movimentacoes.map((m) => m.toUpperCase()), ...movimentacoes.map((m) => m.toUpperCase())];
+
+      // Buscar pessoas que estão no local/grupo específico
       final result = await db.rawQuery('''
         SELECT DISTINCT p.cpf, p.nome, p.email, p.telefone, p.turma, p.movimentacao,
                l.timestamp, l.operador_nome
@@ -48,12 +67,12 @@ class _ListaPorLocalScreenState extends State<ListaPorLocalScreen> {
         LEFT JOIN (
           SELECT cpf, timestamp, operador_nome, tipo
           FROM logs
-          WHERE tipo = ?
+          WHERE tipo IN ($placeholders)
           ORDER BY timestamp DESC
         ) l ON p.cpf = l.cpf
-        WHERE UPPER(TRIM(p.movimentacao)) = UPPER(?)
+        WHERE UPPER(TRIM(p.movimentacao)) IN ($placeholders)
         ORDER BY p.nome
-      ''', [widget.local.toUpperCase(), widget.local.toUpperCase()]);
+      ''', args);
 
       setState(() {
         _pessoas = result;
@@ -394,9 +413,9 @@ class _ListaPorLocalScreenState extends State<ListaPorLocalScreen> {
     );
   }
 
-  Map<String, dynamic> _getInfoLocal(String local) {
-    switch (local.toUpperCase()) {
-      case 'QUARTO':
+  Map<String, dynamic> _getInfoLocal(String grupo) {
+    switch (grupo.toUpperCase()) {
+      case 'GRUPO_QUARTO':
         return {
           'titulo': 'No Quarto',
           'icone': Icons.bed,
@@ -408,21 +427,15 @@ class _ListaPorLocalScreenState extends State<ListaPorLocalScreen> {
           'icone': Icons.exit_to_app,
           'cor': Colors.orange,
         };
-      case 'VOLTOU_AO_QUARTO':
-        return {
-          'titulo': 'Voltou ao Quarto',
-          'icone': Icons.home,
-          'cor': Colors.green,
-        };
       case 'FOI_PARA_BALADA':
         return {
-          'titulo': 'Foi para Balada',
+          'titulo': 'Balada',
           'icone': Icons.nightlife,
           'cor': Colors.purple,
         };
       default:
         return {
-          'titulo': local,
+          'titulo': grupo,
           'icone': Icons.place,
           'cor': Colors.grey,
         };

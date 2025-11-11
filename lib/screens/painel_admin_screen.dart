@@ -11,6 +11,7 @@ import 'package:embarqueellus/screens/lista_logs_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:embarqueellus/screens/lista_por_local_screen.dart';
+import 'package:embarqueellus/constants/movimentacoes.dart';
 
 class PainelAdminScreen extends StatefulWidget {
   const PainelAdminScreen({super.key});
@@ -604,6 +605,23 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
   // CARREGAMENTO DE DADOS
   // =========================================================================
 
+  /// Agrupa as contagens do banco de acordo com os grupos de exibição
+  Map<String, int> _agruparContagens(Map<String, int> contagemBanco) {
+    final Map<String, int> contagemAgrupada = {};
+
+    // Grupo 1: NO QUARTO (QUARTO + VOLTOU_AO_QUARTO)
+    final totalQuarto = (contagemBanco['QUARTO'] ?? 0) + (contagemBanco['VOLTOU_AO_QUARTO'] ?? 0);
+    contagemAgrupada[Movimentacoes.grupoQuarto] = totalQuarto;
+
+    // Grupo 2: FORA DO QUARTO (SAIU_DO_QUARTO)
+    contagemAgrupada[Movimentacoes.grupoForaDoQuarto] = contagemBanco['SAIU_DO_QUARTO'] ?? 0;
+
+    // Grupo 3: BALADA (FOI_PARA_BALADA)
+    contagemAgrupada[Movimentacoes.grupoBalada] = contagemBanco['FOI_PARA_BALADA'] ?? 0;
+
+    return contagemAgrupada;
+  }
+
   Future<void> _carregarDados() async {
     setState(() => _carregando = true);
 
@@ -614,12 +632,15 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       final contagemPorLocal = await _db.getContagemPorMovimentacao();
       final usuario = await _authService.getUsuarioLogado();
 
+      // Agrupar contagens para exibição em 3 cards
+      final contagemAgrupada = _agruparContagens(contagemPorLocal);
+
       setState(() {
         _totalAlunos = alunos.length;
         _totalFaciais = alunosComFacial.length;
         _totalLogs = logs.length;
         _usuario = usuario;
-        _contagemPorLocal = contagemPorLocal;
+        _contagemPorLocal = contagemAgrupada;
         _carregando = false;
       });
     } catch (e) {
@@ -741,11 +762,10 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Cards clicáveis para movimentações
-              _buildLocalCard('QUARTO', _contagemPorLocal['QUARTO'] ?? 0),
-              _buildLocalCard('SAIU_DO_QUARTO', _contagemPorLocal['SAIU_DO_QUARTO'] ?? 0),
-              _buildLocalCard('VOLTOU_AO_QUARTO', _contagemPorLocal['VOLTOU_AO_QUARTO'] ?? 0),
-              _buildLocalCard('FOI_PARA_BALADA', _contagemPorLocal['FOI_PARA_BALADA'] ?? 0),
+              // Cards clicáveis para movimentações (3 grupos)
+              _buildLocalCard(Movimentacoes.grupoQuarto, _contagemPorLocal[Movimentacoes.grupoQuarto] ?? 0),
+              _buildLocalCard(Movimentacoes.grupoForaDoQuarto, _contagemPorLocal[Movimentacoes.grupoForaDoQuarto] ?? 0),
+              _buildLocalCard(Movimentacoes.grupoBalada, _contagemPorLocal[Movimentacoes.grupoBalada] ?? 0),
 
               const SizedBox(height: 24),
             ] else ...[
@@ -1161,9 +1181,9 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     );
   }
 
-  Map<String, dynamic> _getInfoLocal(String local) {
-    switch (local.toUpperCase()) {
-      case 'QUARTO':
+  Map<String, dynamic> _getInfoLocal(String grupo) {
+    switch (grupo.toUpperCase()) {
+      case 'GRUPO_QUARTO':
         return {
           'titulo': 'No Quarto',
           'icone': Icons.bed,
@@ -1175,21 +1195,15 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
           'icone': Icons.exit_to_app,
           'cor': Colors.orange,
         };
-      case 'VOLTOU_AO_QUARTO':
-        return {
-          'titulo': 'Voltou ao Quarto',
-          'icone': Icons.home,
-          'cor': Colors.green,
-        };
       case 'FOI_PARA_BALADA':
         return {
-          'titulo': 'Foi para Balada',
+          'titulo': 'Balada',
           'icone': Icons.nightlife,
           'cor': Colors.purple,
         };
       default:
         return {
-          'titulo': local,
+          'titulo': grupo,
           'icone': Icons.place,
           'cor': Colors.grey,
         };
