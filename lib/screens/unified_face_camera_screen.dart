@@ -340,7 +340,7 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
       if (widget.mode == CameraMode.recognition) {
         setState(() => _statusMessage = 'Reconhecendo...');
 
-        final recognitionResult = await FaceRecognitionService.instance.recognize(processedImage);
+        final recognitionResult = await FaceRecognitionService.instance.recognize(processedImage.croppedImage);
 
         if (recognitionResult != null) {
           await Sentry.captureMessage(
@@ -361,7 +361,7 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
             confidenceScore: recognitionResult['similarity_score'] ?? 0.0,
             distance: recognitionResult['distance_l2'] ?? 999.0,
             imagePath: imagePath,
-            processedImage: processedImage,
+            processedImage: processedImage.croppedImage,
           );
 
           if (mounted) {
@@ -390,7 +390,7 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
 
       // 4. Modo de cadastro
       _capturedImagePaths.add(imagePath);
-      _processedImages.add(processedImage);
+      _processedImages.add(processedImage.croppedImage);
       _currentCaptureIndex++;
 
       await Sentry.captureMessage(
