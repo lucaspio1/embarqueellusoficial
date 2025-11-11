@@ -11,6 +11,7 @@ import 'package:embarqueellus/models/face_camera_result.dart';
 import 'package:embarqueellus/services/face_detection_service.dart';
 import 'package:embarqueellus/services/face_image_processor.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
+import 'package:embarqueellus/services/native_face_service.dart';
 
 /// Tela unificada de câmera facial
 ///
@@ -274,73 +275,37 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
     try {
       setState(() => _statusMessage = 'Detectando rosto...');
 
-      // 1. Detectar face na imagem
-      final inputImage = InputImage.fromFilePath(imagePath);
-      final faces = await FaceDetectionService.instance.detect(inputImage);
+      // 1. Detectar e processar face nativamente (iOS/Android)
+      // MIGRAÇÃO: Agora usa NativeFaceService que corrige EXIF e detecta nativamente
+      final nativeResult = await NativeFaceService.instance.detectAndCropFace(imagePath);
 
-      if (faces.isEmpty) {
-        await Sentry.captureMessage(
-          '⚠️ Nenhum rosto detectado',
-          level: SentryLevel.warning,
-          withScope: (scope) {
-            scope.setTag('mode', widget.mode.name);
-            scope.setTag('capture_index', '${_currentCaptureIndex + 1}');
-          },
-        );
+      await Sentry.captureMessage(
+        '✅ Face detectada e processada nativamente',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('mode', widget.mode.name);
+          scope.setTag('capture_index', '${_currentCaptureIndex + 1}');
+          scope.setContexts('native_result', {
+            'bytes_size': nativeResult.croppedFaceBytes.length,
+            'bbox_width': nativeResult.boundingBox.width.toInt(),
+            'bbox_height': nativeResult.boundingBox.height.toInt(),
+          });
+        },
+      );
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('❌ Nenhum rosto detectado. Tente novamente.'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-
-        setState(() => _isProcessing = false);
-        return;
-      }
-
-      if (faces.length > 1) {
-        await Sentry.captureMessage(
-          '⚠️ Múltiplos rostos detectados',
-          level: SentryLevel.warning,
-          withScope: (scope) {
-            scope.setTag('mode', widget.mode.name);
-            scope.setContexts('detection', {
-              'faces_count': faces.length,
-            });
-          },
-        );
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('❌ Múltiplos rostos detectados. Certifique-se de que apenas uma pessoa está na foto.'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-
-        setState(() => _isProcessing = false);
-        return;
-      }
-
-      // 2. Processar imagem (crop + normalização)
+      // 2. Converter bytes para img.Image (necessário para FaceRecognitionService)
       setState(() => _statusMessage = 'Processando imagem...');
 
-      final processedImage = await FaceImageProcessor.instance.processFile(
-        File(imagePath),
-        outputSize: FaceRecognitionService.INPUT_SIZE,
-      );
+      final decodedImage = img.decodeImage(nativeResult.croppedFaceBytes);
+      if (decodedImage == null) {
+        throw Exception('Falha ao decodificar imagem processada nativamente');
+      }
 
       // 3. Modo de reconhecimento
       if (widget.mode == CameraMode.recognition) {
         setState(() => _statusMessage = 'Reconhecendo...');
 
-        final recognitionResult = await FaceRecognitionService.instance.recognize(processedImage.croppedImage);
+        final recognitionResult = await FaceRecognitionService.instance.recognize(decodedImage);
 
         if (recognitionResult != null) {
           await Sentry.captureMessage(
@@ -361,7 +326,7 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
             confidenceScore: recognitionResult['similarity_score'] ?? 0.0,
             distance: recognitionResult['distance_l2'] ?? 999.0,
             imagePath: imagePath,
-            processedImage: processedImage.croppedImage,
+            processedImage: decodedImage,
           );
 
           if (mounted) {
@@ -390,7 +355,7 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
 
       // 4. Modo de cadastro
       _capturedImagePaths.add(imagePath);
-      _processedImages.add(processedImage.croppedImage);
+      _processedImages.add(decodedImage);
       _currentCaptureIndex++;
 
       await Sentry.captureMessage(

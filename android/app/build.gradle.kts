@@ -64,4 +64,10 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.5.0")
     implementation("androidx.camera:camera-lifecycle:1.5.0")
     implementation("androidx.camera:camera-view:1.5.0")
+
+    // 🔹 ML Kit para detecção facial nativa
+    implementation("com.google.mlkit:face-detection:16.1.6")
+
+    // 🔹 ExifInterface para correção de rotação EXIF
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 }

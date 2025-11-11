@@ -1,28 +1,23 @@
 // lib/services/face_image_processor.dart
-import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' show Rect, Size;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
-import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
-import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'face_detection_service.dart';
 import 'yuv_converter.dart';
 import 'camera_image_converter.dart';
 import 'platform_camera_utils.dart';
 import 'image_rotation_handler.dart';
-import 'image_file_processor.dart';
 
 /// Resultado intermediário do processamento de uma imagem facial.
 class ProcessedFaceResult {
   final img.Image croppedImage;
   final Face face;
-  final String originalPath; // Caminho do ficheiro original (ou temporário corrigido)
+  final String originalPath; // Caminho do ficheiro original ou 'live_stream' para câmera
 
   ProcessedFaceResult({
     required this.croppedImage,
@@ -31,7 +26,10 @@ class ProcessedFaceResult {
   });
 }
 
-/// Utilitário especializado para processamento de imagens faciais.
+/// Utilitário especializado para processamento de imagens faciais da CÂMERA AO VIVO.
+///
+/// IMPORTANTE: Este serviço agora é usado APENAS para processamento de stream da câmera.
+/// O processamento de fotos estáticas foi migrado para código nativo via NativeFaceService.
 class FaceImageProcessor {
   FaceImageProcessor._();
 
@@ -41,145 +39,6 @@ class FaceImageProcessor {
   final CameraImageConverter _converter = CameraImageConverter.instance;
   final PlatformCameraUtils _platformUtils = PlatformCameraUtils.instance;
   final ImageRotationHandler _rotationHandler = ImageRotationHandler.instance;
-  final ImageFileProcessor _fileProcessor = ImageFileProcessor.instance;
-
-  /// Processa um arquivo de imagem (foto) - corrige EXIF, detecta e recorta face.
-  ///
-  /// Este é o método PRINCIPAL para processamento de fotos.
-  /// Ele salva um ficheiro temporário corrigido para garantir que o MLKit
-  /// no iOS o leia corretamente.
-  Future<ProcessedFaceResult> processFile(
-      File file, {
-        int outputSize = 112,
-      }) async {
-    try {
-      if (!await file.exists()) {
-        throw Exception('Arquivo não existe: ${file.path}');
-      }
-
-      final fileSize = await file.length();
-      final bool isIOS = _platformUtils.isIOS;
-
-      Sentry.captureMessage(
-        '📸 PROCESSOR START: ${(fileSize / 1024).toStringAsFixed(0)}KB',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setTag('platform', isIOS ? 'iOS' : 'Android');
-          scope.setTag('output_size', '${outputSize}x$outputSize');
-          scope.setTag('method', 'processFile');
-        },
-      );
-
-      // 1. CORRIGIR EXIF PRIMEIRO (crucial para iOS)
-      final img.Image oriented = await _fileProcessor.loadAndOrient(file);
-      Sentry.captureMessage(
-        '🔄 EXIF APPLIED: ${oriented.width}x${oriented.height}',
-        level: SentryLevel.info,
-      );
-
-      // 2. Salvar imagem corrigida temporariamente
-      final tempDir = file.parent.path;
-      final fixedPath =
-          '$tempDir/temp_fixed_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final tempFile = File(fixedPath);
-
-      try {
-        // 'bakeOrientation' aplica a rotação nos píxeis
-        final img.Image baked = img.bakeOrientation(oriented);
-        await _fileProcessor.saveAsJpeg(baked, tempFile, quality: 100);
-
-        Sentry.captureMessage(
-          '💾 SAVED CORRECTED IMAGE: $fixedPath',
-          level: SentryLevel.info,
-        );
-
-        // 3. Detectar face na imagem CORRIGIDA
-        Sentry.captureMessage(
-          '🔍 DETECTING on corrected image',
-          level: SentryLevel.info,
-        );
-
-        // ✅ USANDO O 'face_detection_service' PURO
-        final inputImage = InputImage.fromFile(tempFile);
-        List<Face> faces = await _detection.detect(inputImage);
-
-        // TENTATIVA 2: Se falhar, tentar com enhancement
-        if (faces.isEmpty) {
-          Sentry.captureMessage(
-            '⚠️ TENTATIVA 2: Aplicando enhancement',
-            level: SentryLevel.warning,
-          );
-
-          final enhanced = _enhanceImage(baked);
-          await _fileProcessor.saveAsJpeg(enhanced, tempFile, quality: 100);
-
-          final enhancedInput = InputImage.fromFile(tempFile);
-          faces = await _detection.detect(enhancedInput);
-          if (faces.isNotEmpty) Sentry.captureMessage('✅ SUCESSO TENTATIVA 2');
-        }
-
-        // TENTATIVA 3: Se ainda falhar, tentar com resize
-        if (faces.isEmpty) {
-          Sentry.captureMessage(
-            '⚠️ TENTATIVA 3: Redimensionando imagem',
-            level: SentryLevel.warning,
-          );
-
-          final maxDim = math.max(baked.width, baked.height);
-          if (maxDim < 1920) {
-            final scale = 1920 / maxDim;
-            final resized = img.copyResize(
-              baked,
-              width: (baked.width * scale).toInt(),
-              height: (baked.height * scale).toInt(),
-              interpolation: img.Interpolation.cubic,
-            );
-
-            await _fileProcessor.saveAsJpeg(resized, tempFile, quality: 100);
-            final resizedInput = InputImage.fromFile(tempFile);
-            faces = await _detection.detect(resizedInput);
-            if (faces.isNotEmpty) Sentry.captureMessage('✅ SUCESSO TENTATIVA 3');
-          }
-        }
-
-        if (faces.isEmpty) {
-          Sentry.captureMessage(
-            '❌ FALHA TOTAL: Nenhuma face após 3 tentativas',
-            level: SentryLevel.error,
-          );
-          throw Exception(
-              'Nenhum rosto detectado. Verifique: iluminação, ângulo da câmera e distância.');
-        }
-
-        // 4. Selecionar face principal
-        final primaryFace = _selectPrimaryFace(faces);
-
-        // 5. Recortar face
-        // ✅ USANDO 'baked' (imagem corrigida em memória) para o recorte
-        final croppedImage =
-        _cropFace(baked, [primaryFace], outputSize: outputSize);
-
-        Sentry.captureMessage(
-          '✅ PROCESSAMENTO COMPLETO: ${croppedImage.width}x${croppedImage.height}',
-          level: SentryLevel.info,
-        );
-
-        return ProcessedFaceResult(
-          croppedImage: croppedImage,
-          face: primaryFace,
-          originalPath: fixedPath, // Retorna o caminho do tempFile corrigido
-        );
-      } finally {
-        // Não apague o tempFile para podermos depurar
-        // if (await tempFile.exists()) {
-        //   await tempFile.delete();
-        // }
-      }
-    } catch (e, stackTrace) {
-      await Sentry.captureException(e, stackTrace: stackTrace);
-      rethrow;
-    }
-  }
 
   /// Processa a imagem de câmera em tempo real.
   /// ✅ RETORNA ProcessedFaceResult
@@ -225,30 +84,7 @@ class FaceImageProcessor {
     );
   }
 
-  /// Processa um arquivo e retorna diretamente o recorte facial em Uint8List
-  Future<Uint8List> cropFaceToBytes(String imagePath,
-      {int outputSize = 112}) async {
-    try {
-      final file = File(imagePath);
-      // ✅ CHAMA O NOVO 'processFile'
-      final processedImage = await processFile(file, outputSize: outputSize);
-
-      final bytes = Uint8List.fromList(
-          img.encodeJpg(processedImage.croppedImage, quality: 95));
-
-      Sentry.captureMessage(
-        '✅ BYTES: ${bytes.length} bytes | ${(bytes.length / 1024).toStringAsFixed(1)}KB',
-        level: SentryLevel.info,
-      );
-
-      return bytes;
-    } catch (e, stackTrace) {
-      await Sentry.captureException(e, stackTrace: stackTrace);
-      rethrow;
-    }
-  }
-
-  // ### MÉTODOS AUXILIARES ###
+  // ### MÉTODOS AUXILIARES (usados por processCameraImage) ###
 
   /// Retorna (img.Image, Face)
   (img.Image, Face) _cropFaceTupla(
@@ -333,21 +169,6 @@ class FaceImageProcessor {
       }
     }
     return rgb;
-  }
-
-  img.Image _enhanceImage(img.Image source) {
-    img.Image enhanced = img.adjustColor(
-      source,
-      contrast: 1.5,
-      brightness: 1.2,
-      saturation: 1.2,
-    );
-    enhanced = img.convolution(
-      enhanced,
-      filter: [0, -1, 0, -1, 6, -1, 0, -1, 0],
-      div: 2,
-    );
-    return enhanced;
   }
 }
 
