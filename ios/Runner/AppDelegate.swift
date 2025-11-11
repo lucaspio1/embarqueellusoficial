@@ -108,46 +108,89 @@ import MLKitFaceDetection
     }
 
     print("✅ [iOS Native] Imagem carregada: \(image.size.width)x\(image.size.height)")
-    print("🔍 [iOS Native] DEBUG - Orientation: \(image.imageOrientation.rawValue)")
+    print("🔍 [iOS Native] DEBUG - Orientation ANTES de bake: \(image.imageOrientation.rawValue)")
     print("🔍 [iOS Native] DEBUG - Scale: \(image.scale)")
 
-    SentrySDK.capture(message: "✅ [iOS Native] Imagem carregada (EXIF corrigido automaticamente)") { scope in
+    SentrySDK.capture(message: "✅ [iOS Native] Imagem carregada (lazy, ainda não aplicada)") { scope in
       scope.setLevel(.info)
       scope.setContext(value: [
-        "width": image.size.width,
-        "height": image.size.height,
-        "orientation": image.imageOrientation.rawValue,
+        "width_lazy": image.size.width,
+        "height_lazy": image.size.height,
+        "orientation_lazy": image.imageOrientation.rawValue,
         "scale": image.scale
-      ], key: "image_loaded")
+      ], key: "image_loaded_lazy")
     }
 
-    // PASSO 2: Configurar detector do ML Kit
-    let options = FaceDetectorOptions()
-    options.performanceMode = .accurate
-    options.landmarkMode = .all
-    options.classificationMode = .none
-    options.contourMode = .none
-    options.minFaceSize = 0.01  // Mais sensível: 1% da imagem (era 5%)
+    // PASSO 2: "ASSAR" (BAKE) A ORIENTAÇÃO NOS PIXELS
+    // Crucial: UIImage é "preguiçoso" - a rotação EXIF não é aplicada fisicamente nos pixels
+    // Precisamos forçar a aplicação desenhando em um novo contexto gráfico
+    print("🔥 [iOS Native] DEBUG - Assando orientação nos pixels...")
 
-    let faceDetector = FaceDetector.faceDetector(options: options)
+    guard let bakedImage = bakeOrientation(image: image) else {
+      SentrySDK.capture(message: "❌ [iOS Native] Erro ao assar orientação") { scope in
+        scope.setLevel(.error)
+        scope.setTag(value: "bake_orientation_error", key: "error_type")
+      }
+      result(FlutterError(
+        code: "BAKE_ERROR",
+        message: "Erro ao processar orientação da imagem",
+        details: nil
+      ))
+      return
+    }
 
-    print("🔍 [iOS Native] DEBUG - Detector configurado: minFaceSize=0.01, mode=accurate")
+    print("✅ [iOS Native] Orientação assada: \(bakedImage.size.width)x\(bakedImage.size.height)")
+    print("🔍 [iOS Native] DEBUG - Orientation DEPOIS de bake: \(bakedImage.imageOrientation.rawValue) (deve ser 0=Up)")
 
-    // PASSO 3: Criar VisionImage
-    let visionImage = VisionImage(image: image)
-    visionImage.orientation = image.imageOrientation
+    SentrySDK.capture(message: "✅ [iOS Native] Orientação assada nos pixels") { scope in
+      scope.setLevel(.info)
+      scope.setContext(value: [
+        "width_baked": bakedImage.size.width,
+        "height_baked": bakedImage.size.height,
+        "orientation_baked": bakedImage.imageOrientation.rawValue,
+        "orientation_fixed": bakedImage.imageOrientation == .up
+      ], key: "image_baked")
+    }
 
-    print("🔍 [iOS Native] DEBUG - VisionImage criado com orientation: \(image.imageOrientation.rawValue)")
+    // PASSO 3: Criar VisionImage com imagem ASSADA
+    let visionImage = VisionImage(image: bakedImage)
+    visionImage.orientation = bakedImage.imageOrientation  // Deve ser .up (0)
+
+    print("🔍 [iOS Native] DEBUG - VisionImage criado com imagem assada (orientation: \(bakedImage.imageOrientation.rawValue))")
 
     // PASSO 4: Detectar faces (com múltiplas tentativas)
     print("🔍 [iOS Native] DEBUG - Iniciando detecção (Tentativa 1/3)")
 
     detectFacesWithRetry(
-      image: image,
+      image: bakedImage,  // ✅ USANDO IMAGEM ASSADA
       visionImage: visionImage,
       imagePath: imagePath,
       result: result
     )
+  }
+
+  /// "Assa" (bake) a orientação EXIF nos pixels da imagem
+  /// Resolve o bug do UIImage "preguiçoso" que não aplica a rotação fisicamente
+  private func bakeOrientation(image: UIImage) -> UIImage? {
+    // Se já está orientada corretamente, retornar como está
+    if image.imageOrientation == .up {
+      return image
+    }
+
+    // Criar um contexto gráfico com o tamanho correto
+    // Importante: usar o tamanho da imagem (que já considera a orientação)
+    UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
+
+    // Desenhar a imagem no contexto
+    // Isso força o iOS a aplicar fisicamente a transformação de rotação
+    image.draw(in: CGRect(origin: .zero, size: image.size))
+
+    // Obter a nova imagem com pixels "assados"
+    let bakedImage = UIGraphicsGetImageFromCurrentImageContext()
+    UIGraphicsEndImageContext()
+
+    // A nova imagem terá orientation = .up porque os pixels já estão corretos
+    return bakedImage
   }
 
   /// Detecta faces com múltiplas tentativas e configurações diferentes
