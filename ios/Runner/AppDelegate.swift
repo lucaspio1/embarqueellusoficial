@@ -139,58 +139,134 @@ import MLKitFaceDetection
 
     print("🔍 [iOS Native] DEBUG - VisionImage criado com orientation: \(image.imageOrientation.rawValue)")
 
-    // PASSO 4: Detectar faces
+    // PASSO 4: Detectar faces (com múltiplas tentativas)
+    print("🔍 [iOS Native] DEBUG - Iniciando detecção (Tentativa 1/3)")
+
+    detectFacesWithRetry(
+      image: image,
+      visionImage: visionImage,
+      imagePath: imagePath,
+      result: result
+    )
+  }
+
+  /// Detecta faces com múltiplas tentativas e configurações diferentes
+  private func detectFacesWithRetry(
+    image: UIImage,
+    visionImage: VisionImage,
+    imagePath: String,
+    result: @escaping FlutterResult,
+    attempt: Int = 1
+  ) {
+    // Configurar detector baseado na tentativa
+    let options = FaceDetectorOptions()
+    options.performanceMode = .accurate
+    options.landmarkMode = .all
+    options.classificationMode = .none
+    options.contourMode = .none
+
+    // Ajustar minFaceSize por tentativa
+    switch attempt {
+    case 1:
+      options.minFaceSize = 0.01  // Muito sensível
+    case 2:
+      options.minFaceSize = 0.05  // Padrão
+    case 3:
+      options.minFaceSize = 0.1   // Menos sensível mas mais robusto
+    default:
+      options.minFaceSize = 0.01
+    }
+
+    let faceDetector = FaceDetector.faceDetector(options: options)
+
+    print("🔍 [iOS Native] DEBUG - Tentativa \(attempt): minFaceSize=\(options.minFaceSize)")
+
     faceDetector.process(visionImage) { [weak self] faces, error in
       guard let self = self else { return }
 
-      print("🔍 [iOS Native] DEBUG - Callback do detector executado")
+      print("🔍 [iOS Native] DEBUG - Callback tentativa \(attempt) executado")
 
       if let error = error {
-        print("❌ [iOS Native] DEBUG - Erro no ML Kit: \(error.localizedDescription)")
+        print("❌ [iOS Native] DEBUG - Erro no ML Kit (tentativa \(attempt)): \(error.localizedDescription)")
+
+        // Se erro na tentativa 1 ou 2, tentar novamente
+        if attempt < 3 {
+          print("🔄 [iOS Native] DEBUG - Tentando novamente...")
+          self.detectFacesWithRetry(
+            image: image,
+            visionImage: visionImage,
+            imagePath: imagePath,
+            result: result,
+            attempt: attempt + 1
+          )
+          return
+        }
+
+        // Erro na última tentativa
         SentrySDK.capture(error: error) { scope in
           scope.setLevel(.error)
           scope.setTag(value: "ml_kit_detection_error", key: "error_type")
           scope.setContext(value: [
             "error_message": error.localizedDescription,
-            "image_path": imagePath
+            "image_path": imagePath,
+            "attempts": attempt
           ], key: "detection_error")
         }
         result(FlutterError(
           code: "DETECTION_ERROR",
-          message: "Erro ao detectar faces: \(error.localizedDescription)",
+          message: "Erro ao detectar faces após \(attempt) tentativas: \(error.localizedDescription)",
           details: nil
         ))
         return
       }
 
-      print("🔍 [iOS Native] DEBUG - Faces retornadas: \(faces?.count ?? 0)")
+      print("🔍 [iOS Native] DEBUG - Faces retornadas (tentativa \(attempt)): \(faces?.count ?? 0)")
 
-      guard let faces = faces, !faces.isEmpty else {
-        print("⚠️ [iOS Native] DEBUG - Nenhuma face detectada (faces array vazio ou nil)")
-        SentrySDK.capture(message: "⚠️ [iOS Native] Nenhuma face detectada") { scope in
+      // Se não encontrou faces, tentar novamente
+      if faces?.isEmpty ?? true {
+        if attempt < 3 {
+          print("⚠️ [iOS Native] DEBUG - Nenhuma face na tentativa \(attempt), tentando novamente...")
+          self.detectFacesWithRetry(
+            image: image,
+            visionImage: visionImage,
+            imagePath: imagePath,
+            result: result,
+            attempt: attempt + 1
+          )
+          return
+        }
+
+        // Nenhuma face encontrada após todas as tentativas
+        print("⚠️ [iOS Native] DEBUG - Nenhuma face detectada após \(attempt) tentativas")
+        SentrySDK.capture(message: "⚠️ [iOS Native] Nenhuma face detectada após múltiplas tentativas") { scope in
           scope.setLevel(.warning)
           scope.setTag(value: "no_face", key: "detection_result")
           scope.setContext(value: [
             "image_path": imagePath,
             "image_width": image.size.width,
             "image_height": image.size.height,
-            "min_face_size": 0.01
+            "attempts": attempt,
+            "min_face_sizes_tried": "0.01, 0.05, 0.1"
           ], key: "detection_context")
         }
         result(FlutterError(
           code: "NO_FACE_DETECTED",
-          message: "Nenhum rosto detectado. Verifique: iluminação, ângulo da câmera e distância.",
+          message: "Nenhum rosto detectado após \(attempt) tentativas. Verifique: iluminação, ângulo da câmera e distância.",
           details: nil
         ))
         return
       }
 
-      print("✅ [iOS Native] Detectadas \(faces.count) face(s)")
+      guard let faces = faces else { return }
+
+      print("✅ [iOS Native] Detectadas \(faces.count) face(s) na tentativa \(attempt)")
       SentrySDK.capture(message: "✅ [iOS Native] Detecção facial bem-sucedida") { scope in
         scope.setLevel(.info)
         scope.setContext(value: [
           "faces_count": faces.count,
-          "image_path": imagePath
+          "image_path": imagePath,
+          "attempt": attempt,
+          "min_face_size_used": options.minFaceSize
         ], key: "detection_success")
       }
 
