@@ -493,21 +493,23 @@ class DatabaseHelper {
     SELECT TRIM(UPPER(movimentacao)) AS tipo,
            COUNT(*) AS total
     FROM pessoas_facial
-    WHERE UPPER(TRIM(movimentacao)) IN ('QUARTO', 'PISCINA', 'BALADA')
+    WHERE UPPER(TRIM(movimentacao)) IN ('QUARTO', 'SAIU_DO_QUARTO', 'VOLTOU_AO_QUARTO', 'FOI_PARA_BALADA')
     GROUP BY TRIM(UPPER(movimentacao))
     ORDER BY
       CASE TRIM(UPPER(movimentacao))
         WHEN 'QUARTO' THEN 1
-        WHEN 'PISCINA' THEN 2
-        WHEN 'BALADA' THEN 3
-        ELSE 4
+        WHEN 'SAIU_DO_QUARTO' THEN 2
+        WHEN 'VOLTOU_AO_QUARTO' THEN 3
+        WHEN 'FOI_PARA_BALADA' THEN 4
+        ELSE 5
       END
   ''');
 
     final mapa = <String, int>{
       'QUARTO': 0,
-      'PISCINA': 0,
-      'BALADA': 0,
+      'SAIU_DO_QUARTO': 0,
+      'VOLTOU_AO_QUARTO': 0,
+      'FOI_PARA_BALADA': 0,
     };
 
     for (final row in result) {

@@ -398,19 +398,25 @@ class _ListaPorLocalScreenState extends State<ListaPorLocalScreen> {
     switch (local.toUpperCase()) {
       case 'QUARTO':
         return {
-          'titulo': 'Quarto',
+          'titulo': 'No Quarto',
           'icone': Icons.bed,
           'cor': Colors.blue,
         };
-      case 'PISCINA':
+      case 'SAIU_DO_QUARTO':
         return {
-          'titulo': 'Piscina',
-          'icone': Icons.pool,
-          'cor': Colors.cyan,
+          'titulo': 'Fora do Quarto',
+          'icone': Icons.exit_to_app,
+          'cor': Colors.orange,
         };
-      case 'BALADA':
+      case 'VOLTOU_AO_QUARTO':
         return {
-          'titulo': 'Balada',
+          'titulo': 'Voltou ao Quarto',
+          'icone': Icons.home,
+          'cor': Colors.green,
+        };
+      case 'FOI_PARA_BALADA':
+        return {
+          'titulo': 'Foi para Balada',
           'icone': Icons.nightlife,
           'cor': Colors.purple,
         };

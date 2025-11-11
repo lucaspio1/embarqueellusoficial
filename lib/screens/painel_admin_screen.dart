@@ -741,10 +741,11 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Cards clicáveis para QUARTO, PISCINA e BALADA
+              // Cards clicáveis para movimentações
               _buildLocalCard('QUARTO', _contagemPorLocal['QUARTO'] ?? 0),
-              _buildLocalCard('PISCINA', _contagemPorLocal['PISCINA'] ?? 0),
-              _buildLocalCard('BALADA', _contagemPorLocal['BALADA'] ?? 0),
+              _buildLocalCard('SAIU_DO_QUARTO', _contagemPorLocal['SAIU_DO_QUARTO'] ?? 0),
+              _buildLocalCard('VOLTOU_AO_QUARTO', _contagemPorLocal['VOLTOU_AO_QUARTO'] ?? 0),
+              _buildLocalCard('FOI_PARA_BALADA', _contagemPorLocal['FOI_PARA_BALADA'] ?? 0),
 
               const SizedBox(height: 24),
             ] else ...[
@@ -1164,19 +1165,25 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     switch (local.toUpperCase()) {
       case 'QUARTO':
         return {
-          'titulo': 'Quarto',
+          'titulo': 'No Quarto',
           'icone': Icons.bed,
           'cor': Colors.blue,
         };
-      case 'PISCINA':
+      case 'SAIU_DO_QUARTO':
         return {
-          'titulo': 'Piscina',
-          'icone': Icons.pool,
-          'cor': Colors.cyan,
+          'titulo': 'Fora do Quarto',
+          'icone': Icons.exit_to_app,
+          'cor': Colors.orange,
         };
-      case 'BALADA':
+      case 'VOLTOU_AO_QUARTO':
         return {
-          'titulo': 'Balada',
+          'titulo': 'Voltou ao Quarto',
+          'icone': Icons.home,
+          'cor': Colors.green,
+        };
+      case 'FOI_PARA_BALADA':
+        return {
+          'titulo': 'Foi para Balada',
           'icone': Icons.nightlife,
           'cor': Colors.purple,
         };
