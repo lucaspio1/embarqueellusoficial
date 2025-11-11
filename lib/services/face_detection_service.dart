@@ -88,8 +88,14 @@ class FaceDetectionService {
         );
       } else {
         final face = faces.first;
-        final facePercent = ((face.boundingBox.width * face.boundingBox.height) /
-                            (image.metadata!.size.width * image.metadata!.size.height) * 100).toStringAsFixed(1);
+
+        // Calcular percentual da face em relação à imagem (com null safety)
+        String facePercent = 'unknown';
+        if (image.metadata?.size != null) {
+          final imageArea = image.metadata!.size.width * image.metadata!.size.height;
+          final faceArea = face.boundingBox.width * face.boundingBox.height;
+          facePercent = ((faceArea / imageArea) * 100).toStringAsFixed(1);
+        }
 
         Sentry.captureMessage(
           '✅ ${faces.length} FACE(S) DETECTADA(S) | ${stopwatch.elapsedMilliseconds}ms',
@@ -104,6 +110,7 @@ class FaceDetectionService {
               'bbox_left': face.boundingBox.left.toInt(),
               'bbox_top': face.boundingBox.top.toInt(),
               'face_percent_of_image': '$facePercent%',
+              'metadata_available': image.metadata != null,
             });
           },
         );
