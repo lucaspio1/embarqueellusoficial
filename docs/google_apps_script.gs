@@ -142,6 +142,10 @@ function doPost(e) {
         return listarViagens();
       case 'enviarTodosParaQuarto':
         return enviarTodosParaQuarto();
+      case 'getEventos':
+        return getEventos(data);
+      case 'marcarEventoProcessado':
+        return marcarEventoProcessado(data);
       default:
         console.error('❌ Ação não reconhecida:', action);
         return createResponse(false, 'Ação não reconhecida: ' + action);
@@ -232,6 +236,10 @@ function doGet(e) {
         } catch (e) {
           return createResponse(false, 'Erro ao encerrar viagem via GET: ' + e.message);
         }
+      case 'getEventos':
+        return getEventos({ timestamp: params.timestamp });
+      case 'marcarEventoProcessado':
+        return marcarEventoProcessado({ evento_id: params.evento_id });
       default:
         return createResponse(false, 'Ação não reconhecida em GET: ' + action);
     }
@@ -863,6 +871,17 @@ function encerrarViagem(data) {
       }
 
       console.log('✅ [CRÍTICO] Todas as viagens encerradas com sucesso!');
+
+      // Registrar evento para notificar clientes
+      try {
+        registrarEvento('VIAGEM_ENCERRADA', {
+          tipo: 'TODAS',
+          abas_limpas: ['PESSOAS', 'LOGS', 'ALUNOS']
+        });
+      } catch (errEvento) {
+        console.error('⚠️ Erro ao registrar evento (não crítico):', errEvento);
+      }
+
       return createResponse(true, 'Todas as viagens foram encerradas! Todas as abas foram limpas.', {
         abas_limpas: ['PESSOAS', 'LOGS', 'ALUNOS']
       });
@@ -894,6 +913,18 @@ function encerrarViagem(data) {
     }
 
     console.log('✅ [CRÍTICO] Viagem encerrada com sucesso! Total de registros removidos:', totalRemovidos);
+
+    // Registrar evento para notificar clientes
+    try {
+      registrarEvento('VIAGEM_ENCERRADA', {
+        tipo: 'ESPECIFICA',
+        inicio_viagem: inicioViagem,
+        fim_viagem: fimViagem,
+        total_removidos: totalRemovidos
+      });
+    } catch (errEvento) {
+      console.error('⚠️ Erro ao registrar evento (não crítico):', errEvento);
+    }
 
     return createResponse(true, 'Viagem encerrada com sucesso! ' + totalRemovidos + ' registro(s) removido(s).', {
       inicio_viagem: inicioViagem,
@@ -1050,5 +1081,188 @@ function enviarTodosParaQuarto() {
     console.error('❌ [CRÍTICO] Erro ao enviar para quarto:', error);
     console.error('❌ Stack trace:', error.stack);
     return createResponse(false, 'Erro ao enviar para quarto: ' + error.message + ' | Stack: ' + error.stack);
+  }
+}
+
+// ============================================================================
+// SISTEMA DE EVENTOS
+// ============================================================================
+
+/**
+ * Registra um evento na aba EVENTOS
+ * Eventos são usados para notificar clientes sobre ações críticas
+ */
+function registrarEvento(tipoEvento, dados) {
+  try {
+    console.log('📢 [registrarEvento] Tipo:', tipoEvento, 'Dados:', JSON.stringify(dados));
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let eventosSheet = ss.getSheetByName('EVENTOS');
+
+    // Criar aba EVENTOS se não existir
+    if (!eventosSheet) {
+      console.log('📝 Criando aba EVENTOS...');
+      eventosSheet = ss.insertSheet('EVENTOS');
+      eventosSheet.appendRow([
+        'ID',
+        'TIMESTAMP',
+        'TIPO_EVENTO',
+        'INICIO_VIAGEM',
+        'FIM_VIAGEM',
+        'DADOS_ADICIONAIS',
+        'PROCESSADO'
+      ]);
+    }
+
+    // Gerar ID único baseado em timestamp
+    const eventoId = 'EVT_' + new Date().getTime();
+    const timestamp = new Date().toISOString();
+    const inicioViagem = dados.inicio_viagem || dados.inicioViagem || '';
+    const fimViagem = dados.fim_viagem || dados.fimViagem || '';
+    const dadosAdicionais = JSON.stringify(dados);
+    const processado = 'NAO';
+
+    eventosSheet.appendRow([
+      eventoId,
+      timestamp,
+      tipoEvento,
+      inicioViagem,
+      fimViagem,
+      dadosAdicionais,
+      processado
+    ]);
+
+    console.log('✅ Evento registrado:', eventoId);
+    return eventoId;
+  } catch (error) {
+    console.error('❌ Erro ao registrar evento:', error);
+    throw error;
+  }
+}
+
+/**
+ * Busca eventos pendentes (não processados)
+ * Clientes chamam essa função periodicamente para verificar novos eventos
+ */
+function getEventos(data) {
+  try {
+    const timestampFiltro = data ? data.timestamp : null;
+    console.log('📥 [getEventos] Buscando eventos... Filtro:', timestampFiltro);
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const eventosSheet = ss.getSheetByName('EVENTOS');
+
+    if (!eventosSheet) {
+      console.log('⚠️ Aba EVENTOS não existe ainda');
+      return createResponse(true, 'Nenhum evento encontrado', { eventos: [] });
+    }
+
+    const lastRow = eventosSheet.getLastRow();
+    if (lastRow <= 1) {
+      console.log('⚠️ Nenhum evento registrado');
+      return createResponse(true, 'Nenhum evento encontrado', { eventos: [] });
+    }
+
+    const data_range = eventosSheet.getDataRange();
+    const values = data_range.getValues();
+
+    const eventos = [];
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+
+      const eventoId = row[0];
+      const timestamp = row[1];
+      const tipoEvento = row[2];
+      const inicioViagem = row[3] || '';
+      const fimViagem = row[4] || '';
+      const dadosAdicionais = row[5] || '{}';
+      const processado = String(row[6] || 'NAO').toUpperCase();
+
+      // Filtrar apenas eventos não processados
+      if (processado === 'NAO') {
+        // Se tem filtro de timestamp, só retornar eventos mais recentes
+        if (timestampFiltro) {
+          const eventoTimestamp = new Date(timestamp).getTime();
+          const filtroTimestamp = new Date(timestampFiltro).getTime();
+
+          if (eventoTimestamp <= filtroTimestamp) {
+            continue; // Pular eventos antigos
+          }
+        }
+
+        let dadosParsed = {};
+        try {
+          dadosParsed = JSON.parse(dadosAdicionais);
+        } catch (e) {
+          console.log('⚠️ Erro ao parsear dados do evento', eventoId);
+        }
+
+        eventos.push({
+          id: eventoId,
+          timestamp: timestamp,
+          tipo_evento: tipoEvento,
+          inicio_viagem: inicioViagem,
+          fim_viagem: fimViagem,
+          dados: dadosParsed,
+          processado: processado
+        });
+      }
+    }
+
+    console.log('✅ [getEventos] ' + eventos.length + ' evento(s) pendente(s) encontrado(s)');
+    return createResponse(true, eventos.length + ' evento(s) encontrado(s)', { eventos: eventos });
+  } catch (error) {
+    console.error('❌ Erro ao buscar eventos:', error);
+    return createResponse(false, 'Erro ao buscar eventos: ' + error.message);
+  }
+}
+
+/**
+ * Marca um evento como processado
+ * Clientes devem chamar essa função após processar o evento localmente
+ */
+function marcarEventoProcessado(data) {
+  try {
+    const eventoId = data.evento_id || data.eventoId || data.id;
+    console.log('📥 [marcarEventoProcessado] Evento:', eventoId);
+
+    if (!eventoId) {
+      return createResponse(false, 'ID do evento é obrigatório');
+    }
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const eventosSheet = ss.getSheetByName('EVENTOS');
+
+    if (!eventosSheet) {
+      return createResponse(false, 'Aba EVENTOS não encontrada');
+    }
+
+    const lastRow = eventosSheet.getLastRow();
+    if (lastRow <= 1) {
+      return createResponse(false, 'Nenhum evento encontrado');
+    }
+
+    const data_range = eventosSheet.getDataRange();
+    const values = data_range.getValues();
+
+    // Procurar o evento pelo ID
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const rowEventoId = row[0];
+
+      if (rowEventoId === eventoId) {
+        // Marcar como processado (coluna 7 = índice 6)
+        eventosSheet.getRange(i + 1, 7).setValue('SIM');
+        console.log('✅ Evento', eventoId, 'marcado como processado');
+        return createResponse(true, 'Evento marcado como processado');
+      }
+    }
+
+    console.log('⚠️ Evento não encontrado:', eventoId);
+    return createResponse(false, 'Evento não encontrado: ' + eventoId);
+  } catch (error) {
+    console.error('❌ Erro ao marcar evento:', error);
+    return createResponse(false, 'Erro ao marcar evento: ' + error.message);
   }
 }
