@@ -74,6 +74,13 @@ post_install do |installer|
 
       # Define versão de deployment uniformemente (já definida no platform, mas garante)
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
+
+      # ===== FIX CRÍTICO: TensorFlow Lite Symbol Stripping =====
+      # Previne o erro: "FAIL TO LOOKUP SYMBOL TFLITEINTERPRETEROPTIONSCREATE"
+      # Referência: https://github.com/tensorflow/flutter-tflite/issues/221
+      config.build_settings['STRIP_STYLE'] = 'non-global'
+      config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
+      config.build_settings['COPY_PHASE_STRIP'] = 'NO'
     end
   end
 
