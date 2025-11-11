@@ -632,6 +632,72 @@ class DatabaseHelper {
     print('✅ Todos os dados foram limpos do banco de dados');
   }
 
+  /// Limpa TODOS os dados de viagens (incluindo pessoas_facial)
+  /// Usado quando o admin encerra TODAS as viagens
+  Future<void> limparTodosDados() async {
+    final db = await database;
+
+    print('🧹 [DB] Limpando TODOS os dados de viagens...');
+
+    await db.delete('passageiros');
+    await db.delete('alunos');
+    await db.delete('embeddings');
+    await db.delete('pessoas_facial');
+    await db.delete('logs');
+    await db.delete('sync_queue');
+
+    // NÃO deletar usuarios para manter login offline
+    print('✅ [DB] Todos os dados de viagens foram limpos');
+  }
+
+  /// Limpa dados de uma viagem específica
+  /// Usado quando o admin encerra uma viagem específica
+  Future<void> limparDadosPorViagem(String inicioViagem, String fimViagem) async {
+    final db = await database;
+
+    print('🧹 [DB] Limpando dados da viagem: $inicioViagem a $fimViagem');
+
+    int totalRemovidos = 0;
+
+    // Limpar passageiros
+    final passageirosRemovidos = await db.delete(
+      'passageiros',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+    totalRemovidos += passageirosRemovidos;
+    print('   - Passageiros removidos: $passageirosRemovidos');
+
+    // Limpar alunos
+    final alunosRemovidos = await db.delete(
+      'alunos',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+    totalRemovidos += alunosRemovidos;
+    print('   - Alunos removidos: $alunosRemovidos');
+
+    // Limpar pessoas_facial
+    final pessoasRemovidas = await db.delete(
+      'pessoas_facial',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+    totalRemovidos += pessoasRemovidas;
+    print('   - Pessoas removidas: $pessoasRemovidas');
+
+    // Limpar logs
+    final logsRemovidos = await db.delete(
+      'logs',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+    totalRemovidos += logsRemovidos;
+    print('   - Logs removidos: $logsRemovidos');
+
+    print('✅ [DB] Total de registros removidos: $totalRemovidos');
+  }
+
   // ========================================================================
   // MÉTODOS PARA USUÁRIOS (LOGIN OFFLINE)
   // ========================================================================

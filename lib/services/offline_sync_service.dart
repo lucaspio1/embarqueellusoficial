@@ -8,6 +8,8 @@ import 'package:crypto/crypto.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/config/app_config.dart';
+import 'package:embarqueellus/models/evento.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class OfflineSyncService {
   OfflineSyncService._();
@@ -484,6 +486,16 @@ class OfflineSyncService {
       results.logs = SyncResult(success: false, message: e.toString(), count: 0);
     }
 
+    // 4.5. Sincronizar Eventos (notificações de ações críticas)
+    try {
+      final eventosResult = await _syncEventos();
+      results.eventos = eventosResult;
+      print('${eventosResult.success ? "✅" : "❌"} [Eventos] ${eventosResult.message}');
+    } catch (e) {
+      print('❌ [Eventos] Erro: $e');
+      results.eventos = SyncResult(success: false, message: e.toString(), count: 0);
+    }
+
     // 5. Sincronizar Outbox (fila de envio)
     try {
       final outboxSuccess = await trySyncNow();
@@ -504,9 +516,171 @@ class OfflineSyncService {
     print('   🎓 Alunos: ${results.alunos.count} (${results.alunos.success ? "OK" : "FALHA"})');
     print('   👤 Pessoas: ${results.pessoas.count} (${results.pessoas.success ? "OK" : "FALHA"})');
     print('   📝 Logs: ${results.logs.count} (${results.logs.success ? "OK" : "FALHA"})');
+    print('   📢 Eventos: ${results.eventos.count} (${results.eventos.success ? "OK" : "FALHA"})');
     print('   📤 Outbox: ${results.outbox.success ? "OK" : "FALHA"}');
 
     return results;
+  }
+
+  // -----------------------------
+  // Sync Eventos (notificações de ações críticas)
+  // -----------------------------
+  Future<SyncResult> _syncEventos() async {
+    try {
+      print('🔄 [EventosSync] Iniciando sincronização de eventos...');
+
+      // Buscar último timestamp processado
+      final prefs = await SharedPreferences.getInstance();
+      final ultimoTimestamp = prefs.getString('ultimo_evento_timestamp');
+
+      final client = http.Client();
+      final body = {
+        'action': 'getEventos',
+        if (ultimoTimestamp != null) 'timestamp': ultimoTimestamp,
+      };
+
+      final request = http.Request('POST', Uri.parse(_sheetsWebhook))
+        ..followRedirects = false
+        ..headers['Content-Type'] = 'application/json; charset=utf-8'
+        ..headers['Accept'] = 'application/json'
+        ..headers['User-Agent'] = 'Flutter-App/1.0'
+        ..body = jsonEncode(body);
+
+      final streamedResponse = await client.send(request);
+      final response = await http.Response.fromStream(streamedResponse);
+      client.close();
+
+      print('📡 [EventosSync] Status: ${response.statusCode}');
+
+      if (response.statusCode != 200) {
+        print('❌ [EventosSync] Erro HTTP ${response.statusCode}');
+        return SyncResult(
+          success: false,
+          count: 0,
+          message: 'Erro HTTP ${response.statusCode}',
+        );
+      }
+
+      final data = jsonDecode(response.body);
+
+      if (data['success'] != true) {
+        final msg = data['message'] ?? 'Erro desconhecido';
+        print('⚠️ [EventosSync] $msg');
+        return SyncResult(success: true, count: 0, message: msg);
+      }
+
+      final eventosData = data['eventos'] ?? [];
+      print('📊 [EventosSync] Total de eventos recebidos: ${eventosData.length}');
+
+      if (eventosData.isEmpty) {
+        print('✅ [EventosSync] Nenhum evento pendente');
+        return SyncResult(success: true, count: 0, message: 'Nenhum evento pendente');
+      }
+
+      int processados = 0;
+      String? novoTimestamp;
+
+      for (final eventoJson in eventosData) {
+        try {
+          final evento = Evento.fromJson(eventoJson);
+          print('📢 [EventosSync] Processando evento: ${evento.tipoEvento} (${evento.id})');
+
+          // Processar o evento
+          await _processarEvento(evento);
+
+          // Marcar como processado no servidor
+          await _marcarEventoProcessado(evento.id);
+
+          processados++;
+
+          // Atualizar timestamp
+          novoTimestamp = evento.timestamp.toIso8601String();
+        } catch (e) {
+          print('❌ [EventosSync] Erro ao processar evento: $e');
+        }
+      }
+
+      // Salvar último timestamp processado
+      if (novoTimestamp != null) {
+        await prefs.setString('ultimo_evento_timestamp', novoTimestamp);
+      }
+
+      print('✅ [EventosSync] $processados evento(s) processado(s)');
+      return SyncResult(
+        success: true,
+        count: processados,
+        message: '$processados evento(s) processado(s)',
+      );
+    } catch (e, stack) {
+      print('❌ [EventosSync] Erro geral: $e');
+      await Sentry.captureException(e, stackTrace: stack);
+      return SyncResult(success: false, count: 0, message: e.toString());
+    }
+  }
+
+  /// Processa um evento específico
+  Future<void> _processarEvento(Evento evento) async {
+    print('🔍 [ProcessarEvento] Tipo: ${evento.tipoEvento}');
+
+    switch (evento.tipoEvento) {
+      case 'VIAGEM_ENCERRADA':
+        await _processarEventoViagemEncerrada(evento);
+        break;
+      default:
+        print('⚠️ [ProcessarEvento] Tipo desconhecido: ${evento.tipoEvento}');
+    }
+  }
+
+  /// Processa evento de viagem encerrada
+  Future<void> _processarEventoViagemEncerrada(Evento evento) async {
+    print('🧹 [ViagemEncerrada] Limpando dados locais...');
+
+    final tipo = evento.dados['tipo'];
+    final inicioViagem = evento.inicioViagem;
+    final fimViagem = evento.fimViagem;
+
+    if (tipo == 'TODAS') {
+      // Limpar TUDO
+      print('🧹 [ViagemEncerrada] Limpando TODAS as viagens');
+      await _db.limparTodosDados();
+    } else if (tipo == 'ESPECIFICA' && inicioViagem != null && fimViagem != null) {
+      // Limpar viagem específica
+      print('🧹 [ViagemEncerrada] Limpando viagem: $inicioViagem a $fimViagem');
+      await _db.limparDadosPorViagem(inicioViagem, fimViagem);
+    }
+
+    print('✅ [ViagemEncerrada] Dados locais limpos com sucesso');
+  }
+
+  /// Marca evento como processado no servidor
+  Future<void> _marcarEventoProcessado(String eventoId) async {
+    try {
+      final body = {
+        'action': 'marcarEventoProcessado',
+        'evento_id': eventoId,
+      };
+
+      final response = await http.post(
+        Uri.parse(_sheetsWebhook),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          print('✅ [EventosSync] Evento $eventoId marcado como processado');
+        } else {
+          print('⚠️ [EventosSync] Falha ao marcar evento: ${data['message']}');
+        }
+      }
+    } catch (e) {
+      print('❌ [EventosSync] Erro ao marcar evento processado: $e');
+      // Não propagar erro - não é crítico
+    }
   }
 
   // -----------------------------
@@ -1045,6 +1219,7 @@ class ConsolidatedSyncResult {
   SyncResult alunos = SyncResult(success: false, message: 'Não sincronizado', count: 0);
   SyncResult pessoas = SyncResult(success: false, message: 'Não sincronizado', count: 0);
   SyncResult logs = SyncResult(success: false, message: 'Não sincronizado', count: 0);
+  SyncResult eventos = SyncResult(success: false, message: 'Não sincronizado', count: 0);
   SyncResult outbox = SyncResult(success: false, message: 'Não sincronizado', count: 0);
 
   /// Retorna true se TODAS as sincronizações foram bem-sucedidas
@@ -1054,6 +1229,7 @@ class ConsolidatedSyncResult {
       alunos.success &&
       pessoas.success &&
       logs.success &&
+      eventos.success &&
       outbox.success;
 
   /// Retorna true se ALGUMA sincronização foi bem-sucedida
@@ -1062,6 +1238,7 @@ class ConsolidatedSyncResult {
       alunos.success ||
       pessoas.success ||
       logs.success ||
+      eventos.success ||
       outbox.success;
 
   /// Total de itens sincronizados
@@ -1069,7 +1246,8 @@ class ConsolidatedSyncResult {
       users.count +
       alunos.count +
       pessoas.count +
-      logs.count;
+      logs.count +
+      eventos.count;
 
   @override
   String toString() {
@@ -1083,6 +1261,7 @@ ConsolidatedSyncResult(
   alunos: ${alunos.count} (${alunos.success ? "OK" : "FALHA"}),
   pessoas: ${pessoas.count} (${pessoas.success ? "OK" : "FALHA"}),
   logs: ${logs.count} (${logs.success ? "OK" : "FALHA"}),
+  eventos: ${eventos.count} (${eventos.success ? "OK" : "FALHA"}),
   outbox: ${outbox.success ? "OK" : "FALHA"}
 )''';
   }
