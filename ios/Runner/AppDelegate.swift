@@ -76,7 +76,7 @@ import MLKitFaceDetection
           let imagePath = args["path"] as? String else {
       SentrySDK.capture(message: "❌ [iOS Native] Argumentos inválidos no Platform Channel") { scope in
         scope.setLevel(.error)
-        scope.setTag("error_type", value: "invalid_args")
+        scope.setTag(value: "invalid_args", key: "error_type")
       }
       result(FlutterError(
         code: "INVALID_ARGS",
@@ -96,7 +96,7 @@ import MLKitFaceDetection
     guard let image = UIImage(contentsOfFile: imagePath) else {
       SentrySDK.capture(message: "❌ [iOS Native] Erro ao carregar imagem") { scope in
         scope.setLevel(.error)
-        scope.setTag("error_type", value: "image_load_error")
+        scope.setTag(value: "image_load_error", key: "error_type")
         scope.setContext(value: ["image_path": imagePath], key: "error_context")
       }
       result(FlutterError(
@@ -108,12 +108,16 @@ import MLKitFaceDetection
     }
 
     print("✅ [iOS Native] Imagem carregada: \(image.size.width)x\(image.size.height)")
+    print("🔍 [iOS Native] DEBUG - Orientation: \(image.imageOrientation.rawValue)")
+    print("🔍 [iOS Native] DEBUG - Scale: \(image.scale)")
+
     SentrySDK.capture(message: "✅ [iOS Native] Imagem carregada (EXIF corrigido automaticamente)") { scope in
       scope.setLevel(.info)
       scope.setContext(value: [
         "width": image.size.width,
         "height": image.size.height,
-        "orientation": image.imageOrientation.rawValue
+        "orientation": image.imageOrientation.rawValue,
+        "scale": image.scale
       ], key: "image_loaded")
     }
 
@@ -123,22 +127,29 @@ import MLKitFaceDetection
     options.landmarkMode = .all
     options.classificationMode = .none
     options.contourMode = .none
-    options.minFaceSize = 0.05
+    options.minFaceSize = 0.01  // Mais sensível: 1% da imagem (era 5%)
 
     let faceDetector = FaceDetector.faceDetector(options: options)
+
+    print("🔍 [iOS Native] DEBUG - Detector configurado: minFaceSize=0.01, mode=accurate")
 
     // PASSO 3: Criar VisionImage
     let visionImage = VisionImage(image: image)
     visionImage.orientation = image.imageOrientation
 
+    print("🔍 [iOS Native] DEBUG - VisionImage criado com orientation: \(image.imageOrientation.rawValue)")
+
     // PASSO 4: Detectar faces
     faceDetector.process(visionImage) { [weak self] faces, error in
       guard let self = self else { return }
 
+      print("🔍 [iOS Native] DEBUG - Callback do detector executado")
+
       if let error = error {
+        print("❌ [iOS Native] DEBUG - Erro no ML Kit: \(error.localizedDescription)")
         SentrySDK.capture(error: error) { scope in
           scope.setLevel(.error)
-          scope.setTag("error_type", value: "ml_kit_detection_error")
+          scope.setTag(value: "ml_kit_detection_error", key: "error_type")
           scope.setContext(value: [
             "error_message": error.localizedDescription,
             "image_path": imagePath
@@ -152,11 +163,19 @@ import MLKitFaceDetection
         return
       }
 
+      print("🔍 [iOS Native] DEBUG - Faces retornadas: \(faces?.count ?? 0)")
+
       guard let faces = faces, !faces.isEmpty else {
+        print("⚠️ [iOS Native] DEBUG - Nenhuma face detectada (faces array vazio ou nil)")
         SentrySDK.capture(message: "⚠️ [iOS Native] Nenhuma face detectada") { scope in
           scope.setLevel(.warning)
-          scope.setTag("detection_result", value: "no_face")
-          scope.setContext(value: ["image_path": imagePath], key: "detection_context")
+          scope.setTag(value: "no_face", key: "detection_result")
+          scope.setContext(value: [
+            "image_path": imagePath,
+            "image_width": image.size.width,
+            "image_height": image.size.height,
+            "min_face_size": 0.01
+          ], key: "detection_context")
         }
         result(FlutterError(
           code: "NO_FACE_DETECTED",
@@ -189,7 +208,7 @@ import MLKitFaceDetection
             let croppedCGImage = cgImage.cropping(to: primaryFace.frame) else {
         SentrySDK.capture(message: "❌ [iOS Native] Erro ao recortar face") { scope in
           scope.setLevel(.error)
-          scope.setTag("error_type", value: "crop_error")
+          scope.setTag(value: "crop_error", key: "error_type")
           scope.setContext(value: [
             "face_frame": "\(primaryFace.frame)",
             "image_path": imagePath
@@ -212,7 +231,7 @@ import MLKitFaceDetection
       guard let jpegData = finalImage.jpegData(compressionQuality: 0.95) else {
         SentrySDK.capture(message: "❌ [iOS Native] Erro ao converter para JPEG") { scope in
           scope.setLevel(.error)
-          scope.setTag("error_type", value: "jpeg_conversion_error")
+          scope.setTag(value: "jpeg_conversion_error", key: "error_type")
         }
         result(FlutterError(
           code: "JPEG_ERROR",
