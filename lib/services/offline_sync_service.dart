@@ -197,7 +197,8 @@ class OfflineSyncService {
 
   Future<void> trySyncInBackground() async {
     try {
-      await trySyncNow();
+      // Sincroniza TUDO: usuários, alunos, pessoas, logs, eventos E outbox
+      await syncAll();
     } catch (e) {
       print('❌ [OfflineSync] Erro em background: $e');
     }
