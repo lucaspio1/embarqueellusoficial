@@ -17,6 +17,24 @@ import 'platform_camera_utils.dart';
 import 'image_rotation_handler.dart';
 import 'image_file_processor.dart';
 
+/// Resultado intermediário do processamento de uma imagem facial.
+///
+/// Contém todos os dados necessários após a detecção e correção EXIF:
+/// - croppedImage: Imagem recortada da face
+/// - face: Face detectada pelo ML Kit com metadados
+/// - originalPath: Caminho da imagem original (ou corrigida)
+class ProcessedFaceResult {
+  final img.Image croppedImage;
+  final Face face;
+  final String originalPath;
+
+  ProcessedFaceResult({
+    required this.croppedImage,
+    required this.face,
+    required this.originalPath,
+  });
+}
+
 /// Utilitário especializado para processamento de imagens faciais.
 ///
 /// RESPONSABILIDADES:
@@ -40,6 +58,182 @@ class FaceImageProcessor {
   final PlatformCameraUtils _platformUtils = PlatformCameraUtils.instance;
   final ImageRotationHandler _rotationHandler = ImageRotationHandler.instance;
   final ImageFileProcessor _fileProcessor = ImageFileProcessor.instance;
+
+  /// NOVO: Processa um arquivo completo - corrige EXIF, detecta e recorta face.
+  ///
+  /// Este é o método PRINCIPAL que deve ser usado para processamento completo.
+  /// Retorna [ProcessedFaceResult] contendo:
+  /// - croppedImage: Face recortada pronta para uso
+  /// - face: Dados da face detectada (boundingBox, landmarks, etc)
+  /// - originalPath: Caminho do arquivo processado
+  ///
+  /// IMPORTANTE: Este método aplica correção EXIF ANTES de detectar faces,
+  /// garantindo funcionamento correto no iOS.
+  Future<ProcessedFaceResult> processFileComplete(
+    File file, {
+    int outputSize = 112,
+  }) async {
+    try {
+      if (!await file.exists()) {
+        throw Exception('Arquivo não existe: ${file.path}');
+      }
+
+      final fileSize = await file.length();
+      final bool isIOS = _platformUtils.isIOS;
+
+      Sentry.captureMessage(
+        '📸 PROCESSOR COMPLETE START: ${(fileSize / 1024).toStringAsFixed(0)}KB',
+        level: SentryLevel.info,
+        withScope: (scope) {
+          scope.setTag('platform', isIOS ? 'iOS' : 'Android');
+          scope.setTag('output_size', '${outputSize}x$outputSize');
+          scope.setTag('method', 'processFileComplete');
+        },
+      );
+
+      // ⚠️ PASSO 1: CORRIGIR EXIF PRIMEIRO (crucial para iOS)
+      final img.Image oriented = await _fileProcessor.loadAndOrient(file);
+
+      Sentry.captureMessage(
+        '🔄 EXIF APPLIED: ${oriented.width}x${oriented.height}',
+        level: SentryLevel.info,
+      );
+
+      // PASSO 2: Salvar imagem corrigida temporariamente
+      final tempDir = file.parent.path;
+      final fixedPath = '$tempDir/temp_fixed_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final tempFile = File(fixedPath);
+
+      try {
+        // No iOS, aplicar bakeOrientation para garantir que EXIF seja aplicado
+        final img.Image baked = isIOS ? img.bakeOrientation(oriented) : oriented;
+        await _fileProcessor.saveAsJpeg(baked, tempFile, quality: 100);
+
+        Sentry.captureMessage(
+          '💾 SAVED CORRECTED IMAGE: $fixedPath',
+          level: SentryLevel.info,
+        );
+
+        // PASSO 3: Detectar face na imagem CORRIGIDA
+        Sentry.captureMessage(
+          '🔍 DETECTING on corrected image',
+          level: SentryLevel.info,
+        );
+
+        final inputImage = InputImage.fromFile(tempFile);
+        List<Face> faces = await _detection.detect(inputImage);
+
+        // TENTATIVA 2: Se falhar, tentar com enhancement
+        if (faces.isEmpty) {
+          Sentry.captureMessage(
+            '⚠️ TENTATIVA 2: Aplicando enhancement',
+            level: SentryLevel.warning,
+          );
+
+          final enhanced = _enhanceImage(baked);
+          await _fileProcessor.saveAsJpeg(enhanced, tempFile, quality: 100);
+
+          final enhancedInput = InputImage.fromFile(tempFile);
+          faces = await _detection.detect(enhancedInput);
+
+          if (faces.isNotEmpty) {
+            Sentry.captureMessage(
+              '✅ SUCESSO NA TENTATIVA 2: Face detectada após enhancement',
+              level: SentryLevel.info,
+            );
+          }
+        }
+
+        // TENTATIVA 3: Se ainda falhar, tentar com resize
+        if (faces.isEmpty) {
+          Sentry.captureMessage(
+            '⚠️ TENTATIVA 3: Redimensionando imagem',
+            level: SentryLevel.warning,
+          );
+
+          final maxDim = math.max(baked.width, baked.height);
+          if (maxDim < 1920) {
+            final scale = 1920 / maxDim;
+            final resized = img.copyResize(
+              baked,
+              width: (baked.width * scale).toInt(),
+              height: (baked.height * scale).toInt(),
+              interpolation: img.Interpolation.cubic,
+            );
+
+            await _fileProcessor.saveAsJpeg(resized, tempFile, quality: 100);
+
+            final resizedInput = InputImage.fromFile(tempFile);
+            faces = await _detection.detect(resizedInput);
+
+            if (faces.isNotEmpty) {
+              Sentry.captureMessage(
+                '✅ SUCESSO NA TENTATIVA 3: Face detectada após resize',
+                level: SentryLevel.info,
+              );
+            }
+          }
+        }
+
+        if (faces.isEmpty) {
+          Sentry.captureMessage(
+            '❌ FALHA TOTAL: Nenhuma face após 3 tentativas',
+            level: SentryLevel.error,
+            withScope: (scope) {
+              scope.setTag('platform', isIOS ? 'iOS' : 'Android');
+              scope.setTag('image_size', '${baked.width}x${baked.height}');
+              scope.setTag('file_size_kb', '${(fileSize / 1024).toStringAsFixed(1)}');
+            },
+          );
+
+          throw Exception('Nenhum rosto detectado. Verifique: iluminação, ângulo da câmera e distância.');
+        }
+
+        // PASSO 4: Selecionar face principal
+        final primaryFace = _selectPrimaryFace(faces);
+
+        Sentry.captureMessage(
+          '✅ FACE SELECTED: ${primaryFace.boundingBox.width.toInt()}x${primaryFace.boundingBox.height.toInt()}',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('faces_count', '${faces.length}');
+          },
+        );
+
+        // PASSO 5: Recortar face
+        final croppedImage = _cropFace(baked, [primaryFace], outputSize: outputSize);
+
+        Sentry.captureMessage(
+          '✅ PROCESSAMENTO COMPLETO: ${croppedImage.width}x${croppedImage.height}',
+          level: SentryLevel.info,
+        );
+
+        return ProcessedFaceResult(
+          croppedImage: croppedImage,
+          face: primaryFace,
+          originalPath: fixedPath,
+        );
+      } finally {
+        // Limpar arquivo temporário (opcional - pode manter para debug)
+        // Se quiser manter para debug, remova este bloco
+        if (await tempFile.exists()) {
+          // await tempFile.delete();  // Comentado para manter arquivo para debug
+        }
+      }
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro em processFileComplete',
+          'file_path': file.path,
+          'platform': _platformUtils.platformDescription,
+        }),
+      );
+
+      rethrow;
+    }
+  }
 
   /// Processa um arquivo de imagem (por exemplo, foto capturada) e retorna a
   /// imagem já recortada/normalizada para uso pelo ArcFace.

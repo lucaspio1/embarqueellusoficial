@@ -6,37 +6,40 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
-import 'face_detection_service.dart';
 import 'face_image_processor.dart';
 import 'platform_camera_utils.dart';
 
 /// Serviço PRINCIPAL para captura única de foto com detecção facial.
 ///
-/// Este serviço implementa o fluxo completo de:
+/// NOVA ARQUITETURA (Reestruturada):
 /// 1. Inicialização da câmera
 /// 2. Captura de uma única foto (não streaming)
-/// 3. Detecção facial via Google ML Kit
-/// 4. Recorte da face detectada
-/// 5. Retorno do recorte como Uint8List pronto para embeddings
+/// 3. DELEGAÇÃO para FaceImageProcessor (correção EXIF + detecção + recorte)
+/// 4. Retorno do recorte como Uint8List pronto para embeddings
 ///
-/// FASE 2: Consolidado como serviço único de captura facial.
-/// - SingleFaceCaptureService foi removido (100% redundante)
-/// - FaceImageProcessor mantido como utilitário (usado por este serviço)
-/// - Compatível com iOS 15.5+ e Android
+/// RESPONSABILIDADE ÚNICA:
+/// - FaceCaptureService: Apenas gerencia câmera e captura foto
+/// - FaceImageProcessor: "CÉREBRO" - corrige EXIF, detecta e recorta
+/// - FaceDetectionService: Motor puro de ML Kit (usado pelo processor)
+///
+/// BENEFÍCIOS:
+/// ✅ Correção de EXIF aplicada ANTES da detecção (fix iOS)
+/// ✅ Código modular e testável
+/// ✅ Separação clara de responsabilidades
+/// ✅ Compatível com iOS 15.5+ e Android
 ///
 /// DEPENDÊNCIAS:
-/// - FaceDetectionService: detecção de faces
-/// - FaceImageProcessor: processamento e crop de imagens
+/// - FaceImageProcessor: processamento completo (EXIF + detecção + crop)
 /// - PlatformCameraUtils: utilitários multiplataforma
 class FaceCaptureService {
   FaceCaptureService._();
 
   static final FaceCaptureService instance = FaceCaptureService._();
 
-  final FaceDetectionService _detection = FaceDetectionService.instance;
   final FaceImageProcessor _processor = FaceImageProcessor.instance;
   final PlatformCameraUtils _platformUtils = PlatformCameraUtils.instance;
 
@@ -121,6 +124,11 @@ class FaceCaptureService {
 
   /// Captura uma foto, detecta a face e retorna o recorte facial.
   ///
+  /// NOVA ARQUITETURA:
+  /// - FaceCaptureService: Apenas captura a foto
+  /// - FaceImageProcessor: Corrige EXIF, detecta e recorta (TODO o processamento)
+  /// - FaceDetectionService: Motor puro de ML Kit
+  ///
   /// Retorna [FaceCaptureResult] contendo:
   /// - croppedFaceBytes: Uint8List da face recortada (pronta para embeddings)
   /// - boundingBox: Coordenadas da face detectada
@@ -141,14 +149,15 @@ class FaceCaptureService {
         level: SentryLevel.info,
       );
 
-      // 1. Capturar foto
+      // PASSO 1: Capturar foto (responsabilidade única do FaceCaptureService)
       final XFile file = await _controller!.takePicture();
       final String imagePath = file.path;
 
       await Sentry.captureMessage(
-        '✅ FACE_CAPTURE: Foto capturada',
+        '✅ FACE_CAPTURE: Foto capturada | Delegando processamento para FaceImageProcessor',
         level: SentryLevel.info,
         withScope: (scope) {
+          scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
           scope.setContexts('photo_captured', {
             'image_path': imagePath,
             'file_exists': await File(imagePath).exists(),
@@ -156,54 +165,19 @@ class FaceCaptureService {
         },
       );
 
-      // 2. Criar InputImage para detecção
-      final inputImage = InputImage.fromFilePath(imagePath);
-
-      await Sentry.captureMessage(
-        '🔍 FACE_CAPTURE: Detectando faces na imagem',
-        level: SentryLevel.info,
-      );
-
-      // 3. Detectar faces
-      final faces = await _detection.detect(inputImage);
-
-      if (faces.isEmpty) {
-        await Sentry.captureMessage(
-          '❌ FACE_CAPTURE: Nenhuma face detectada',
-          level: SentryLevel.warning,
-          withScope: (scope) {
-            scope.setTag('detection_result', 'no_faces');
-            scope.setContexts('detection_failed', {
-              'image_path': imagePath,
-            });
-          },
-        );
-
-        throw Exception('Nenhum rosto detectado na imagem. Por favor, posicione seu rosto na câmera.');
-      }
-
-      await Sentry.captureMessage(
-        '✅ FACE_CAPTURE: Face(s) detectada(s)',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setContexts('faces_detected', {
-            'total_faces': faces.length,
-            'primary_face_bbox': '${faces.first.boundingBox.width.toInt()}x${faces.first.boundingBox.height.toInt()}',
-          });
-        },
-      );
-
-      final primaryFace = faces.first;
-
-      await Sentry.captureMessage(
-        '✂️ FACE_CAPTURE: Recortando face',
-        level: SentryLevel.info,
-      );
-
-      // 4. Recortar face e converter para Uint8List
-      final Uint8List croppedFaceBytes = await _processor.cropFaceToBytes(
-        imagePath,
+      // PASSO 2: Delegar TODO processamento para FaceImageProcessor
+      // O processador agora é responsável por:
+      // - Corrigir EXIF (crucial para iOS)
+      // - Detectar face
+      // - Recortar face
+      final processed = await _processor.processFileComplete(
+        File(imagePath),
         outputSize: 112,
+      );
+
+      // PASSO 3: Converter para bytes (JPEG)
+      final Uint8List croppedFaceBytes = Uint8List.fromList(
+        img.encodeJpg(processed.croppedImage, quality: 95),
       );
 
       await Sentry.captureMessage(
@@ -213,16 +187,16 @@ class FaceCaptureService {
           scope.setTag('platform', _platformUtils.isIOS ? 'iOS' : 'Android');
           scope.setContexts('capture_complete', {
             'cropped_bytes_size': croppedFaceBytes.length,
-            'bbox_width': primaryFace.boundingBox.width.toInt(),
-            'bbox_height': primaryFace.boundingBox.height.toInt(),
+            'bbox_width': processed.face.boundingBox.width.toInt(),
+            'bbox_height': processed.face.boundingBox.height.toInt(),
           });
         },
       );
 
       return FaceCaptureResult(
         croppedFaceBytes: croppedFaceBytes,
-        boundingBox: primaryFace.boundingBox,
-        imagePath: imagePath,
+        boundingBox: processed.face.boundingBox,
+        imagePath: processed.originalPath,
       );
     } catch (e, stackTrace) {
       await Sentry.captureException(
