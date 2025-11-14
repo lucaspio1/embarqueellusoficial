@@ -63,14 +63,14 @@ post_install do |installer|
       config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/Headers/Public/Flutter'
       config.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/../Flutter/Frameworks'
 
-      # ===== Remoção de EXCLUDED_ARCHS =====
-      # Remove EXCLUDED_ARCHS para evitar conflitos entre pods MLKit/TensorFlow
-      # Isso permite suporte nativo para Apple Silicon (arm64)
-      config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
-      config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphoneos*]')
+      # ===== FIX: Suporte para Simulador iPad/iPhone =====
+      # Exclui arm64 do simulador para evitar conflito com frameworks compilados apenas para device
+      # Isso resolve o erro: "building for iOS-simulator, but linking in object file built for iOS"
+      config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
 
-      # Remove também versões sem sufixo de SDK
-      config.build_settings.delete('EXCLUDED_ARCHS')
+      # Permite arm64 em dispositivos físicos
+      config.build_settings['VALID_ARCHS'] = 'arm64 x86_64'
+      config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
 
       # Define versão de deployment uniformemente (já definida no platform, mas garante)
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
@@ -81,16 +81,17 @@ post_install do |installer|
       config.build_settings['STRIP_STYLE'] = 'non-global'
       config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
       config.build_settings['COPY_PHASE_STRIP'] = 'NO'
+
+      # Permite builds em Apple Silicon Macs
+      config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
     end
   end
 
-  # Remove EXCLUDED_ARCHS das configurações globais do projeto de Pods
+  # Configura EXCLUDED_ARCHS globalmente para o projeto de Pods
   installer.pods_project.build_configurations.each do |config|
-    config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
-    config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphoneos*]')
-    config.build_settings.delete('EXCLUDED_ARCHS')
+    config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
   end
 
-  # Força regeneração de xcconfig sem EXCLUDED_ARCHS
+  # Força regeneração de xcconfig
   installer.pods_project.save
 end
