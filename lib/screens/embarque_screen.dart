@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:embarqueellus/models/passageiro.dart';
 import 'package:embarqueellus/services/data_service.dart';
-import 'package:embarqueellus/screens/barcode_screen.dart';
 
 class EmbarqueScreen extends StatefulWidget {
   final String colegio;
@@ -40,38 +38,12 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
   void _filtrarPassageiros() => setState(() {});
 
   /// ============================================================
-  /// CONFIRMAR EMBARQUE (com pulseira)
+  /// CONFIRMAR EMBARQUE
   /// ============================================================
   Future<void> _confirmarEmbarque(Passageiro passageiro) async {
-    final prefs = await SharedPreferences.getInstance();
-    final precisaPulseira =
-        prefs.getString('pulseira')?.toUpperCase().trim() == 'SIM';
-
-    String? codigoPulseira;
-
-    if (precisaPulseira) {
-      codigoPulseira = await Navigator.push<String>(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const BarcodeScreen(),
-        ),
-      );
-
-      if (codigoPulseira == null || codigoPulseira.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ Leitura ou digitação da pulseira cancelada.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-    }
-
-    // Embarque com ou sem pulseira (dependendo da configuração)
+    // Embarque confirmado
     final passageiroAtualizado = passageiro.copyWith(
       embarque: 'SIM',
-      codigoPulseira: codigoPulseira ?? passageiro.codigoPulseira,
     );
 
     // Atualiza localmente e sincroniza
@@ -88,90 +60,6 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
     );
 
     _nomeController.clear();
-  }
-
-  /// ============================================================
-  /// EDITAR PULSEIRA MANUALMENTE
-  /// ============================================================
-  Future<void> _editarPulseira(Passageiro passageiro) async {
-    final TextEditingController controller = TextEditingController(
-      text: passageiro.codigoPulseira ?? '',
-    );
-
-    String? codigoPulseira = passageiro.codigoPulseira;
-
-    final codigoNovo = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: const Text('Editar Pulseira'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Número da pulseira',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (value) => codigoPulseira = value,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final codigoLido = await Navigator.push<String>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const BarcodeScreen(),
-                        ),
-                      );
-                      if (codigoLido != null && codigoLido.isNotEmpty) {
-                        setStateDialog(() {
-                          controller.text = codigoLido;
-                          codigoPulseira = codigoLido;
-                        });
-                      }
-                    },
-                    icon: const Icon(Icons.qr_code_scanner),
-                    label: const Text('Ler Código com Câmera'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  child: const Text('Cancelar'),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                TextButton(
-                  child: const Text('Salvar'),
-                  onPressed: () => Navigator.pop(context, controller.text.trim()),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (codigoNovo != null && codigoNovo.isNotEmpty) {
-      final passageiroAtualizado =
-      passageiro.copyWith(codigoPulseira: codigoNovo);
-      dataService.updateLocalData(passageiroAtualizado);
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✔️ Pulseira de ${passageiro.nome} atualizada!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 
   /// ============================================================
@@ -229,28 +117,6 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
                               Text('CPF: ${passageiro.cpf}'),
                               Text('Turma: ${passageiro.turma}'),
                               Text('Ônibus: ${passageiro.onibus}'),
-
-                              // Exibe pulseira se cadastrada
-                              if (passageiro.codigoPulseira != null &&
-                                  passageiro.codigoPulseira!.isNotEmpty)
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        'Pulseira: ${passageiro.codigoPulseira}',
-                                        style: const TextStyle(
-                                          color: Colors.indigo,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, color: Colors.blue),
-                                      tooltip: 'Editar pulseira',
-                                      onPressed: () => _editarPulseira(passageiro),
-                                    ),
-                                  ],
-                                ),
 
                               const SizedBox(height: 10),
                               Row(
