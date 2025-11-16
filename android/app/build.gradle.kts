@@ -7,14 +7,14 @@ plugins {
 }
 
 android {
-    namespace = "com.example.embarqueellus"
+    namespace = "br.com.embarqueellus"
 
     // ✅ Atualizado para suportar o mobile_scanner
     compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
-        applicationId = "com.example.embarqueellus"
+        applicationId = "br.com.embarqueellus"
         // ✅ mobile_scanner exige no mínimo API 23 (Android 6.0)
         minSdk = flutter.minSdkVersion
         targetSdk = 36
