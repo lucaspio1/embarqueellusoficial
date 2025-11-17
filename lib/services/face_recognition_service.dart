@@ -126,16 +126,17 @@ class FaceRecognitionService {
     try {
       final probe = await extractEmbedding(faceImage);
 
-      final known = await DatabaseHelper.instance.getTodosAlunosComFacial();
+      // ✅ FILTRO DE DATA: Buscar apenas alunos com viagem ativa
+      final known = await DatabaseHelper.instance.getTodosAlunosComFacialAtivos();
       if (known.isEmpty) {
         await Sentry.captureMessage(
-          'Tentativa de reconhecimento facial sem alunos cadastrados',
+          'Tentativa de reconhecimento facial sem alunos ativos',
           level: SentryLevel.warning,
           withScope: (scope) {
-            scope.setTag('facial_error_type', 'no_students_registered');
+            scope.setTag('facial_error_type', 'no_active_students');
             scope.setContexts('info', {
               'total_students': 0,
-              'message': 'Nenhum aluno com facial cadastrada no banco de dados',
+              'message': 'Nenhum aluno com facial ativa (dentro do período de viagem)',
             });
           },
         );

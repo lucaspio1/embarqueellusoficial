@@ -56,7 +56,10 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         await AlunosSyncService.instance.syncPessoasFromSheets();
       }
 
-      final alunos = await _db.getTodosAlunosComFacial();
+      // ✅ FILTRO DE DATA: Buscar apenas alunos com viagem ativa (dentro do período)
+      final alunos = await _db.getTodosAlunosComFacialAtivos();
+
+      print('📅 [Reconhecimento] ${alunos.length} alunos com facial ATIVA (dentro do período de viagem)');
 
       // ✅ CORREÇÃO: Buscar apenas logs do operador logado
       final usuarioLogado = await AuthService.instance.getUsuarioLogado();

@@ -469,6 +469,84 @@ class DatabaseHelper {
     }).toList();
   }
 
+  /// Retorna alunos com facial ATIVOS (dentro do período de viagem)
+  /// Filtra por data: hoje >= inicio_viagem E hoje <= fim_viagem
+  Future<List<Map<String, dynamic>>> getTodosAlunosComFacialAtivos() async {
+    final db = await database;
+    final hoje = DateTime.now();
+
+    // Buscar todas as pessoas com facial
+    final List<Map<String, dynamic>> pessoasComFacial = await db.rawQuery('''
+      SELECT cpf, nome, email, telefone, turma, embedding, movimentacao, inicio_viagem, fim_viagem
+      FROM pessoas_facial
+      WHERE facial_status = 'CADASTRADA' AND embedding IS NOT NULL
+    ''');
+
+    // Filtrar no Dart por data (mais flexível para diferentes formatos)
+    final pessoasAtivas = pessoasComFacial.where((pessoa) {
+      final inicioStr = pessoa['inicio_viagem']?.toString() ?? '';
+      final fimStr = pessoa['fim_viagem']?.toString() ?? '';
+
+      // Se não tem datas, considera ativo (para compatibilidade)
+      if (inicioStr.isEmpty || fimStr.isEmpty) {
+        return true;
+      }
+
+      try {
+        // Tentar parsear data em formato ISO (YYYY-MM-DD) ou DD/MM/YYYY
+        DateTime? inicio;
+        DateTime? fim;
+
+        // Formato ISO: YYYY-MM-DD
+        if (inicioStr.contains('-')) {
+          inicio = DateTime.parse(inicioStr);
+          fim = DateTime.parse(fimStr);
+        }
+        // Formato brasileiro: DD/MM/YYYY
+        else if (inicioStr.contains('/')) {
+          final partesInicio = inicioStr.split('/');
+          final partesFim = fimStr.split('/');
+
+          if (partesInicio.length == 3 && partesFim.length == 3) {
+            inicio = DateTime(
+              int.parse(partesInicio[2]), // ano
+              int.parse(partesInicio[1]), // mês
+              int.parse(partesInicio[0]), // dia
+            );
+            fim = DateTime(
+              int.parse(partesFim[2]), // ano
+              int.parse(partesFim[1]), // mês
+              int.parse(partesFim[0]), // dia
+            );
+          }
+        }
+
+        // Se conseguiu parsear, verificar se está no período
+        if (inicio != null && fim != null) {
+          final hojeSemHora = DateTime(hoje.year, hoje.month, hoje.day);
+          final inicioSemHora = DateTime(inicio.year, inicio.month, inicio.day);
+          final fimSemHora = DateTime(fim.year, fim.month, fim.day);
+
+          return hojeSemHora.isAfter(inicioSemHora.subtract(Duration(days: 1))) &&
+                 hojeSemHora.isBefore(fimSemHora.add(Duration(days: 1)));
+        }
+
+        // Se não conseguiu parsear, considera ativo
+        return true;
+      } catch (e) {
+        print('⚠️ Erro ao parsear datas para ${pessoa['nome']}: $e');
+        return true; // Em caso de erro, considera ativo
+      }
+    }).toList();
+
+    return pessoasAtivas.map((pessoa) {
+      return {
+        ...pessoa,
+        'embedding': jsonDecode(pessoa['embedding']),
+      };
+    }).toList();
+  }
+
   /// Conta quantos passageiros de uma lista específica têm facial cadastrada
   /// Usado no controle de embarque para contar faciais apenas da lista atual
   Future<int> contarFaciaisDaListaEmbarque(List<String> cpfs) async {
