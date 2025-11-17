@@ -66,16 +66,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       final passageiros = DataService().passageirosEmbarque.value;
 
-      // ✅ Verificar quais alunos JÁ TÊM facial cadastrada
-      final pessoasComFacial = await _db.getAllPessoasFacial();
-      final cpfsComFacial = <String, bool>{};
-      for (final pessoa in pessoasComFacial) {
-        final cpf = pessoa['cpf']?.toString() ?? '';
-        if (cpf.isNotEmpty) {
-          cpfsComFacial[cpf] = true;
-        }
-      }
-
       // ✅ Converter passageiros para formato de alunos
       final alunos = passageiros.map((p) {
         return {
@@ -88,6 +78,22 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           'fim_viagem': p.fimViagem ?? '',
         };
       }).where((a) => a['cpf']?.toString().isNotEmpty ?? false).toList();
+
+      // ✅ CORREÇÃO: Verificar quais alunos DESTA LISTA já têm facial cadastrada
+      // Não buscar TODAS as faciais do banco (que incluem outras viagens)
+      final cpfsDosPassageiros = alunos
+          .map((a) => a['cpf']?.toString() ?? '')
+          .where((cpf) => cpf.isNotEmpty)
+          .toList();
+
+      final pessoasComFacial = await _db.getPessoasFaciaisPorCPFs(cpfsDosPassageiros);
+      final cpfsComFacial = <String, bool>{};
+      for (final pessoa in pessoasComFacial) {
+        final cpf = pessoa['cpf']?.toString() ?? '';
+        if (cpf.isNotEmpty) {
+          cpfsComFacial[cpf] = true;
+        }
+      }
 
       setState(() {
         _todosAlunos = alunos;

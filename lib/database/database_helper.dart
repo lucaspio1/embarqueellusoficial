@@ -488,6 +488,25 @@ class DatabaseHelper {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// Retorna pessoas com facial cadastrada filtradas por lista de CPFs
+  /// Usado na tela Gerenciar Alunos para marcar quais têm facial
+  Future<List<Map<String, dynamic>>> getPessoasFaciaisPorCPFs(List<String> cpfs) async {
+    if (cpfs.isEmpty) return [];
+
+    final db = await database;
+    final placeholders = cpfs.map((_) => '?').join(',');
+
+    final result = await db.rawQuery('''
+      SELECT cpf, nome, email, telefone, turma, movimentacao, inicio_viagem, fim_viagem
+      FROM pessoas_facial
+      WHERE facial_status = 'CADASTRADA'
+        AND embedding IS NOT NULL
+        AND cpf IN ($placeholders)
+    ''', cpfs);
+
+    return result;
+  }
+
   Future<void> updatePessoaMovimentacao(
       String cpf, String movimentacao) async {
     if (cpf.isEmpty) return;
