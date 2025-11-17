@@ -55,9 +55,14 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
 
       final passageiros = DataService().passageirosEmbarque.value;
 
-      // Verificar faciais cadastradas
+      // ✅ CORREÇÃO: Contar apenas faciais DOS PASSAGEIROS DESTA LISTA
+      // Não contar todas as faciais do banco (que incluem outras viagens)
       final db = DatabaseHelper.instance;
-      final alunosComFacial = await db.getTodosAlunosComFacial();
+      final cpfsDosPassageiros = passageiros
+          .where((p) => p.cpf != null && p.cpf!.isNotEmpty)
+          .map((p) => p.cpf!)
+          .toList();
+      final totalFaciaisDaLista = await db.contarFaciaisDaListaEmbarque(cpfsDosPassageiros);
 
       setState(() {
         _nomeAba = nomeAba;
@@ -67,7 +72,7 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
         _totalAlunos = passageiros.length;
         _totalEmbarcados = passageiros.where((p) => p.embarque == 'SIM').length;
         _totalRetornados = passageiros.where((p) => p.retorno == 'SIM').length;
-        _totalFaciaisCadastradas = alunosComFacial.length;
+        _totalFaciaisCadastradas = totalFaciaisDaLista;
         // Mostrar botão se pulseira == 'SIM' no QR Code
         _temAlunosComQR = pulseira?.toUpperCase() == 'SIM';
         _temDadosSalvos = true;
@@ -431,8 +436,55 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
 // ============================================================================
 // TELA DE SCANNER USANDO GOOGLE MLKIT BARCODE SCANNING
 // ============================================================================
-class QRCodeScannerScreen extends StatelessWidget {
+class QRCodeScannerScreen extends StatefulWidget {
   const QRCodeScannerScreen({super.key});
+
+  @override
+  State<QRCodeScannerScreen> createState() => _QRCodeScannerScreenState();
+}
+
+class _QRCodeScannerScreenState extends State<QRCodeScannerScreen> {
+  final TextEditingController _manualInputController = TextEditingController();
+  bool _showManualInput = false;
+
+  @override
+  void dispose() {
+    _manualInputController.dispose();
+    super.dispose();
+  }
+
+  void _processQrData(String value) {
+    final partes = value.split(';');
+    if (partes.length >= 4) {
+      Navigator.pop(context, {
+        'nomeAba': partes[0].trim(),
+        'nomePasseio': partes[1].trim(),
+        'numeroOnibus': partes[2].trim(),
+        'pulseira': partes[3].trim(),
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Formato inválido. Use: NomeAba;NomePasseio;NumeroOnibus;Pulseira'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _processManualInput() {
+    final value = _manualInputController.text.trim();
+    if (value.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Digite os dados no formato: NomeAba;NomePasseio;NumeroOnibus;Pulseira'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    _processQrData(value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -440,19 +492,157 @@ class QRCodeScannerScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Escanear QR Code'),
         backgroundColor: const Color(0xFF4C643C),
+        actions: [
+          IconButton(
+            icon: Icon(_showManualInput ? Icons.qr_code_scanner : Icons.keyboard),
+            onPressed: () {
+              setState(() {
+                _showManualInput = !_showManualInput;
+              });
+            },
+            tooltip: _showManualInput ? 'Voltar para Scanner' : 'Entrada Manual',
+          ),
+        ],
       ),
-      body: BarcodeCameraView(
-        onScanned: (value) {
-          final partes = value.split(';');
-          if (partes.length >= 4) {
-            Navigator.pop(context, {
-              'nomeAba': partes[0].trim(),
-              'nomePasseio': partes[1].trim(),
-              'numeroOnibus': partes[2].trim(),
-              'pulseira': partes[3].trim(),
-            });
-          }
-        },
+      body: _showManualInput ? _buildManualInput() : _buildScanner(),
+    );
+  }
+
+  Widget _buildScanner() {
+    return BarcodeCameraView(
+      onScanned: _processQrData,
+    );
+  }
+
+  Widget _buildManualInput() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Icon(
+            Icons.edit_note,
+            size: 80,
+            color: Color(0xFF4C643C),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Entrada Manual',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF4C643C),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Digite os dados no formato:',
+            style: TextStyle(fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: const Text(
+              'NomeAba;NomePasseio;NumeroOnibus;Pulseira',
+              style: TextStyle(
+                fontSize: 14,
+                fontFamily: 'monospace',
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _manualInputController,
+            decoration: InputDecoration(
+              labelText: 'Dados do QR Code',
+              hintText: 'Ex: Escola ABC;Passeio XYZ;Bus01;SIM',
+              prefixIcon: const Icon(Icons.text_fields),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            maxLines: 3,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _processManualInput(),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _processManualInput,
+            icon: const Icon(Icons.check_circle, size: 24),
+            label: const Text(
+              'CONFIRMAR',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4C643C),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 16),
+          const Text(
+            'Explicação dos campos:',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildInfoRow('Nome da Aba', 'Nome da planilha/colégio'),
+          _buildInfoRow('Nome do Passeio', 'Nome do evento/viagem'),
+          _buildInfoRow('Número do Ônibus', 'Identificação do ônibus'),
+          _buildInfoRow('Pulseira/Facial', 'SIM ou NÃO (uso de facial)'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, size: 20, color: Color(0xFF4C643C)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
