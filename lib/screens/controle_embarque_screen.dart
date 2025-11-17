@@ -55,9 +55,14 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
 
       final passageiros = DataService().passageirosEmbarque.value;
 
-      // Verificar faciais cadastradas
+      // ✅ CORREÇÃO: Contar apenas faciais DOS PASSAGEIROS DESTA LISTA
+      // Não contar todas as faciais do banco (que incluem outras viagens)
       final db = DatabaseHelper.instance;
-      final alunosComFacial = await db.getTodosAlunosComFacial();
+      final cpfsDosPassageiros = passageiros
+          .where((p) => p.cpf != null && p.cpf!.isNotEmpty)
+          .map((p) => p.cpf!)
+          .toList();
+      final totalFaciaisDaLista = await db.contarFaciaisDaListaEmbarque(cpfsDosPassageiros);
 
       setState(() {
         _nomeAba = nomeAba;
@@ -67,7 +72,7 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
         _totalAlunos = passageiros.length;
         _totalEmbarcados = passageiros.where((p) => p.embarque == 'SIM').length;
         _totalRetornados = passageiros.where((p) => p.retorno == 'SIM').length;
-        _totalFaciaisCadastradas = alunosComFacial.length;
+        _totalFaciaisCadastradas = totalFaciaisDaLista;
         // Mostrar botão se pulseira == 'SIM' no QR Code
         _temAlunosComQR = pulseira?.toUpperCase() == 'SIM';
         _temDadosSalvos = true;

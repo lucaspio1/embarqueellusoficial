@@ -469,6 +469,25 @@ class DatabaseHelper {
     }).toList();
   }
 
+  /// Conta quantos passageiros de uma lista específica têm facial cadastrada
+  /// Usado no controle de embarque para contar faciais apenas da lista atual
+  Future<int> contarFaciaisDaListaEmbarque(List<String> cpfs) async {
+    if (cpfs.isEmpty) return 0;
+
+    final db = await database;
+    final placeholders = cpfs.map((_) => '?').join(',');
+
+    final result = await db.rawQuery('''
+      SELECT COUNT(*) as total
+      FROM pessoas_facial
+      WHERE facial_status = 'CADASTRADA'
+        AND embedding IS NOT NULL
+        AND cpf IN ($placeholders)
+    ''', cpfs);
+
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
   Future<void> updatePessoaMovimentacao(
       String cpf, String movimentacao) async {
     if (cpf.isEmpty) return;

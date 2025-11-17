@@ -274,8 +274,8 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
         return;
       }
 
-      // Se capturou com sucesso
-      final embedding = result.firstEmbedding!;
+      // ✅ CORREÇÃO: Extrair embedding da imagem processada (não vem pronto)
+      final embedding = await _faceService.extractEmbedding(result.firstProcessedImage!);
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
