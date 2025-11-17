@@ -593,6 +593,20 @@ class DatabaseHelper {
     );
   }
 
+  /// Busca logs de hoje filtrados por operador (para tela de reconhecimento facial)
+  Future<List<Map<String, dynamic>>> getLogsHojePorOperador(String operadorNome) async {
+    final db = await database;
+    final hoje = DateTime.now();
+    final inicioDia = DateTime(hoje.year, hoje.month, hoje.day);
+
+    return await db.query(
+      'logs',
+      where: 'timestamp >= ? AND operador_nome = ?',
+      whereArgs: [inicioDia.toIso8601String(), operadorNome],
+      orderBy: 'timestamp DESC',
+    );
+  }
+
   // ✅ CORREÇÃO: Métodos para sincronização
   Future<void> enqueueOutbox(String tipo, Map<String, dynamic> payload) async {
     final db = await database;

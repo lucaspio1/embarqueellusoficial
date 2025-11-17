@@ -57,7 +57,11 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       }
 
       final alunos = await _db.getTodosAlunosComFacial();
-      final logs = await _db.getLogsHoje();
+
+      // ✅ CORREÇÃO: Buscar apenas logs do operador logado
+      final usuarioLogado = await AuthService.instance.getUsuarioLogado();
+      final operadorNome = usuarioLogado?['nome'] ?? 'Sistema';
+      final logs = await _db.getLogsHojePorOperador(operadorNome);
 
       setState(() {
         _todosAlunos = alunos;
