@@ -488,6 +488,25 @@ class DatabaseHelper {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// Retorna pessoas com facial cadastrada filtradas por lista de CPFs
+  /// Usado na tela Gerenciar Alunos para marcar quais têm facial
+  Future<List<Map<String, dynamic>>> getPessoasFaciaisPorCPFs(List<String> cpfs) async {
+    if (cpfs.isEmpty) return [];
+
+    final db = await database;
+    final placeholders = cpfs.map((_) => '?').join(',');
+
+    final result = await db.rawQuery('''
+      SELECT cpf, nome, email, telefone, turma, movimentacao, inicio_viagem, fim_viagem
+      FROM pessoas_facial
+      WHERE facial_status = 'CADASTRADA'
+        AND embedding IS NOT NULL
+        AND cpf IN ($placeholders)
+    ''', cpfs);
+
+    return result;
+  }
+
   Future<void> updatePessoaMovimentacao(
       String cpf, String movimentacao) async {
     if (cpf.isEmpty) return;
@@ -589,6 +608,20 @@ class DatabaseHelper {
       'logs',
       where: 'timestamp >= ?',
       whereArgs: [inicioDia.toIso8601String()],
+      orderBy: 'timestamp DESC',
+    );
+  }
+
+  /// Busca logs de hoje filtrados por operador (para tela de reconhecimento facial)
+  Future<List<Map<String, dynamic>>> getLogsHojePorOperador(String operadorNome) async {
+    final db = await database;
+    final hoje = DateTime.now();
+    final inicioDia = DateTime(hoje.year, hoje.month, hoje.day);
+
+    return await db.query(
+      'logs',
+      where: 'timestamp >= ? AND operador_nome = ?',
+      whereArgs: [inicioDia.toIso8601String(), operadorNome],
       orderBy: 'timestamp DESC',
     );
   }
