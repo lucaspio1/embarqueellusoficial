@@ -296,10 +296,13 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
         nome: aluno['nome'],
+        colegio: aluno['colegio'] ?? '', // ✅ NOVO CAMPO
         email: aluno['email'] ?? '',
         telefone: aluno['telefone'] ?? '',
         embedding: embedding,
         personId: aluno['cpf'],
+        inicioViagem: aluno['inicio_viagem'] ?? '',
+        fimViagem: aluno['fim_viagem'] ?? '',
       );
 
       print('✅ [CadastroFacial] Embedding enfileirado para sincronização com aba Pessoas');

@@ -47,6 +47,7 @@ class OfflineSyncService {
     required String personId,
     required String tipo,
     String? operadorNome,
+    String? colegio, // ✅ NOVO CAMPO
     String? inicioViagem,
     String? fimViagem,
   }) async {
@@ -64,6 +65,7 @@ class OfflineSyncService {
     await _db.enqueueOutbox('movement_log', {
       'cpf': cpf,
       'personName': personName,
+      'colegio': colegio ?? '', // ✅ NOVO CAMPO
       'timestamp': timestamp.toIso8601String(),
       'confidence': confidence,
       'personId': personId,
@@ -73,7 +75,7 @@ class OfflineSyncService {
       'fim_viagem': fimViagem ?? '',
     });
 
-    print('📝 [OfflineSync] Log enfileirado: $personName - $tipo (Operador: ${operadorNome ?? "N/A"})');
+    print('📝 [OfflineSync] Log enfileirado: $personName - $tipo - Colégio: ${colegio ?? "N/A"} (Operador: ${operadorNome ?? "N/A"})');
   }
 
   Future<void> queueCadastroFacial({
@@ -83,12 +85,14 @@ class OfflineSyncService {
     required String telefone,
     required List<double> embedding,
     required String personId,
+    String? colegio, // ✅ NOVO CAMPO
     String? inicioViagem,
     String? fimViagem,
   }) async {
     await _db.enqueueOutbox('face_register', {
       'cpf': cpf,
       'nome': nome,
+      'colegio': colegio ?? '', // ✅ NOVO CAMPO
       'email': email,
       'telefone': telefone,
       'embedding': embedding,
@@ -98,7 +102,7 @@ class OfflineSyncService {
       'fim_viagem': fimViagem ?? '',
     });
 
-    print('📝 [OfflineSync] Cadastro facial enfileirado: $nome (Local inicial: QUARTO, Viagem: ${inicioViagem ?? "N/A"} a ${fimViagem ?? "N/A"})');
+    print('📝 [OfflineSync] Cadastro facial enfileirado: $nome - Colégio: ${colegio ?? "N/A"} (Local inicial: QUARTO, Viagem: ${inicioViagem ?? "N/A"} a ${fimViagem ?? "N/A"})');
   }
 
   Future<bool> _hasInternet() async {
@@ -264,6 +268,7 @@ class OfflineSyncService {
       'action': 'addPessoa',
       'cpf': copy['cpf'],
       'nome': copy['nome'],
+      'colegio': copy['colegio'] ?? '', // ✅ NOVO CAMPO
       'email': copy['email'] ?? '',
       'telefone': copy['telefone'] ?? '',
       'embedding': copy['embedding'],
