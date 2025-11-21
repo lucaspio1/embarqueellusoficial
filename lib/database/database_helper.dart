@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 5, // ✅ VERSÃO 5: Adicionar coluna colegio
+      version: 6, // ✅ VERSÃO 6: Adicionar coluna turma
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -104,6 +104,36 @@ class DatabaseHelper {
         print('⚠️ [DB] Coluna colegio já existia em passageiros: $e');
       }
     }
+    if (oldVersion < 6) {
+      // Adicionar coluna turma às tabelas
+      try {
+        await db.execute("ALTER TABLE pessoas_facial ADD COLUMN turma TEXT");
+        print('✅ [DB] Migração v5 -> v6: Adicionada coluna turma em pessoas_facial');
+      } catch (e) {
+        print('⚠️ [DB] Coluna turma já existia em pessoas_facial: $e');
+      }
+
+      try {
+        await db.execute("ALTER TABLE alunos ADD COLUMN turma TEXT");
+        print('✅ [DB] Migração v5 -> v6: Adicionada coluna turma em alunos');
+      } catch (e) {
+        print('⚠️ [DB] Coluna turma já existia em alunos: $e');
+      }
+
+      try {
+        await db.execute("ALTER TABLE logs ADD COLUMN turma TEXT");
+        print('✅ [DB] Migração v5 -> v6: Adicionada coluna turma em logs');
+      } catch (e) {
+        print('⚠️ [DB] Coluna turma já existia em logs: $e');
+      }
+
+      try {
+        await db.execute("ALTER TABLE passageiros ADD COLUMN turma TEXT");
+        print('✅ [DB] Migração v5 -> v6: Adicionada coluna turma em passageiros');
+      } catch (e) {
+        print('⚠️ [DB] Coluna turma já existia em passageiros: $e');
+      }
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -176,6 +206,7 @@ class DatabaseHelper {
         cpf TEXT,
         person_name TEXT,
         colegio TEXT,
+        turma TEXT,
         timestamp TEXT,
         confidence REAL,
         tipo TEXT,
@@ -680,7 +711,8 @@ class DatabaseHelper {
     required double confidence,
     required String tipo,
     String? operadorNome,
-    String? colegio, // ✅ NOVO CAMPO
+    String? colegio,
+    String? turma,
     String? inicioViagem,
     String? fimViagem,
   }) async {
@@ -693,7 +725,8 @@ class DatabaseHelper {
       {
         'cpf': cpf,
         'person_name': personName,
-        'colegio': colegio, // ✅ NOVO CAMPO
+        'colegio': colegio,
+        'turma': turma,
         'timestamp': timestamp.toIso8601String(),
         'confidence': confidence,
         'tipo': tipo,

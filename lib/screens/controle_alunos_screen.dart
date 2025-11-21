@@ -269,7 +269,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
         nome: aluno['nome'],
-        colegio: aluno['colegio'] ?? '', // ✅ NOVO CAMPO
+        colegio: aluno['colegio'] ?? '',
+        turma: aluno['turma'] ?? '',
         email: aluno['email'] ?? '',
         telefone: aluno['telefone'] ?? '',
         embedding: embedding,
@@ -399,7 +400,8 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
         nome: aluno['nome'],
-        colegio: aluno['colegio'] ?? '', // ✅ NOVO CAMPO
+        colegio: aluno['colegio'] ?? '',
+        turma: aluno['turma'] ?? '',
         email: aluno['email'] ?? '',
         telefone: aluno['telefone'] ?? '',
         embedding: embedding,
