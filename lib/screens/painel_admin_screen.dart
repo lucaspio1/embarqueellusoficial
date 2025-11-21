@@ -6,8 +6,10 @@ import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/logs_sync_service.dart';
 import 'package:embarqueellus/services/user_sync_service.dart';
 import 'package:embarqueellus/services/acoes_criticas_service.dart';
+import 'package:embarqueellus/services/quartos_sync_service.dart';
 import 'package:embarqueellus/screens/lista_alunos_screen.dart';
 import 'package:embarqueellus/screens/lista_logs_screen.dart';
+import 'package:embarqueellus/screens/lista_quartos_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:embarqueellus/screens/lista_por_local_screen.dart';
@@ -27,12 +29,14 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
   final _logsSync = LogsSyncService.instance;
   final _userSync = UserSyncService.instance;
   final _acoesCriticas = AcoesCriticasService.instance;
+  final _quartosSync = QuartosSyncService.instance;
 
   bool _carregando = true;
   bool _sincronizando = false;
   int _totalAlunos = 0;
   int _totalFaciais = 0;
   int _totalLogs = 0;
+  int _totalQuartos = 0;
   Map<String, dynamic>? _usuario;
   Map<String, int> _contagemPorLocal = {};
   Timer? _syncTimer;
@@ -110,6 +114,9 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
 
       // Sincronizar logs
       await _logsSync.syncLogsFromSheets();
+
+      // Sincronizar quartos
+      await _quartosSync.syncQuartosFromSheets();
 
       print('✅ [PainelAdmin] Todas as tabelas sincronizadas com sucesso');
 
@@ -629,6 +636,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       final alunos = await _db.getAllAlunos();
       final alunosComFacial = await _db.getTodosAlunosComFacial();
       final logs = await _db.getAllLogs();
+      final quartos = await _db.getAllQuartos();
       final contagemPorLocal = await _db.getContagemPorMovimentacao();
       final usuario = await _authService.getUsuarioLogado();
 
@@ -639,6 +647,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
         _totalAlunos = alunos.length;
         _totalFaciais = alunosComFacial.length;
         _totalLogs = logs.length;
+        _totalQuartos = quartos.length;
         _usuario = usuario;
         _contagemPorLocal = contagemAgrupada;
         _carregando = false;
@@ -741,12 +750,28 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
 
             const SizedBox(height: 12),
 
-            _buildStatCard(
-              'Logs de Reconhecimento',
-              _totalLogs.toString(),
-              Icons.history,
-              Colors.indigo,
-              onTap: _abrirListaLogs,
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    'Logs',
+                    _totalLogs.toString(),
+                    Icons.history,
+                    Colors.indigo,
+                    onTap: _abrirListaLogs,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildStatCard(
+                    'Quartos',
+                    _totalQuartos.toString(),
+                    Icons.hotel,
+                    Colors.orange,
+                    onTap: _abrirListaQuartos,
+                  ),
+                ),
+              ],
             ),
 
             const SizedBox(height: 24),
@@ -946,6 +971,15 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     );
   }
 
+  void _abrirListaQuartos() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ListaQuartosScreen(),
+      ),
+    );
+  }
+
   Widget _buildAtualizacaoCard() {
     final dataFormatada = _ultimaAtualizacao != null
         ? DateFormat('dd/MM/yyyy HH:mm').format(_ultimaAtualizacao!)
@@ -1025,7 +1059,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Sincroniza: Usuários, Alunos e Logs',
+              'Sincroniza: Usuários, Alunos, Logs e Quartos',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.8),
                 fontSize: 12,
