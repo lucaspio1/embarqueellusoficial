@@ -255,6 +255,7 @@ class OfflineSyncService {
   Future<bool> _sendMovementIndividually(Map<String, dynamic> item) async {
     final copy = Map<String, dynamic>.from(item)..remove('idOutbox');
     final body = <String, dynamic>{'action': 'addMovementLog', 'people': [copy]};
+    print('📤 [OfflineSync] Enviando movimento com dados: CPF=${copy['cpf']}, Nome=${copy['personName']}, Colégio=${copy['colegio']}, Tipo=${copy['tipo']}');
     return _postWithRetriesAndSuccess(body);
   }
 
