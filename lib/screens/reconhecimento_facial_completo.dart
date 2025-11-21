@@ -526,27 +526,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
           'icon': Icons.nightlife,
           'color': Colors.purple,
         };
-      case 'restaurante':
-      case 'foi_ao_restaurante':
-        return {
-          'label': 'Foi ao Restaurante',
-          'icon': Icons.restaurant,
-          'color': Colors.orange,
-        };
-      case 'piscina':
-      case 'foi_para_piscina':
-        return {
-          'label': 'Foi para Piscina',
-          'icon': Icons.pool,
-          'color': Colors.cyan,
-        };
-      case 'praia':
-      case 'foi_para_praia':
-        return {
-          'label': 'Foi para Praia',
-          'icon': Icons.beach_access,
-          'color': Colors.amber,
-        };
       case 'embarque':
       case 'embarque_registrado':
         return {
