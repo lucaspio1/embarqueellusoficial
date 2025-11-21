@@ -436,6 +436,8 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
   Widget _buildLogCard(Map<String, dynamic> log) {
     final tipo = log['tipo'] ?? 'desconhecido';
     final nome = log['person_name'] ?? 'Sem nome';
+    final colegio = log['colegio'] ?? '';
+    final turma = log['turma'] ?? '';
     final operador = log['operador_nome'] ?? 'Sistema';
     final timestamp = DateTime.parse(log['timestamp'] ?? DateTime.now().toIso8601String());
     final hora = '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
@@ -459,6 +461,17 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
           children: [
             Text(tipoInfo['label']),
             const SizedBox(height: 2),
+            if (colegio.isNotEmpty || turma.isNotEmpty)
+              Text(
+                '${colegio.isNotEmpty ? colegio : ''}${colegio.isNotEmpty && turma.isNotEmpty ? ' - ' : ''}${turma.isNotEmpty ? turma : ''}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            if (colegio.isNotEmpty || turma.isNotEmpty)
+              const SizedBox(height: 2),
             Text(
               'Registrado por: $operador',
               style: TextStyle(
@@ -494,36 +507,48 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
   Map<String, dynamic> _getTipoInfo(String tipo) {
     switch (tipo.toLowerCase()) {
       case 'quarto':
+      case 'voltou_ao_quarto':
         return {
           'label': 'Voltou ao Quarto',
           'icon': Icons.bed,
           'color': Colors.blue,
         };
+      case 'saiu_do_quarto':
+        return {
+          'label': 'Saiu do Quarto',
+          'icon': Icons.exit_to_app,
+          'color': Colors.orange,
+        };
       case 'balada':
+      case 'foi_para_balada':
         return {
           'label': 'Foi para Balada',
           'icon': Icons.nightlife,
           'color': Colors.purple,
         };
       case 'restaurante':
+      case 'foi_ao_restaurante':
         return {
           'label': 'Foi ao Restaurante',
           'icon': Icons.restaurant,
           'color': Colors.orange,
         };
       case 'piscina':
+      case 'foi_para_piscina':
         return {
           'label': 'Foi para Piscina',
           'icon': Icons.pool,
           'color': Colors.cyan,
         };
       case 'praia':
+      case 'foi_para_praia':
         return {
           'label': 'Foi para Praia',
           'icon': Icons.beach_access,
           'color': Colors.amber,
         };
       case 'embarque':
+      case 'embarque_registrado':
         return {
           'label': 'Embarque Registrado',
           'icon': Icons.login,
