@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 6, // ✅ VERSÃO 6: Adicionar coluna turma
+      version: 7, // ✅ VERSÃO 7: Adicionar tabela quartos
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -134,6 +134,25 @@ class DatabaseHelper {
         print('⚠️ [DB] Coluna turma já existia em passageiros: $e');
       }
     }
+    if (oldVersion < 7) {
+      // Adicionar tabela quartos
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS quartos(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            numero_quarto TEXT NOT NULL,
+            escola TEXT,
+            nome_hospede TEXT NOT NULL,
+            cpf TEXT NOT NULL,
+            inicio_viagem TEXT,
+            fim_viagem TEXT
+          )
+        ''');
+        print('✅ [DB] Migração v6 -> v7: Tabela quartos criada');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao criar tabela quartos: $e');
+      }
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -238,6 +257,18 @@ class DatabaseHelper {
         ativo INTEGER DEFAULT 1,
         created_at TEXT,
         updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE quartos(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        numero_quarto TEXT NOT NULL,
+        escola TEXT,
+        nome_hospede TEXT NOT NULL,
+        cpf TEXT NOT NULL,
+        inicio_viagem TEXT,
+        fim_viagem TEXT
       )
     ''');
   }
@@ -844,6 +875,7 @@ class DatabaseHelper {
     await db.delete('pessoas_facial');
     await db.delete('logs');
     await db.delete('sync_queue');
+    await db.delete('quartos');
 
     // NÃO deletar usuarios para manter login offline
     print('✅ [DB] Todos os dados de viagens foram limpos');
@@ -893,6 +925,15 @@ class DatabaseHelper {
     );
     totalRemovidos += logsRemovidos;
     print('   - Logs removidos: $logsRemovidos');
+
+    // Limpar quartos
+    final quartosRemovidos = await db.delete(
+      'quartos',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+    totalRemovidos += quartosRemovidos;
+    print('   - Quartos removidos: $quartosRemovidos');
 
     print('✅ [DB] Total de registros removidos: $totalRemovidos');
   }
@@ -1025,6 +1066,89 @@ class DatabaseHelper {
     final db = await database;
     final result = await db.rawQuery('SELECT COUNT(*) as count FROM pessoas_facial');
     return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  // ========================================================================
+  // MÉTODOS PARA QUARTOS
+  // ========================================================================
+
+  /// Insere ou atualiza quarto
+  Future<void> upsertQuarto(Map<String, dynamic> quarto) async {
+    final db = await database;
+    await db.insert(
+      'quartos',
+      quarto,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Busca todos os quartos
+  Future<List<Map<String, dynamic>>> getAllQuartos() async {
+    final db = await database;
+    return await db.query('quartos');
+  }
+
+  /// Busca quartos agrupados por número de quarto
+  /// Retorna um Map onde a chave é o número do quarto e o valor é a lista de hóspedes
+  Future<Map<String, List<Map<String, dynamic>>>> getQuartosAgrupados() async {
+    final db = await database;
+    final quartos = await db.query('quartos', orderBy: 'numero_quarto ASC, nome_hospede ASC');
+
+    final Map<String, List<Map<String, dynamic>>> agrupados = {};
+
+    for (final quarto in quartos) {
+      final numeroQuarto = quarto['numero_quarto']?.toString() ?? '';
+      if (numeroQuarto.isEmpty) continue;
+
+      if (!agrupados.containsKey(numeroQuarto)) {
+        agrupados[numeroQuarto] = [];
+      }
+      agrupados[numeroQuarto]!.add(quarto);
+    }
+
+    return agrupados;
+  }
+
+  /// Busca hóspedes de um quarto específico com informação de presença
+  /// Cruza dados com a tabela pessoas_facial para verificar movimentação
+  Future<List<Map<String, dynamic>>> getHospedesDoQuarto(String numeroQuarto) async {
+    final db = await database;
+
+    // JOIN entre quartos e pessoas_facial para pegar a movimentação atual
+    final result = await db.rawQuery('''
+      SELECT
+        q.numero_quarto,
+        q.escola,
+        q.nome_hospede,
+        q.cpf,
+        q.inicio_viagem,
+        q.fim_viagem,
+        COALESCE(p.movimentacao, '') as movimentacao
+      FROM quartos q
+      LEFT JOIN pessoas_facial p ON q.cpf = p.cpf
+      WHERE q.numero_quarto = ?
+      ORDER BY q.nome_hospede ASC
+    ''', [numeroQuarto]);
+
+    return result;
+  }
+
+  /// Limpa todos os quartos
+  Future<void> clearQuartos() async {
+    final db = await database;
+    await db.delete('quartos');
+    print('✅ Todos os quartos foram limpos');
+  }
+
+  /// Limpa quartos de uma viagem específica
+  Future<void> clearQuartosPorViagem(String inicioViagem, String fimViagem) async {
+    final db = await database;
+    final quartosRemovidos = await db.delete(
+      'quartos',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+    print('✅ Quartos removidos: $quartosRemovidos');
   }
 
   Future<void> close() async {
