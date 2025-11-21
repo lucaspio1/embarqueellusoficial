@@ -115,6 +115,8 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold)),
                               Text('CPF: ${passageiro.cpf}'),
+                              if (passageiro.colegio != null && passageiro.colegio!.isNotEmpty)
+                                Text('Colégio: ${passageiro.colegio}'),
                               Text('Turma: ${passageiro.turma}'),
                               Text('Ônibus: ${passageiro.onibus}'),
 
