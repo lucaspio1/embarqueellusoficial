@@ -169,6 +169,8 @@ class _RetornoScreenState extends State<RetornoScreen> {
                               Text('Nome: ${passageiro.nome}',
                                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                               Text('ID Passeio: ${passageiro.idPasseio}'),
+                              if (passageiro.colegio != null && passageiro.colegio!.isNotEmpty)
+                                Text('Colégio: ${passageiro.colegio}'),
                               Text('Turma: ${passageiro.turma}'),
                               Text('Ônibus: ${passageiro.onibus}'),
                               Row(

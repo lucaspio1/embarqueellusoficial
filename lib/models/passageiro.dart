@@ -7,7 +7,7 @@ class Passageiro {
   final String retorno;
   final String onibus;
   final String? cpf;
-  final String? codigoPulseira;
+  final String? colegio; // ✅ NOVO CAMPO
   String? flowType;
   final String? inicioViagem;
   final String? fimViagem;
@@ -20,7 +20,7 @@ class Passageiro {
     required this.retorno,
     required this.onibus,
     this.cpf,
-    this.codigoPulseira,
+    this.colegio, // ✅ NOVO CAMPO
     this.flowType,
     this.inicioViagem,
     this.fimViagem,
@@ -35,7 +35,7 @@ class Passageiro {
       retorno: (map['retorno'] ?? 'NÃO').toString(),
       onibus: (map['onibus'] ?? '').toString(),
       cpf: map['cpf']?.toString(),
-      codigoPulseira: map['codigo_pulseira']?.toString(),
+      colegio: map['colegio']?.toString(), // ✅ NOVO CAMPO
       inicioViagem: map['inicio_viagem']?.toString(),
       fimViagem: map['fim_viagem']?.toString(),
     );
@@ -50,7 +50,7 @@ class Passageiro {
       retorno: (json['retorno'] ?? 'NÃO').toString(),
       onibus: (json['onibus'] ?? '').toString(),
       cpf: json['cpf']?.toString(),
-      codigoPulseira: json['codigoPulseira']?.toString(),
+      colegio: json['colegio']?.toString(), // ✅ NOVO CAMPO
       flowType: json['flowType']?.toString(),
       inicioViagem: json['inicioViagem']?.toString(),
       fimViagem: json['fimViagem']?.toString(),
@@ -66,7 +66,7 @@ class Passageiro {
       'retorno': retorno,
       'onibus': onibus,
       'cpf': cpf,
-      'codigoPulseira': codigoPulseira,
+      'colegio': colegio, // ✅ NOVO CAMPO
       'flowType': flowType,
       'inicioViagem': inicioViagem,
       'fimViagem': fimViagem,
@@ -82,7 +82,7 @@ class Passageiro {
       'retorno': retorno,
       'onibus': onibus,
       'cpf': cpf,
-      'codigo_pulseira': codigoPulseira,
+      'colegio': colegio, // ✅ NOVO CAMPO
       'inicio_viagem': inicioViagem,
       'fim_viagem': fimViagem,
     };
@@ -97,7 +97,7 @@ class Passageiro {
     String? onibus,
     String? cpf,
     String? flowType,
-    String? codigoPulseira,
+    String? colegio, // ✅ NOVO CAMPO
     String? inicioViagem,
     String? fimViagem,
   }) {
@@ -110,7 +110,7 @@ class Passageiro {
       onibus: onibus ?? this.onibus,
       cpf: cpf ?? this.cpf,
       flowType: flowType ?? this.flowType,
-      codigoPulseira: codigoPulseira ?? this.codigoPulseira,
+      colegio: colegio ?? this.colegio, // ✅ NOVO CAMPO
       inicioViagem: inicioViagem ?? this.inicioViagem,
       fimViagem: fimViagem ?? this.fimViagem,
     );
@@ -118,6 +118,6 @@ class Passageiro {
 
   @override
   String toString() {
-    return 'Passageiro(nome: $nome, cpf: $cpf, idPasseio: $idPasseio, turma: $turma, onibus: $onibus, embarque: $embarque, retorno: $retorno, pulseira: $codigoPulseira, inicioViagem: $inicioViagem, fimViagem: $fimViagem)';
+    return 'Passageiro(nome: $nome, cpf: $cpf, colegio: $colegio, idPasseio: $idPasseio, turma: $turma, onibus: $onibus, embarque: $embarque, retorno: $retorno, inicioViagem: $inicioViagem, fimViagem: $fimViagem)';
   }
 }

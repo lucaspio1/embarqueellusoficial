@@ -85,8 +85,7 @@ class DataService {
     final listaJson = json.encode(lista.map((p) => p.toJson()).toList());
     await prefs.setString('passageiros_json', listaJson);
 
-    final pulseira = (prefs.getString('pulseira') ?? '').toUpperCase();
-    final facialLiberada = pulseira == 'SIM';
+    // ❌ REMOVIDO: Lógica de pulseira não é mais necessária
 
     // Salvar também no banco SQLite (tabela passageiros)
     final db = DatabaseHelper.instance;
@@ -145,7 +144,6 @@ class DataService {
       final atualizado = currentList[index].copyWith(
         embarque: novoEmbarque ?? passageiro.embarque,
         retorno: novoRetorno ?? passageiro.retorno,
-        codigoPulseira: passageiro.codigoPulseira, // mantém sempre o valor atual
       );
 
       currentList[index] = atualizado;
@@ -217,7 +215,6 @@ class DataService {
           embarque: '',
           retorno: '',
           onibus: '',
-          codigoPulseira: '',
         ),
       );
 
@@ -227,12 +224,8 @@ class DataService {
         'operacao': operacao,
       };
 
-      // 🔥 Sempre envia a pulseira quando QR for "SIM"
       if (operacao == 'embarque') {
         requestBody['novoStatus'] = valor;
-        if (valor == 'SIM') {
-          requestBody['codigoPulseira'] = passageiro.codigoPulseira ?? '';
-        }
       } else if (operacao == 'retorno') {
         requestBody['novoRetorno'] = valor;
       }

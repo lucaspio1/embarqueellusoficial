@@ -71,6 +71,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         return {
           'cpf': p.cpf ?? '',
           'nome': p.nome,
+          'colegio': p.colegio ?? '', // ✅ NOVO CAMPO
           'turma': p.turma,
           'email': '', // Passageiros não têm email, mas mantemos a estrutura
           'telefone': '',
