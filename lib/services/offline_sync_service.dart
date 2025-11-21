@@ -47,7 +47,8 @@ class OfflineSyncService {
     required String personId,
     required String tipo,
     String? operadorNome,
-    String? colegio, // ✅ NOVO CAMPO
+    String? colegio,
+    String? turma,
     String? inicioViagem,
     String? fimViagem,
   }) async {
@@ -58,7 +59,8 @@ class OfflineSyncService {
       confidence: confidence,
       tipo: tipo,
       operadorNome: operadorNome,
-      colegio: colegio, // ✅ NOVO CAMPO
+      colegio: colegio,
+      turma: turma,
       inicioViagem: inicioViagem,
       fimViagem: fimViagem,
     );
@@ -66,7 +68,8 @@ class OfflineSyncService {
     await _db.enqueueOutbox('movement_log', {
       'cpf': cpf,
       'personName': personName,
-      'colegio': colegio ?? '', // ✅ NOVO CAMPO
+      'colegio': colegio ?? '',
+      'turma': turma ?? '',
       'timestamp': timestamp.toIso8601String(),
       'confidence': confidence,
       'personId': personId,
@@ -76,7 +79,7 @@ class OfflineSyncService {
       'fim_viagem': fimViagem ?? '',
     });
 
-    print('📝 [OfflineSync] Log enfileirado: $personName - $tipo - Colégio: ${colegio ?? "N/A"} (Operador: ${operadorNome ?? "N/A"})');
+    print('📝 [OfflineSync] Log enfileirado: $personName - $tipo - Colégio: ${colegio ?? "N/A"}, Turma: ${turma ?? "N/A"} (Operador: ${operadorNome ?? "N/A"})');
   }
 
   Future<void> queueCadastroFacial({
@@ -86,24 +89,26 @@ class OfflineSyncService {
     required String telefone,
     required List<double> embedding,
     required String personId,
-    String? colegio, // ✅ NOVO CAMPO
+    String? colegio,
+    String? turma,
     String? inicioViagem,
     String? fimViagem,
   }) async {
     await _db.enqueueOutbox('face_register', {
       'cpf': cpf,
       'nome': nome,
-      'colegio': colegio ?? '', // ✅ NOVO CAMPO
+      'colegio': colegio ?? '',
+      'turma': turma ?? '',
       'email': email,
       'telefone': telefone,
       'embedding': embedding,
       'personId': personId,
-      'movimentacao': 'QUARTO', // ✅ JÁ ENVIA COM MOVIMENTAÇÃO INICIAL
+      'movimentacao': 'QUARTO',
       'inicio_viagem': inicioViagem ?? '',
       'fim_viagem': fimViagem ?? '',
     });
 
-    print('📝 [OfflineSync] Cadastro facial enfileirado: $nome - Colégio: ${colegio ?? "N/A"} (Local inicial: QUARTO, Viagem: ${inicioViagem ?? "N/A"} a ${fimViagem ?? "N/A"})');
+    print('📝 [OfflineSync] Cadastro facial enfileirado: $nome - Colégio: ${colegio ?? "N/A"}, Turma: ${turma ?? "N/A"} (Local inicial: QUARTO, Viagem: ${inicioViagem ?? "N/A"} a ${fimViagem ?? "N/A"})');
   }
 
   Future<bool> _hasInternet() async {
@@ -270,12 +275,13 @@ class OfflineSyncService {
       'action': 'addPessoa',
       'cpf': copy['cpf'],
       'nome': copy['nome'],
-      'colegio': copy['colegio'] ?? '', // ✅ NOVO CAMPO
+      'colegio': copy['colegio'] ?? '',
+      'turma': copy['turma'] ?? '',
       'email': copy['email'] ?? '',
       'telefone': copy['telefone'] ?? '',
       'embedding': copy['embedding'],
       'personId': copy['personId'] ?? copy['cpf'],
-      'movimentacao': copy['movimentacao'] ?? 'QUARTO', // ✅ GARANTE QUE SEMPRE VAI COM QUARTO
+      'movimentacao': copy['movimentacao'] ?? 'QUARTO',
       'inicio_viagem': copy['inicio_viagem'] ?? '',
       'fim_viagem': copy['fim_viagem'] ?? '',
     };
@@ -986,9 +992,10 @@ class OfflineSyncService {
           final alunoData = {
             'cpf': aluno['cpf'] ?? '',
             'nome': aluno['nome'] ?? '',
+            'colegio': aluno['colegio'] ?? '',
+            'turma': aluno['turma'] ?? '',
             'email': aluno['email'] ?? '',
             'telefone': aluno['telefone'] ?? '',
-            'turma': aluno['turma'] ?? '',
             'facial': aluno['facial_status'],
             'tem_qr': aluno['tem_qr'] ?? aluno['pulseira'] ?? 'NAO',
             'inicio_viagem': aluno['inicio_viagem'] ?? '',
@@ -1065,9 +1072,10 @@ class OfflineSyncService {
               await _db.upsertPessoaFacial({
                 'cpf': pessoa['cpf'] ?? '',
                 'nome': pessoa['nome'] ?? '',
+                'colegio': pessoa['colegio'] ?? '',
+                'turma': pessoa['turma'] ?? '',
                 'email': pessoa['email'] ?? '',
                 'telefone': pessoa['telefone'] ?? '',
-                'turma': pessoa['turma'] ?? '',
                 'embedding': jsonEncode(embedding),
                 'facial_status': 'CADASTRADA',
                 'movimentacao': (pessoa['movimentacao'] ?? '').toString().toUpperCase(),
@@ -1148,6 +1156,7 @@ class OfflineSyncService {
             tipo: log['tipo'] ?? 'FACIAL',
             operadorNome: log['operador_nome'] ?? log['operador'] ?? '',
             colegio: log['colegio'] ?? '',
+            turma: log['turma'] ?? '',
             inicioViagem: log['inicio_viagem'] ?? '',
             fimViagem: log['fim_viagem'] ?? '',
           );

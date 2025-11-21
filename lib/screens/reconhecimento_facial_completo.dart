@@ -190,7 +190,8 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         personId: aluno['cpf'],
         tipo: tipo,
         operadorNome: operadorNome,
-        colegio: aluno['colegio'] as String? ?? '', // ✅ NOVO CAMPO
+        colegio: aluno['colegio'] as String? ?? '',
+        turma: aluno['turma'] as String? ?? '',
         inicioViagem: aluno['inicio_viagem'] as String?,
         fimViagem: aluno['fim_viagem'] as String?,
       );
