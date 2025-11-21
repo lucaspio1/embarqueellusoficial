@@ -58,6 +58,7 @@ class OfflineSyncService {
       confidence: confidence,
       tipo: tipo,
       operadorNome: operadorNome,
+      colegio: colegio, // ✅ NOVO CAMPO
       inicioViagem: inicioViagem,
       fimViagem: fimViagem,
     );
@@ -1145,6 +1146,7 @@ class OfflineSyncService {
             confidence: (log['confidence'] ?? 0.0).toDouble(),
             tipo: log['tipo'] ?? 'FACIAL',
             operadorNome: log['operador_nome'] ?? log['operador'] ?? '',
+            colegio: log['colegio'] ?? '',
             inicioViagem: log['inicio_viagem'] ?? '',
             fimViagem: log['fim_viagem'] ?? '',
           );

@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 4,
+      version: 5, // ✅ VERSÃO 5: Adicionar coluna colegio
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -74,6 +74,36 @@ class DatabaseHelper {
         print('⚠️ [DB] Colunas de data já existiam em logs: $e');
       }
     }
+    if (oldVersion < 5) {
+      // Adicionar coluna colegio às tabelas
+      try {
+        await db.execute("ALTER TABLE pessoas_facial ADD COLUMN colegio TEXT");
+        print('✅ [DB] Migração v4 -> v5: Adicionada coluna colegio em pessoas_facial');
+      } catch (e) {
+        print('⚠️ [DB] Coluna colegio já existia em pessoas_facial: $e');
+      }
+
+      try {
+        await db.execute("ALTER TABLE alunos ADD COLUMN colegio TEXT");
+        print('✅ [DB] Migração v4 -> v5: Adicionada coluna colegio em alunos');
+      } catch (e) {
+        print('⚠️ [DB] Coluna colegio já existia em alunos: $e');
+      }
+
+      try {
+        await db.execute("ALTER TABLE logs ADD COLUMN colegio TEXT");
+        print('✅ [DB] Migração v4 -> v5: Adicionada coluna colegio em logs');
+      } catch (e) {
+        print('⚠️ [DB] Coluna colegio já existia em logs: $e');
+      }
+
+      try {
+        await db.execute("ALTER TABLE passageiros ADD COLUMN colegio TEXT");
+        print('✅ [DB] Migração v4 -> v5: Adicionada coluna colegio em passageiros');
+      } catch (e) {
+        print('⚠️ [DB] Coluna colegio já existia em passageiros: $e');
+      }
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -82,6 +112,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL,
         cpf TEXT,
+        colegio TEXT,
         id_passeio TEXT,
         turma TEXT,
         embarque TEXT DEFAULT 'NÃO',
@@ -98,6 +129,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         cpf TEXT UNIQUE,
         nome TEXT,
+        colegio TEXT,
         email TEXT,
         telefone TEXT,
         turma TEXT,
@@ -124,6 +156,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         cpf TEXT UNIQUE,
         nome TEXT,
+        colegio TEXT,
         email TEXT,
         telefone TEXT,
         turma TEXT,
@@ -142,6 +175,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         cpf TEXT,
         person_name TEXT,
+        colegio TEXT,
         timestamp TEXT,
         confidence REAL,
         tipo TEXT,
@@ -477,7 +511,7 @@ class DatabaseHelper {
 
     // Buscar todas as pessoas com facial
     final List<Map<String, dynamic>> pessoasComFacial = await db.rawQuery('''
-      SELECT cpf, nome, email, telefone, turma, embedding, movimentacao, inicio_viagem, fim_viagem
+      SELECT cpf, nome, colegio, email, telefone, turma, embedding, movimentacao, inicio_viagem, fim_viagem
       FROM pessoas_facial
       WHERE facial_status = 'CADASTRADA' AND embedding IS NOT NULL
     ''');
@@ -646,6 +680,7 @@ class DatabaseHelper {
     required double confidence,
     required String tipo,
     String? operadorNome,
+    String? colegio, // ✅ NOVO CAMPO
     String? inicioViagem,
     String? fimViagem,
   }) async {
@@ -658,6 +693,7 @@ class DatabaseHelper {
       {
         'cpf': cpf,
         'person_name': personName,
+        'colegio': colegio, // ✅ NOVO CAMPO
         'timestamp': timestamp.toIso8601String(),
         'confidence': confidence,
         'tipo': tipo,
