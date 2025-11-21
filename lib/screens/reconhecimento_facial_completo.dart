@@ -795,6 +795,24 @@ class _SelecionarTipoAcessoDialog extends StatelessWidget {
                 fontSize: 14,
               ),
             ),
+            const SizedBox(height: 4),
+            if (aluno['colegio'] != null && aluno['colegio'].toString().isNotEmpty)
+              Text(
+                'Colégio: ${aluno['colegio']}',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 14,
+                ),
+              ),
+            const SizedBox(height: 4),
+            if (aluno['turma'] != null && aluno['turma'].toString().isNotEmpty)
+              Text(
+                'Turma: ${aluno['turma']}',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 14,
+                ),
+              ),
             const SizedBox(height: 24),
             const Text(
               'Para onde o aluno está indo?',
