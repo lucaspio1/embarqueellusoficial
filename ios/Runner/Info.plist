@@ -83,11 +83,9 @@
 
 	<!-- ✅ Configuração de segurança de rede para permitir Sentry -->
 	<key>NSAppTransportSecurity</key>
-	
 	<dict>
-    <key>NSAllowsArbitraryLoads</key>
-    <true/>
-		<!-- Permite conexões HTTPS com configurações específicas -->
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
 			<!-- Configuração para Sentry -->
@@ -111,5 +109,10 @@
 			</dict>
 		</dict>
 	</dict>
+
+	<!-- 🔐 Obrigatório para compliance de criptografia -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+
 </dict>
 </plist>
