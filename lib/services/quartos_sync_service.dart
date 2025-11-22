@@ -115,6 +115,10 @@ class QuartosSyncService {
         final List<dynamic> quartos = (body['data'] as List?) ?? [];
         print('📊 [QuartosSync] Total de quartos recebidos: ${quartos.length}');
 
+        // Limpar quartos antigos antes de inserir novos (evita duplicação)
+        await _db.clearQuartos();
+        print('🧹 [QuartosSync] Quartos antigos limpos');
+
         int count = 0;
 
         for (final q in quartos) {
