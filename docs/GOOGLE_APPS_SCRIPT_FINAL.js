@@ -630,6 +630,22 @@ function getAllStudents() {
       const row = values[i];
       if (!row[1]) continue;
 
+      // ✅ Garantir que datas sejam convertidas para string ISO
+      let inicioViagem = row[9] || '';
+      let fimViagem = row[10] || '';
+
+      if (inicioViagem instanceof Date) {
+        inicioViagem = inicioViagem.toISOString();
+      } else if (inicioViagem) {
+        inicioViagem = inicioViagem.toString().trim();
+      }
+
+      if (fimViagem instanceof Date) {
+        fimViagem = fimViagem.toISOString();
+      } else if (fimViagem) {
+        fimViagem = fimViagem.toString().trim();
+      }
+
       const aluno = {
         cpf: String(row[4] || '').trim(),
         nome: row[1] || '',
@@ -639,8 +655,8 @@ function getAllStudents() {
         telefone: row[5] || '',
         facial_status: 'NAO',
         tem_qr: 'NAO',
-        inicio_viagem: row[9] || '',
-        fim_viagem: row[10] || ''
+        inicio_viagem: inicioViagem,
+        fim_viagem: fimViagem
       };
 
       alunos.push(aluno);
@@ -1015,8 +1031,21 @@ function listarViagens() {
 
     for (let i = 1; i < values.length; i++) {
       const row = values[i];
-      const inicioViagem = row[9] || '';
-      const fimViagem = row[10] || '';
+      let inicioViagem = row[9] || '';
+      let fimViagem = row[10] || '';
+
+      // ✅ Garantir que datas sejam convertidas para string ISO
+      if (inicioViagem instanceof Date) {
+        inicioViagem = inicioViagem.toISOString();
+      } else if (inicioViagem) {
+        inicioViagem = inicioViagem.toString().trim();
+      }
+
+      if (fimViagem instanceof Date) {
+        fimViagem = fimViagem.toISOString();
+      } else if (fimViagem) {
+        fimViagem = fimViagem.toString().trim();
+      }
 
       if (inicioViagem && fimViagem) {
         const chave = inicioViagem + '|' + fimViagem;
@@ -1292,10 +1321,33 @@ function registrarEvento(tipoEvento, dados) {
 
     const eventoId = 'EVT_' + new Date().getTime();
     const timestamp = new Date().toISOString();
-    const inicioViagem = dados.inicio_viagem || dados.inicioViagem || '';
-    const fimViagem = dados.fim_viagem || dados.fimViagem || '';
+
+    // ✅ Garantir que inicio_viagem e fim_viagem sejam sempre strings
+    let inicioViagem = dados.inicio_viagem || dados.inicioViagem || '';
+    let fimViagem = dados.fim_viagem || dados.fimViagem || '';
+
+    // Se forem Date objects, converter para ISO string
+    if (inicioViagem instanceof Date) {
+      inicioViagem = inicioViagem.toISOString();
+    } else if (inicioViagem && typeof inicioViagem !== 'string') {
+      inicioViagem = inicioViagem.toString().trim();
+    }
+
+    if (fimViagem instanceof Date) {
+      fimViagem = fimViagem.toISOString();
+    } else if (fimViagem && typeof fimViagem !== 'string') {
+      fimViagem = fimViagem.toString().trim();
+    }
+
     const dadosAdicionais = JSON.stringify(dados);
     const processado = 'NAO';
+
+    // ✅ DEBUG: Verificar valores antes de inserir
+    console.log('🔍 [registrarEvento] Valores a serem inseridos:');
+    console.log('  - inicioViagem:', inicioViagem, '(tipo:', typeof inicioViagem, ')');
+    console.log('  - fimViagem:', fimViagem, '(tipo:', typeof fimViagem, ')');
+    console.log('  - dados.inicio_viagem:', dados.inicio_viagem);
+    console.log('  - dados.fim_viagem:', dados.fim_viagem);
 
     eventosSheet.appendRow([
       eventoId,
@@ -1345,8 +1397,23 @@ function getEventos(data) {
       const eventoId = row[0];
       const timestamp = row[1];
       const tipoEvento = row[2];
-      const inicioViagem = row[3] || '';
-      const fimViagem = row[4] || '';
+
+      // ✅ Garantir que inicio_viagem e fim_viagem sejam sempre strings ISO
+      let inicioViagem = row[3] || '';
+      let fimViagem = row[4] || '';
+
+      if (inicioViagem instanceof Date) {
+        inicioViagem = inicioViagem.toISOString();
+      } else if (inicioViagem) {
+        inicioViagem = inicioViagem.toString().trim();
+      }
+
+      if (fimViagem instanceof Date) {
+        fimViagem = fimViagem.toISOString();
+      } else if (fimViagem) {
+        fimViagem = fimViagem.toString().trim();
+      }
+
       const dadosAdicionais = row[5] || '{}';
       const processado = String(row[6] || 'NAO').toUpperCase();
 

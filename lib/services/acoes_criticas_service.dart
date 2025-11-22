@@ -271,6 +271,8 @@ class AcoesCriticasService {
 
       // 1. Limpar Google Sheets
       print('🔄 Limpando Google Sheets (pode receber HTTP 302 - isso é normal)...');
+      print('🔍 [DEBUG] inicioViagem: $inicioViagem');
+      print('🔍 [DEBUG] fimViagem: $fimViagem');
 
       final client = http.Client();
       Map<String, dynamic> resultado;
@@ -281,6 +283,8 @@ class AcoesCriticasService {
           if (inicioViagem != null) 'inicio_viagem': inicioViagem,
           if (fimViagem != null) 'fim_viagem': fimViagem,
         });
+
+        print('🔍 [DEBUG] Request body: $requestBody');
 
         final request = http.Request('POST', Uri.parse(_googleAppsScriptUrl))
           ..followRedirects = false
