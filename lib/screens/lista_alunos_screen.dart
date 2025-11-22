@@ -279,7 +279,7 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
-      // ✅ NOVA LÓGICA: Salvar com movimentação inicial "QUARTO"
+      // ✅ Salvar SEM setar movimentação (preserva a existente do Google Sheets)
       await _db.upsertPessoaFacial({
         'cpf': aluno['cpf'],
         'nome': aluno['nome'],
@@ -288,10 +288,10 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
         'turma': aluno['turma'] ?? '',
         'embedding': jsonEncode(embedding),
         'facial_status': 'CADASTRADA',
-        'movimentacao': 'QUARTO', // ✅ JÁ INICIA NO QUARTO
+        // NÃO setar 'movimentacao' - deixa preservar a que já existe
       });
 
-      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial com movimentação QUARTO');
+      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial (preservando movimentação existente)');
 
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],

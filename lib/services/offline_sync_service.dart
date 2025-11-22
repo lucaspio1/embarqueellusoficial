@@ -95,6 +95,20 @@ class OfflineSyncService {
     String? inicioViagem,
     String? fimViagem,
   }) async {
+    // Buscar movimentação atual da pessoa (preserva a existente, não força QUARTO)
+    final db = await _db.database;
+    final pessoaExistente = await db.query(
+      'pessoas_facial',
+      columns: ['movimentacao'],
+      where: 'cpf = ?',
+      whereArgs: [cpf],
+      limit: 1,
+    );
+
+    final movimentacaoAtual = pessoaExistente.isNotEmpty
+        ? (pessoaExistente.first['movimentacao']?.toString() ?? 'QUARTO')
+        : 'QUARTO';
+
     await _db.enqueueOutbox('face_register', {
       'cpf': cpf,
       'nome': nome,
@@ -104,12 +118,12 @@ class OfflineSyncService {
       'telefone': telefone,
       'embedding': embedding,
       'personId': personId,
-      'movimentacao': 'QUARTO',
+      'movimentacao': movimentacaoAtual,
       'inicio_viagem': inicioViagem ?? '',
       'fim_viagem': fimViagem ?? '',
     });
 
-    print('📝 [OfflineSync] Cadastro facial enfileirado: $nome - Colégio: ${colegio ?? "N/A"}, Turma: ${turma ?? "N/A"} (Local inicial: QUARTO, Viagem: ${inicioViagem ?? "N/A"} a ${fimViagem ?? "N/A"})');
+    print('📝 [OfflineSync] Cadastro facial enfileirado: $nome - Colégio: ${colegio ?? "N/A"}, Turma: ${turma ?? "N/A"} (Movimentação atual: $movimentacaoAtual, Viagem: ${inicioViagem ?? "N/A"} a ${fimViagem ?? "N/A"})');
   }
 
   Future<bool> _hasInternet() async {

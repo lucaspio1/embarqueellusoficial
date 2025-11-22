@@ -245,12 +245,12 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         'turma': aluno['turma'] ?? '',
         'embedding': jsonEncode(embedding),
         'facial_status': 'CADASTRADA',
-        'movimentacao': 'QUARTO',
+        // NÃO setar 'movimentacao' - preserva a existente do Google Sheets
         'inicio_viagem': aluno['inicio_viagem'] ?? '',
         'fim_viagem': aluno['fim_viagem'] ?? '',
       });
 
-      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial com movimentação QUARTO');
+      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial (preservando movimentação existente)');
 
       await Sentry.captureMessage(
         'Facial cadastrada com sucesso',
@@ -375,12 +375,12 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         'turma': aluno['turma'] ?? '',
         'embedding': jsonEncode(embedding),
         'facial_status': 'CADASTRADA',
-        'movimentacao': 'QUARTO',
+        // NÃO setar 'movimentacao' - preserva a existente do Google Sheets
         'inicio_viagem': aluno['inicio_viagem'] ?? '',
         'fim_viagem': aluno['fim_viagem'] ?? '',
       });
 
-      print('✅ [CadastroFacialAvançado] Salvo na tabela pessoas_facial com movimentação QUARTO');
+      print('✅ [CadastroFacialAvançado] Salvo na tabela pessoas_facial (preservando movimentação existente)');
 
       await Sentry.captureMessage(
         'Facial avançada cadastrada com sucesso',
