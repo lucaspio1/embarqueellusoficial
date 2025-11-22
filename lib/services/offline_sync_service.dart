@@ -9,6 +9,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/config/app_config.dart';
 import 'package:embarqueellus/models/evento.dart';
+import 'package:embarqueellus/services/quartos_sync_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class OfflineSyncService {
@@ -500,7 +501,17 @@ class OfflineSyncService {
       results.logs = SyncResult(success: false, message: e.toString(), count: 0);
     }
 
-    // 4.5. Sincronizar Eventos (notificações de ações críticas)
+    // 4.5. Sincronizar Quartos
+    try {
+      final quartosResult = await _syncQuartos();
+      results.quartos = quartosResult;
+      print('${quartosResult.success ? "✅" : "❌"} [Quartos] ${quartosResult.message}');
+    } catch (e) {
+      print('❌ [Quartos] Erro: $e');
+      results.quartos = SyncResult(success: false, message: e.toString(), count: 0);
+    }
+
+    // 5. Sincronizar Eventos (notificações de ações críticas)
     try {
       final eventosResult = await _syncEventos();
       results.eventos = eventosResult;
@@ -510,7 +521,7 @@ class OfflineSyncService {
       results.eventos = SyncResult(success: false, message: e.toString(), count: 0);
     }
 
-    // 5. Sincronizar Outbox (fila de envio)
+    // 6. Sincronizar Outbox (fila de envio)
     try {
       final outboxSuccess = await trySyncNow();
       results.outbox = SyncResult(
@@ -530,6 +541,7 @@ class OfflineSyncService {
     print('   🎓 Alunos: ${results.alunos.count} (${results.alunos.success ? "OK" : "FALHA"})');
     print('   👤 Pessoas: ${results.pessoas.count} (${results.pessoas.success ? "OK" : "FALHA"})');
     print('   📝 Logs: ${results.logs.count} (${results.logs.success ? "OK" : "FALHA"})');
+    print('   🏨 Quartos: ${results.quartos.count} (${results.quartos.success ? "OK" : "FALHA"})');
     print('   📢 Eventos: ${results.eventos.count} (${results.eventos.success ? "OK" : "FALHA"})');
     print('   📤 Outbox: ${results.outbox.success ? "OK" : "FALHA"}');
 
@@ -928,6 +940,26 @@ class OfflineSyncService {
   }
 
   // -----------------------------
+  // Sync Quartos (aba HOMELIST)
+  // -----------------------------
+  Future<SyncResult> _syncQuartos() async {
+    try {
+      print('🔄 [QuartosSync] Delegando para QuartosSyncService...');
+
+      // Importar QuartosSyncService dinamicamente para evitar dependência circular
+      final quartosSyncService = QuartosSyncService.instance;
+      final result = await quartosSyncService.syncQuartosFromSheets();
+
+      print('${result.success ? "✅" : "❌"} [QuartosSync] ${result.message}');
+      return result;
+    } catch (e, stack) {
+      print('❌ [QuartosSync] Erro geral: $e');
+      await Sentry.captureException(e, stackTrace: stack);
+      return SyncResult(success: false, count: 0, message: e.toString());
+    }
+  }
+
+  // -----------------------------
   // Helper: Follow Redirect
   // -----------------------------
   Future<http.Response> _followRedirect(String redirectedUrl, Map<String, dynamic> body) async {
@@ -1237,6 +1269,7 @@ class ConsolidatedSyncResult {
   SyncResult alunos = SyncResult(success: false, message: 'Não sincronizado', count: 0);
   SyncResult pessoas = SyncResult(success: false, message: 'Não sincronizado', count: 0);
   SyncResult logs = SyncResult(success: false, message: 'Não sincronizado', count: 0);
+  SyncResult quartos = SyncResult(success: false, message: 'Não sincronizado', count: 0);
   SyncResult eventos = SyncResult(success: false, message: 'Não sincronizado', count: 0);
   SyncResult outbox = SyncResult(success: false, message: 'Não sincronizado', count: 0);
 
@@ -1247,6 +1280,7 @@ class ConsolidatedSyncResult {
       alunos.success &&
       pessoas.success &&
       logs.success &&
+      quartos.success &&
       eventos.success &&
       outbox.success;
 
@@ -1256,6 +1290,7 @@ class ConsolidatedSyncResult {
       alunos.success ||
       pessoas.success ||
       logs.success ||
+      quartos.success ||
       eventos.success ||
       outbox.success;
 
@@ -1265,6 +1300,7 @@ class ConsolidatedSyncResult {
       alunos.count +
       pessoas.count +
       logs.count +
+      quartos.count +
       eventos.count;
 
   @override
@@ -1279,6 +1315,7 @@ ConsolidatedSyncResult(
   alunos: ${alunos.count} (${alunos.success ? "OK" : "FALHA"}),
   pessoas: ${pessoas.count} (${pessoas.success ? "OK" : "FALHA"}),
   logs: ${logs.count} (${logs.success ? "OK" : "FALHA"}),
+  quartos: ${quartos.count} (${quartos.success ? "OK" : "FALHA"}),
   eventos: ${eventos.count} (${eventos.success ? "OK" : "FALHA"}),
   outbox: ${outbox.success ? "OK" : "FALHA"}
 )''';
