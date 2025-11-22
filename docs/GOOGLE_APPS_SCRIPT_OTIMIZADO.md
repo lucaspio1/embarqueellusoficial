@@ -222,78 +222,17 @@ function getAllPeople(data) {
 }
 ```
 
-### **MODIFICAR a função getAllStudents() para Delta Sync:**
+### **⚠️ ALUNOS - Delta Sync NÃO necessário:**
 
-```javascript
-function getAllStudents(data) {
-  try {
-    const since = data ? data.since : null;
+A aba ALUNOS é usada apenas para:
+- Listagem no painel administrativo
+- Seleção de quem vai cadastrar facial
 
-    if (since) {
-      console.log('📥 [getAllStudents] DELTA SYNC desde:', since);
-    } else {
-      console.log('📥 [getAllStudents] FULL SYNC');
-    }
+**NÃO é usada para reconhecimento facial** (isso é feito pela aba PESSOAS).
 
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    let alunosSheet = ss.getSheetByName('ALUNOS');
+Como os dados mudam raramente (só quando CONTROLE=SIM na planilha de embarque), **delta sync aqui não traz benefício significativo**.
 
-    if (!alunosSheet) {
-      return createResponse(true, 'Aba ALUNOS não encontrada', { data: [] });
-    }
-
-    // ✅ Garantir coluna UPDATED_AT
-    garantirColunaUpdatedAtAlunos(alunosSheet);
-
-    const data_range = alunosSheet.getDataRange();
-    const values = data_range.getValues();
-    const alunos = [];
-    const sinceTimestamp = since ? new Date(since).getTime() : null;
-
-    for (let i = 1; i < values.length; i++) {
-      const row = values[i];
-      if (!row[1]) continue;
-
-      // ✅ DELTA SYNC
-      if (sinceTimestamp) {
-        const updatedAt = row[13]; // Coluna N (UPDATED_AT)
-        if (updatedAt) {
-          const updatedTimestamp = new Date(updatedAt).getTime();
-          if (updatedTimestamp <= sinceTimestamp) {
-            continue;
-          }
-        }
-      }
-
-      const aluno = {
-        cpf: String(row[4] || '').trim(),
-        nome: row[1] || '',
-        colegio: row[2] || '',
-        turma: row[3] || '',
-        email: '',
-        telefone: row[5] || '',
-        facial_status: 'NAO',
-        tem_qr: 'NAO',
-        inicio_viagem: row[9] || '',
-        fim_viagem: row[10] || '',
-        updated_at: row[13] || '' // ✅ NOVO
-      };
-
-      alunos.push(aluno);
-    }
-
-    const message = since
-      ? `${alunos.length} alunos modificados desde ${since}`
-      : `${alunos.length} alunos encontrados`;
-
-    console.log('✅ [getAllStudents]', message);
-    return createResponse(true, message, { data: alunos });
-  } catch (error) {
-    console.error('❌ Erro ao buscar alunos:', error);
-    return createResponse(false, 'Erro: ' + error.message);
-  }
-}
-```
+Se mesmo assim quiser implementar, seguir o mesmo padrão da aba PESSOAS.
 
 ### **MODIFICAR getAllLogs() para Delta Sync:**
 
@@ -395,31 +334,10 @@ function garantirColunaUpdatedAt(pessoasSheet) {
 }
 
 /**
- * Garante que a aba ALUNOS tem a coluna UPDATED_AT (coluna N)
+ * ⚠️ NOTA: Aba ALUNOS não precisa de UPDATED_AT
+ * A aba é usada apenas para listagem administrativa, não para reconhecimento
+ * Delta sync focado apenas na aba PESSOAS (que tem os embeddings faciais)
  */
-function garantirColunaUpdatedAtAlunos(alunosSheet) {
-  try {
-    const UPDATED_AT_COLUMN = 14; // Coluna N (após as 13 colunas existentes)
-    const lastColumn = alunosSheet.getLastColumn();
-
-    if (lastColumn < UPDATED_AT_COLUMN) {
-      const colunasParaAdicionar = UPDATED_AT_COLUMN - lastColumn;
-      if (lastColumn > 0) {
-        alunosSheet.insertColumnsAfter(lastColumn, colunasParaAdicionar);
-      }
-    }
-
-    const headerCell = alunosSheet.getRange(1, UPDATED_AT_COLUMN);
-    const currentValue = headerCell.getValue();
-
-    if (currentValue !== 'UPDATED_AT') {
-      headerCell.setValue('UPDATED_AT');
-      console.log('✅ Coluna UPDATED_AT adicionada em ALUNOS');
-    }
-  } catch (error) {
-    console.error('❌ Erro ao garantir coluna UPDATED_AT em ALUNOS:', error);
-  }
-}
 
 /**
  * Atualiza o timestamp UPDATED_AT de uma pessoa
@@ -541,13 +459,14 @@ curl -X POST "SUA_URL_DO_SCRIPT" \
 
 - [ ] Adicionar função `batchSync()`
 - [ ] Modificar `getAllPeople()` para aceitar `since`
-- [ ] Modificar `getAllStudents()` para aceitar `since`
 - [ ] Modificar `getAllLogs()` para aceitar `since`
-- [ ] Adicionar funções `garantirColunaUpdatedAt()`
+- [ ] Adicionar função `garantirColunaUpdatedAt()` (apenas para PESSOAS)
 - [ ] Modificar `addPessoa()` para atualizar `UPDATED_AT`
-- [ ] Modificar `addMovementLog()` para atualizar timestamp
+- [ ] Modificar `addMovementLog()` para atualizar timestamp da pessoa
 - [ ] Testar batching com Postman/curl
 - [ ] Testar delta sync com timestamps
+
+**Nota:** Aba ALUNOS não precisa de delta sync (usada apenas para listagem administrativa)
 
 ---
 
