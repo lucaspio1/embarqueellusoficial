@@ -178,6 +178,13 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       final usuarioLogado = await AuthService.instance.getUsuarioLogado();
       final operadorNome = usuarioLogado?['nome'] ?? 'Sistema';
 
+      // 🔍 DEBUG: Verificar valores de viagem antes de salvar
+      final inicioViagem = aluno['inicio_viagem'] as String?;
+      final fimViagem = aluno['fim_viagem'] as String?;
+      print('🔍 [DEBUG _registrarPassagem] Aluno: ${aluno['nome']}');
+      print('🔍 [DEBUG _registrarPassagem] inicioViagem: $inicioViagem (${inicioViagem?.isNotEmpty == true ? "PREENCHIDO" : "VAZIO"})');
+      print('🔍 [DEBUG _registrarPassagem] fimViagem: $fimViagem (${fimViagem?.isNotEmpty == true ? "PREENCHIDO" : "VAZIO"})');
+
       // ❌ REMOVIDO: insertLog() duplicado - queueLogAcesso já faz isso
       // await _db.insertLog(...)
 
@@ -192,8 +199,8 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         operadorNome: operadorNome,
         colegio: aluno['colegio'] as String? ?? '',
         turma: aluno['turma'] as String? ?? '',
-        inicioViagem: aluno['inicio_viagem'] as String?,
-        fimViagem: aluno['fim_viagem'] as String?,
+        inicioViagem: inicioViagem,
+        fimViagem: fimViagem,
       );
 
       await _db.updatePessoaMovimentacao(

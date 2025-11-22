@@ -55,6 +55,11 @@ class OfflineSyncService {
     String? inicioViagem,
     String? fimViagem,
   }) async {
+    // 🔍 DEBUG: Verificar valores recebidos
+    print('🔍 [DEBUG queueLogAcesso] Recebendo log para $personName');
+    print('🔍 [DEBUG queueLogAcesso] inicioViagem: $inicioViagem (${inicioViagem?.isNotEmpty == true ? "PREENCHIDO" : "VAZIO"})');
+    print('🔍 [DEBUG queueLogAcesso] fimViagem: $fimViagem (${fimViagem?.isNotEmpty == true ? "PREENCHIDO" : "VAZIO"})');
+
     await _db.insertLog(
       cpf: cpf,
       personName: personName,
