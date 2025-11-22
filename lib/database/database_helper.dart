@@ -1119,20 +1119,28 @@ class DatabaseHelper {
     final db = await database;
 
     // JOIN entre quartos e pessoas_facial para pegar a movimentação atual
+    // USANDO TRIM para garantir que espaços em branco não atrapalhem o JOIN
     final result = await db.rawQuery('''
       SELECT
         q.numero_quarto,
         q.escola,
         q.nome_hospede,
-        q.cpf,
+        q.cpf as cpf_quarto,
         q.inicio_viagem,
         q.fim_viagem,
+        p.cpf as cpf_pessoa,
         COALESCE(p.movimentacao, '') as movimentacao
       FROM quartos q
-      LEFT JOIN pessoas_facial p ON q.cpf = p.cpf
+      LEFT JOIN pessoas_facial p ON TRIM(q.cpf) = TRIM(p.cpf)
       WHERE q.numero_quarto = ?
       ORDER BY q.nome_hospede ASC
     ''', [numeroQuarto]);
+
+    // 🔍 DIAGNÓSTICO: Ver o que está retornando do JOIN
+    print('🔍 [JOIN] Quarto $numeroQuarto:');
+    for (final row in result) {
+      print('   ${row['nome_hospede']}: CPF_Q="${row['cpf_quarto']}" CPF_P="${row['cpf_pessoa']}" MOV="${row['movimentacao']}"');
+    }
 
     return result;
   }
