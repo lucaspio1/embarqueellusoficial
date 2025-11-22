@@ -746,6 +746,7 @@ class DatabaseHelper {
     String? turma,
     String? inicioViagem,
     String? fimViagem,
+    bool updateMovimentacao = true, // ✅ Controla se deve atualizar movimentacao
   }) async {
     final db = await database;
     // ✅ CORREÇÃO: Adicionar conflictAlgorithm.ignore para evitar duplicatas
@@ -769,8 +770,12 @@ class DatabaseHelper {
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
 
+    // ✅ CORREÇÃO: Só atualiza movimentacao se for um log NOVO (não histórico)
+    // Quando sincronizando logs históricos do Google Sheets, não devemos
+    // sobrescrever o status atual (da aba PESSOAS) com dados históricos (da aba LOGS)
     final tipoNormalizado = tipo.trim().toUpperCase();
-    if (tipoNormalizado.isNotEmpty &&
+    if (updateMovimentacao &&
+        tipoNormalizado.isNotEmpty &&
         tipoNormalizado != 'RECONHECIMENTO' &&
         tipoNormalizado != 'FACIAL') {
       await updatePessoaMovimentacao(cpf, tipoNormalizado);
