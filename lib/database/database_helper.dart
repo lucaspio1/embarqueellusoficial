@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 7, // ✅ VERSÃO 7: Adicionar tabela quartos
+      version: 8, // ✅ VERSÃO 8: Adicionar índices para otimização de performance
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -153,6 +153,64 @@ class DatabaseHelper {
         print('⚠️ [DB] Erro ao criar tabela quartos: $e');
       }
     }
+    if (oldVersion < 8) {
+      // Adicionar índices para otimização de performance
+      try {
+        // Índice em pessoas_facial.cpf - usado em joins e buscas
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_pessoas_cpf ON pessoas_facial(cpf)');
+        print('✅ [DB] Migração v7 -> v8: Índice idx_pessoas_cpf criado');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao criar idx_pessoas_cpf: $e');
+      }
+
+      try {
+        // Índice composto em logs(cpf, timestamp) - usado em queries de histórico
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_logs_cpf_timestamp ON logs(cpf, timestamp)');
+        print('✅ [DB] Migração v7 -> v8: Índice idx_logs_cpf_timestamp criado');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao criar idx_logs_cpf_timestamp: $e');
+      }
+
+      try {
+        // Índice em pessoas_facial.movimentacao - usado em filtros de localização
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_pessoas_movimentacao ON pessoas_facial(movimentacao)');
+        print('✅ [DB] Migração v7 -> v8: Índice idx_pessoas_movimentacao criado');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao criar idx_pessoas_movimentacao: $e');
+      }
+
+      try {
+        // Índice em logs.tipo - usado em filtros de tipo de movimentação
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_logs_tipo ON logs(tipo)');
+        print('✅ [DB] Migração v7 -> v8: Índice idx_logs_tipo criado');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao criar idx_logs_tipo: $e');
+      }
+
+      try {
+        // Índice em pessoas_facial.facial_status - usado em filtros de status
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_pessoas_facial_status ON pessoas_facial(facial_status)');
+        print('✅ [DB] Migração v7 -> v8: Índice idx_pessoas_facial_status criado');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao criar idx_pessoas_facial_status: $e');
+      }
+
+      try {
+        // Índice em quartos.cpf - usado em joins com pessoas_facial
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_quartos_cpf ON quartos(cpf)');
+        print('✅ [DB] Migração v7 -> v8: Índice idx_quartos_cpf criado');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao criar idx_quartos_cpf: $e');
+      }
+
+      try {
+        // Índice em alunos.cpf - usado em buscas e joins
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_alunos_cpf ON alunos(cpf)');
+        print('✅ [DB] Migração v7 -> v8: Índice idx_alunos_cpf criado');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao criar idx_alunos_cpf: $e');
+      }
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -271,6 +329,16 @@ class DatabaseHelper {
         fim_viagem TEXT
       )
     ''');
+
+    // ✅ Criar índices para otimização de performance
+    await db.execute('CREATE INDEX idx_pessoas_cpf ON pessoas_facial(cpf)');
+    await db.execute('CREATE INDEX idx_logs_cpf_timestamp ON logs(cpf, timestamp)');
+    await db.execute('CREATE INDEX idx_pessoas_movimentacao ON pessoas_facial(movimentacao)');
+    await db.execute('CREATE INDEX idx_logs_tipo ON logs(tipo)');
+    await db.execute('CREATE INDEX idx_pessoas_facial_status ON pessoas_facial(facial_status)');
+    await db.execute('CREATE INDEX idx_quartos_cpf ON quartos(cpf)');
+    await db.execute('CREATE INDEX idx_alunos_cpf ON alunos(cpf)');
+    print('✅ [DB] Índices de performance criados');
   }
 
   Future<void> ensureFacialSchema() async {
