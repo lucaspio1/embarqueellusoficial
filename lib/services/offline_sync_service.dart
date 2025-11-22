@@ -22,6 +22,7 @@ class OfflineSyncService {
   String get _sheetsWebhook => AppConfig.instance.googleAppsScriptUrl;
 
   Timer? _syncTimer;
+  bool _isSyncing = false; // Lock para evitar sincronizações simultâneas
 
   void init() {
     _syncTimer?.cancel();
@@ -464,6 +465,13 @@ class OfflineSyncService {
   /// Sincroniza TUDO: Usuários, Alunos, Pessoas, Logs e Outbox
   /// Retorna resultado consolidado com estatísticas de cada tipo
   Future<ConsolidatedSyncResult> syncAll() async {
+    // Evitar sincronizações simultâneas
+    if (_isSyncing) {
+      print('⏸️ [OfflineSync] Sincronização já em andamento, pulando...');
+      return ConsolidatedSyncResult();
+    }
+
+    _isSyncing = true;
     print('🔄 [OfflineSync] Iniciando sincronização completa...');
 
     final results = ConsolidatedSyncResult();
@@ -472,6 +480,7 @@ class OfflineSyncService {
     if (!await _hasInternet()) {
       print('📵 [OfflineSync] Sem conexão com internet');
       results.hasInternet = false;
+      _isSyncing = false; // Liberar lock
       return results;
     }
 
@@ -559,6 +568,7 @@ class OfflineSyncService {
     print('   📢 Eventos: ${results.eventos.count} (${results.eventos.success ? "OK" : "FALHA"})');
     print('   📤 Outbox: ${results.outbox.success ? "OK" : "FALHA"}');
 
+    _isSyncing = false; // Liberar lock
     return results;
   }
 
