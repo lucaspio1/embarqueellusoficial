@@ -699,20 +699,6 @@ class DatabaseHelper {
   Future<Map<String, int>> getContagemPorMovimentacao() async {
     final db = await database;
 
-    // 🔍 DIAGNÓSTICO: Verificar TODAS as movimentações no banco (incluindo vazias e outras)
-    final todasMovimentacoes = await db.rawQuery('''
-      SELECT
-        COALESCE(TRIM(UPPER(movimentacao)), 'VAZIO_OU_NULL') AS mov,
-        COUNT(*) AS total
-      FROM pessoas_facial
-      GROUP BY TRIM(UPPER(movimentacao))
-    ''');
-
-    print('🔍 [DB] TODAS as movimentações na tabela pessoas_facial:');
-    for (final row in todasMovimentacoes) {
-      print('   ${row['mov']}: ${row['total']}');
-    }
-
     // ✅ Buscar da tabela pessoas_facial (onde as pessoas ESTÃO AGORA)
     // Não dos logs (histórico), para ser consistente com a listagem
     final result = await db.rawQuery('''
@@ -731,11 +717,6 @@ class DatabaseHelper {
       END
   ''');
 
-    print('🔍 [DB] Movimentações FILTRADAS (apenas as 4 válidas):');
-    for (final row in result) {
-      print('   ${row['tipo']}: ${row['total']}');
-    }
-
     final mapa = <String, int>{
       'QUARTO': 0,
       'SAIU_DO_QUARTO': 0,
@@ -750,7 +731,6 @@ class DatabaseHelper {
       }
     }
 
-    print('🔍 [DB] Mapa final retornado: $mapa');
     return mapa;
   }
 
