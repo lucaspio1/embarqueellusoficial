@@ -551,13 +551,13 @@ class OfflineSyncService {
         }
 
         // Validar estrutura da resposta
-        if (batchResponse['data'] == null || batchResponse['data']['responses'] == null) {
-          print('❌ [OfflineSync] Resposta de batch inválida (sem data/responses)');
+        if (batchResponse['responses'] == null) {
+          print('❌ [OfflineSync] Resposta de batch inválida (sem responses)');
           print('🔄 [OfflineSync] Fallback para sync individual...');
           return await _syncAllIndividual();
         }
 
-        final responses = batchResponse['data']['responses'] as List;
+        final responses = batchResponse['responses'] as List;
         final syncTimestamp = DateTime.now().toIso8601String();
 
         print('✅ [OfflineSync] Batch recebido com ${responses.length} respostas');
