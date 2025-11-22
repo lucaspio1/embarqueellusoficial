@@ -12,7 +12,7 @@ class QuartosSyncService {
   final DatabaseHelper _db = DatabaseHelper.instance;
   String get _sheetsWebhook => AppConfig.instance.googleAppsScriptUrl;
 
-  /// Sincroniza quartos da aba QUARTOS do Google Sheets
+  /// Sincroniza quartos da aba HOMELIST do Google Sheets
   Future<SyncResult> syncQuartosFromSheets() async {
     try {
       print('🔄 [QuartosSync] Iniciando sincronização de quartos...');
@@ -25,70 +25,132 @@ class QuartosSyncService {
         );
       }
 
-      // Fazer requisição ao Google Apps Script
-      final response = await http.post(
-        Uri.parse(_sheetsWebhook),
+      // Fazer requisição ao Google Apps Script com seguimento de redirect
+      final client = http.Client();
+      final request = http.Request('POST', Uri.parse(_sheetsWebhook))
+        ..followRedirects = false
+        ..headers['Content-Type'] = 'application/json; charset=utf-8'
+        ..headers['Accept'] = 'application/json'
+        ..headers['X-Requested-With'] = 'XMLHttpRequest'
+        ..headers['User-Agent'] = 'PostmanRuntime/7.32.3'
+        ..body = jsonEncode({'action': 'getQuartos'});
+
+      final streamedResponse = await client.send(request);
+      final response = await http.Response.fromStream(streamedResponse);
+      client.close();
+
+      print('📡 [QuartosSync] Status: ${response.statusCode}');
+
+      // Seguir redirect se necessário (302)
+      if (response.statusCode == 302 && response.headers['location'] != null) {
+        final redirectedUrl = response.headers['location']!;
+        print('🔁 [QuartosSync] Redirecionando para: $redirectedUrl');
+
+        http.Response redirectedResponse = await _followRedirect(redirectedUrl);
+        return await _processarResposta(redirectedResponse);
+      }
+
+      // Resposta direta (200)
+      if (response.statusCode == 200) {
+        return await _processarResposta(response);
+      }
+
+      print('❌ [QuartosSync] HTTP ${response.statusCode}: ${response.body}');
+      return SyncResult(
+        success: false,
+        message: 'Erro HTTP ${response.statusCode}',
+        count: 0,
+      );
+    } catch (e) {
+      print('❌ [QuartosSync] Erro ao sincronizar quartos: $e');
+      return SyncResult(
+        success: false,
+        message: e.toString(),
+        count: 0,
+      );
+    }
+  }
+
+  /// Segue o redirect (302) do Google Apps Script
+  Future<http.Response> _followRedirect(String redirectedUrl) async {
+    try {
+      // Tentar POST primeiro
+      http.Response redirectedResponse = await http.post(
+        Uri.parse(redirectedUrl),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'User-Agent': 'PostmanRuntime/7.32.3',
         },
-        body: jsonEncode({
-          'action': 'getQuartos',
-        }),
-      ).timeout(const Duration(seconds: 30));
+        body: jsonEncode({'action': 'getQuartos'}),
+      );
 
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
+      // Se POST não funcionar (405), tentar GET
+      if (redirectedResponse.statusCode == 405) {
+        print('⚠️ [QuartosSync] POST não permitido, tentando GET...');
+        redirectedResponse = await http.get(
+          Uri.parse(redirectedUrl),
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'PostmanRuntime/7.32.3',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+        );
+      }
 
-        if (body is Map && body['success'] == true) {
-          final List<dynamic> quartos = (body['data'] as List?) ?? [];
-          int count = 0;
+      return redirectedResponse;
+    } catch (e) {
+      print('❌ [QuartosSync] Erro ao seguir redirect: $e');
+      rethrow;
+    }
+  }
 
-          // Limpar quartos antigos antes de inserir novos
-          // await _db.clearQuartos();
+  /// Processa a resposta do Google Apps Script
+  Future<SyncResult> _processarResposta(http.Response response) async {
+    try {
+      final body = jsonDecode(response.body);
 
-          for (final q in quartos) {
-            if (q is Map && q['CPF'] != null && q['Quarto'] != null) {
-              try {
-                await _db.upsertQuarto({
-                  'numero_quarto': q['Quarto']?.toString() ?? '',
-                  'escola': q['Escola']?.toString() ?? '',
-                  'nome_hospede': q['Nome do Hóspede']?.toString() ?? '',
-                  'cpf': q['CPF']?.toString() ?? '',
-                  'inicio_viagem': q['inicio_viagem']?.toString(),
-                  'fim_viagem': q['fim_viagem']?.toString(),
-                });
-                count++;
-              } catch (e) {
-                print('⚠️ [QuartosSync] Erro ao inserir quarto: $e');
-              }
+      if (body is Map && body['success'] == true) {
+        final List<dynamic> quartos = (body['data'] as List?) ?? [];
+        print('📊 [QuartosSync] Total de quartos recebidos: ${quartos.length}');
+
+        int count = 0;
+
+        for (final q in quartos) {
+          if (q is Map && q['CPF'] != null && q['Quarto'] != null) {
+            try {
+              await _db.upsertQuarto({
+                'numero_quarto': q['Quarto']?.toString() ?? '',
+                'escola': q['Escola']?.toString() ?? '',
+                'nome_hospede': q['Nome do Hóspede']?.toString() ?? '',
+                'cpf': q['CPF']?.toString() ?? '',
+                'inicio_viagem': q['inicio_viagem']?.toString(),
+                'fim_viagem': q['fim_viagem']?.toString(),
+              });
+              count++;
+            } catch (e) {
+              print('⚠️ [QuartosSync] Erro ao inserir quarto: $e');
             }
           }
-
-          print('✅ [QuartosSync] $count quartos sincronizados com sucesso!');
-          return SyncResult(
-            success: true,
-            message: '$count quartos sincronizados',
-            count: count,
-          );
-        } else {
-          print('⚠️ [QuartosSync] Resposta sem success=true: ${response.body}');
-          return SyncResult(
-            success: false,
-            message: 'Resposta inválida do servidor',
-            count: 0,
-          );
         }
+
+        print('✅ [QuartosSync] $count quartos sincronizados com sucesso!');
+        return SyncResult(
+          success: true,
+          message: '$count quartos sincronizados',
+          count: count,
+        );
       } else {
-        print('❌ [QuartosSync] HTTP ${response.statusCode}: ${response.body}');
+        print('⚠️ [QuartosSync] Resposta sem success=true: ${response.body}');
         return SyncResult(
           success: false,
-          message: 'Erro HTTP ${response.statusCode}',
+          message: 'Resposta inválida do servidor',
           count: 0,
         );
       }
     } catch (e) {
-      print('❌ [QuartosSync] Erro ao sincronizar quartos: $e');
+      print('❌ [QuartosSync] Erro ao processar resposta: $e');
       return SyncResult(
         success: false,
         message: e.toString(),
