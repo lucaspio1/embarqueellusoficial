@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 8, // ✅ VERSÃO 8: Adicionar índices para otimização de performance
+      version: 9, // ✅ VERSÃO 9: Adicionar coluna sincronizado na tabela logs
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -211,6 +211,23 @@ class DatabaseHelper {
         print('⚠️ [DB] Erro ao criar idx_alunos_cpf: $e');
       }
     }
+    if (oldVersion < 9) {
+      // Adicionar coluna sincronizado à tabela logs para controle de sincronização
+      try {
+        await db.execute('ALTER TABLE logs ADD COLUMN sincronizado INTEGER DEFAULT 0');
+        print('✅ [DB] Migração v8 -> v9: Adicionada coluna sincronizado na tabela logs');
+      } catch (e) {
+        print('⚠️ [DB] Coluna sincronizado já existia em logs: $e');
+      }
+
+      try {
+        // Índice em logs.sincronizado - usado para buscar logs pendentes de sincronização
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_logs_sincronizado ON logs(sincronizado)');
+        print('✅ [DB] Migração v8 -> v9: Índice idx_logs_sincronizado criado');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao criar idx_logs_sincronizado: $e');
+      }
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -291,6 +308,7 @@ class DatabaseHelper {
         created_at TEXT,
         inicio_viagem TEXT,
         fim_viagem TEXT,
+        sincronizado INTEGER DEFAULT 0,
         UNIQUE(cpf, timestamp, tipo)
       )
     ''');
@@ -338,6 +356,7 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_pessoas_facial_status ON pessoas_facial(facial_status)');
     await db.execute('CREATE INDEX idx_quartos_cpf ON quartos(cpf)');
     await db.execute('CREATE INDEX idx_alunos_cpf ON alunos(cpf)');
+    await db.execute('CREATE INDEX idx_logs_sincronizado ON logs(sincronizado)');
     print('✅ [DB] Índices de performance criados');
   }
 
@@ -1283,6 +1302,62 @@ class DatabaseHelper {
       whereArgs: [inicioViagem, fimViagem],
     );
     print('✅ Quartos removidos: $quartosRemovidos');
+  }
+
+  // ========================================================================
+  // MÉTODOS PARA SINCRONIZAÇÃO DE LOGS COM CHUNKING
+  // ========================================================================
+
+  /// Busca logs pendentes de sincronização (sincronizado = 0)
+  /// Usa limit para implementar chunking (envio em lotes)
+  Future<List<Map<String, dynamic>>> getLogsPendentes({int limit = 50}) async {
+    final db = await database;
+    return await db.query(
+      'logs',
+      where: 'sincronizado = ?',
+      whereArgs: [0],
+      orderBy: 'timestamp ASC',
+      limit: limit,
+    );
+  }
+
+  /// Marca logs como sincronizados (sincronizado = 1)
+  Future<void> marcarLogsSincronizados(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.update(
+      'logs',
+      {'sincronizado': 1},
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
+    print('✅ [DB] ${ids.length} logs marcados como sincronizados');
+  }
+
+  /// Limpa logs antigos (mais de 30 dias E sincronizados)
+  /// Mantém o app leve, guardando histórico de apenas 30 dias
+  Future<int> limparLogsAntigos({int diasRetencao = 30}) async {
+    final db = await database;
+    final dataLimite = DateTime.now().subtract(Duration(days: diasRetencao));
+    final totalRemovidos = await db.delete(
+      'logs',
+      where: 'sincronizado = 1 AND timestamp < ?',
+      whereArgs: [dataLimite.toIso8601String()],
+    );
+    if (totalRemovidos > 0) {
+      print('🧹 [DB] $totalRemovidos logs antigos removidos (>$diasRetencao dias)');
+    }
+    return totalRemovidos;
+  }
+
+  /// Conta total de logs pendentes de sincronização
+  Future<int> contarLogsPendentes() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM logs WHERE sincronizado = 0'
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 
   Future<void> close() async {
