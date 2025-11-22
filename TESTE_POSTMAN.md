@@ -31,26 +31,26 @@ Se o script estiver **corretamente implantado**, você receberá:
   "success": true,
   "message": "Batch sync concluído",
   "data": {
-    "total_requests": 10,
+    "total_requests": 8,
     "responses": [
       {
         "action": "getAllUsers",
         "success": true,
         "data": {
           "success": true,
-          "data": [...array de usuários...]
+          "users": [...array de usuários...]
         }
       },
       {
-        "action": "syncLogs",
+        "action": "getAllLogs",
         "success": true,
         "data": {
           "success": true,
-          "message": "1 logs sincronizados com sucesso"
+          "data": [...array de logs...]
         }
       },
       {
-        "action": "getAllQuartos",
+        "action": "getQuartos",
         "success": true,
         "data": {
           "success": true,
@@ -62,7 +62,7 @@ Se o script estiver **corretamente implantado**, você receberá:
         "success": true,
         "data": {
           "success": true,
-          "data": [...todos os eventos...]
+          "eventos": [...todos os eventos...]
         }
       },
       {
@@ -70,7 +70,7 @@ Se o script estiver **corretamente implantado**, você receberá:
         "success": true,
         "data": {
           "success": true,
-          "data": [...apenas eventos após 15:00...]
+          "eventos": [...apenas eventos após 15:00...]
         }
       },
       {
@@ -82,7 +82,7 @@ Se o script estiver **corretamente implantado**, você receberá:
         }
       },
       {
-        "action": "getAllAlunos",
+        "action": "getAllStudents",
         "success": true,
         "data": {
           "success": true,
@@ -90,27 +90,11 @@ Se o script estiver **corretamente implantado**, você receberá:
         }
       },
       {
-        "action": "getPessoasByColegio",
+        "action": "getAlunos",
         "success": true,
         "data": {
           "success": true,
-          "data": [...pessoas do COC...]
-        }
-      },
-      {
-        "action": "getPessoasByTurma",
-        "success": true,
-        "data": {
-          "success": true,
-          "data": [...pessoas do 8 ANO 2...]
-        }
-      },
-      {
-        "action": "getQuartoByCPF",
-        "success": true,
-        "data": {
-          "success": true,
-          "data": {...dados do quarto...}
+          "data": [...array de alunos da aba específica...]
         }
       }
     ]
@@ -156,10 +140,10 @@ Após executar o teste, verifique:
 
 - [ ] Status code: `200 OK`
 - [ ] `success: true` no root
-- [ ] `total_requests: 10`
-- [ ] Array `responses` com 10 elementos
+- [ ] `total_requests: 8`
+- [ ] Array `responses` com 8 elementos
 - [ ] Cada response tem `action`, `success: true` e `data`
-- [ ] Teste 2 (syncLogs) gravou o log na planilha
+- [ ] Teste 2 (getAllLogs) retorna array de logs
 - [ ] Teste 5 retorna menos eventos que Teste 4 (delta sync funcionando)
 - [ ] Tempos de resposta < 10 segundos
 
@@ -168,15 +152,13 @@ Após executar o teste, verifique:
 ## 🎯 O que cada teste valida
 
 1. **getAllUsers** → Sistema de usuários
-2. **syncLogs** → Gravação de movimentações
-3. **getAllQuartos** → Sistema de quartos
+2. **getAllLogs** → Buscar todos os logs de movimentação
+3. **getQuartos** → Sistema de quartos (da aba HOMELIST)
 4. **getEventos (sem lastSync)** → Busca completa de eventos
 5. **getEventos (com lastSync)** → Delta sync de eventos
 6. **getAllPeople** → Pessoas com embeddings faciais
-7. **getAllAlunos** → Sistema de alunos
-8. **getPessoasByColegio** → Filtro por colégio
-9. **getPessoasByTurma** → Filtro por turma
-10. **getQuartoByCPF** → Busca individual de quarto
+7. **getAllStudents** → Sistema de alunos
+8. **getAlunos** → Buscar alunos de uma aba específica
 
 ---
 
