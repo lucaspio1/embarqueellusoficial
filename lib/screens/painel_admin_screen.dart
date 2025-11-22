@@ -644,8 +644,22 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       final contagemPorLocal = await _db.getContagemPorMovimentacao();
       final usuario = await _authService.getUsuarioLogado();
 
+      // 🔍 DIAGNÓSTICO: Imprimir dados brutos do banco
+      print('🔍 [DIAGNÓSTICO] Contagem do banco ANTES do agrupamento:');
+      print('   QUARTO: ${contagemPorLocal['QUARTO'] ?? 0}');
+      print('   SAIU_DO_QUARTO: ${contagemPorLocal['SAIU_DO_QUARTO'] ?? 0}');
+      print('   VOLTOU_AO_QUARTO: ${contagemPorLocal['VOLTOU_AO_QUARTO'] ?? 0}');
+      print('   FOI_PARA_BALADA: ${contagemPorLocal['FOI_PARA_BALADA'] ?? 0}');
+      print('   Total de chaves: ${contagemPorLocal.keys.toList()}');
+
       // Agrupar contagens para exibição em 3 cards
       final contagemAgrupada = _agruparContagens(contagemPorLocal);
+
+      // 🔍 DIAGNÓSTICO: Imprimir dados DEPOIS do agrupamento
+      print('🔍 [DIAGNÓSTICO] Contagem DEPOIS do agrupamento:');
+      print('   GRUPO_QUARTO: ${contagemAgrupada['GRUPO_QUARTO'] ?? 0}');
+      print('   SAIU_DO_QUARTO: ${contagemAgrupada['SAIU_DO_QUARTO'] ?? 0}');
+      print('   FOI_PARA_BALADA: ${contagemAgrupada['FOI_PARA_BALADA'] ?? 0}');
 
       if (mounted) {
         setState(() {
