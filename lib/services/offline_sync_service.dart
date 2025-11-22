@@ -11,6 +11,7 @@ import 'package:embarqueellus/config/app_config.dart';
 import 'package:embarqueellus/models/evento.dart';
 import 'package:embarqueellus/services/quartos_sync_service.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
+import 'package:embarqueellus/services/sync_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class OfflineSyncService {
@@ -18,6 +19,7 @@ class OfflineSyncService {
   static final OfflineSyncService instance = OfflineSyncService._();
 
   final DatabaseHelper _db = DatabaseHelper.instance;
+  final SyncManager _syncManager = SyncManager.instance;
 
   // URL lida do arquivo .env
   String get _sheetsWebhook => AppConfig.instance.googleAppsScriptUrl;
@@ -497,16 +499,16 @@ class OfflineSyncService {
 
       // ✅ OTIMIZAÇÃO 1: BATCHING HTTP - Enviar todas as requisições em um único request
       // ✅ OTIMIZAÇÃO 2: DELTA SYNC - Buscar apenas mudanças desde a última sync
+      // ✅ OTIMIZAÇÃO 3: SAFETY BUFFER - Usar margem de 20 minutos para não perder dados
       try {
-        print('🚀 [OfflineSync] Usando BATCHING HTTP + DELTA SYNC');
+        print('🚀 [OfflineSync] Usando BATCHING HTTP + DELTA SYNC + SAFETY BUFFER');
 
-        // Buscar timestamps da última sincronização
-        final prefs = await SharedPreferences.getInstance();
-        final lastSyncUsers = prefs.getString('last_sync_users');
-        final lastSyncPeople = prefs.getString('last_sync_people');
-        final lastSyncStudents = prefs.getString('last_sync_students');
-        final lastSyncLogs = prefs.getString('last_sync_logs');
-        final lastSyncEventos = prefs.getString('last_sync_eventos');
+        // Buscar timestamps da última sincronização COM SAFETY BUFFER (20 min antes)
+        final safeSyncUsers = await _syncManager.getSafeSyncParamUsers();
+        final safeSyncPeople = await _syncManager.getSafeSyncParamPeople();
+        final safeSyncStudents = await _syncManager.getSafeSyncParamStudents();
+        final safeSyncLogs = await _syncManager.getSafeSyncParamLogs();
+        final safeSyncEventos = await _syncManager.getSafeSyncParamEventos();
 
         // Montar requisição em batch
         final batchBody = {
@@ -514,33 +516,33 @@ class OfflineSyncService {
           'requests': [
             {
               'action': 'getAllUsers',
-              if (lastSyncUsers != null) 'since': lastSyncUsers,
+              if (safeSyncUsers != null) 'since': safeSyncUsers,
             },
             {
               'action': 'getAllPeople',
-              if (lastSyncPeople != null) 'since': lastSyncPeople,
+              if (safeSyncPeople != null) 'since': safeSyncPeople,
             },
             {
               'action': 'getAllStudents',
-              if (lastSyncStudents != null) 'since': lastSyncStudents,
+              if (safeSyncStudents != null) 'since': safeSyncStudents,
             },
             {
               'action': 'getAllLogs',
-              if (lastSyncLogs != null) 'since': lastSyncLogs,
+              if (safeSyncLogs != null) 'since': safeSyncLogs,
             },
             {
               'action': 'getQuartos',
             },
             {
               'action': 'getEventos',
-              if (lastSyncEventos != null) 'timestamp': lastSyncEventos,
+              if (safeSyncEventos != null) 'timestamp': safeSyncEventos,
             },
           ],
         };
 
         print('📤 [OfflineSync] Enviando batch com ${(batchBody['requests'] as List?)?.length} requisições...');
-        if (lastSyncPeople != null) {
-          print('🔄 [DeltaSync] Última sync de pessoas: $lastSyncPeople');
+        if (safeSyncPeople != null) {
+          print('🔄 [DeltaSync] Última sync de pessoas (com buffer): $safeSyncPeople');
         }
 
         // Enviar requisição única em batch
@@ -590,7 +592,7 @@ class OfflineSyncService {
                 final userResult = await _processUsersResponse(data);
                 results.users = userResult;
                 if (userResult.success) {
-                  await prefs.setString('last_sync_users', syncTimestamp);
+                  await _syncManager.saveServerSyncTimeUsers(syncTimestamp);
                 }
                 break;
 
@@ -598,7 +600,7 @@ class OfflineSyncService {
                 final pessoasResult = await _processPessoasResponse(data);
                 results.pessoas = pessoasResult;
                 if (pessoasResult.success) {
-                  await prefs.setString('last_sync_people', syncTimestamp);
+                  await _syncManager.saveServerSyncTimePeople(syncTimestamp);
                   FaceRecognitionService.instance.invalidateCache();
                 }
                 break;
@@ -607,7 +609,7 @@ class OfflineSyncService {
                 final alunosResult = await _processAlunosResponse(data);
                 results.alunos = alunosResult;
                 if (alunosResult.success) {
-                  await prefs.setString('last_sync_students', syncTimestamp);
+                  await _syncManager.saveServerSyncTimeStudents(syncTimestamp);
                 }
                 break;
 
@@ -615,7 +617,7 @@ class OfflineSyncService {
                 final logsResult = await _processLogsResponse(data);
                 results.logs = logsResult;
                 if (logsResult.success) {
-                  await prefs.setString('last_sync_logs', syncTimestamp);
+                  await _syncManager.saveServerSyncTimeLogs(syncTimestamp);
                 }
                 break;
 
@@ -628,7 +630,7 @@ class OfflineSyncService {
                 final eventosResult = await _processEventosResponse(data);
                 results.eventos = eventosResult;
                 if (eventosResult.success) {
-                  await prefs.setString('last_sync_eventos', syncTimestamp);
+                  await _syncManager.saveServerSyncTimeEventos(syncTimestamp);
                 }
                 break;
 
@@ -661,6 +663,22 @@ class OfflineSyncService {
       } catch (e) {
         print('❌ [Outbox] Erro: $e');
         results.outbox = SyncResult(success: false, message: e.toString(), count: 0);
+      }
+
+      // 8. Sincronizar Logs Pendentes em Lotes (Chunking)
+      try {
+        print('🔄 [OfflineSync] Verificando logs pendentes...');
+        final totalPendentes = await _db.contarLogsPendentes();
+
+        if (totalPendentes > 0) {
+          print('📊 [OfflineSync] Encontrados $totalPendentes logs pendentes de sincronização');
+          final totalSincronizados = await sincronizarLogsPendentes();
+          print('✅ [OfflineSync] $totalSincronizados logs sincronizados com sucesso');
+        } else {
+          print('✅ [OfflineSync] Nenhum log pendente de sincronização');
+        }
+      } catch (e) {
+        print('❌ [OfflineSync] Erro ao sincronizar logs pendentes: $e');
       }
 
       // Resumo final
@@ -1693,6 +1711,155 @@ class OfflineSyncService {
       return logs.isNotEmpty;
     } catch (e) {
       return false;
+    }
+  }
+
+  // ========================================================================
+  // TAREFA 3: ENVIO DE LOGS EM LOTES - CHUNKING
+  // ========================================================================
+
+  /// Sincroniza logs pendentes (sincronizado = 0) em lotes de 50
+  ///
+  /// IMPORTANTE: Não envia tudo de uma vez.
+  /// - Busca logs pendentes em lotes de 50
+  /// - Envia o lote para a API
+  /// - Se sucesso, marca esses 50 IDs como sincronizado = 1
+  /// - Continua para o próximo lote
+  /// - Se der erro no meio, para o loop (tenta de novo na próxima vez)
+  ///
+  /// Retorna o número total de logs sincronizados
+  Future<int> sincronizarLogsPendentes({int batchSize = 50}) async {
+    print('🔄 [LogsChunking] Iniciando sincronização de logs pendentes...');
+
+    // Verificar conectividade
+    if (!await _hasInternet()) {
+      print('📵 [LogsChunking] Sem conexão com internet');
+      return 0;
+    }
+
+    int totalSincronizados = 0;
+    bool continuarEnviando = true;
+
+    while (continuarEnviando) {
+      // Buscar próximo lote de logs pendentes
+      final logsPendentes = await _db.getLogsPendentes(limit: batchSize);
+
+      if (logsPendentes.isEmpty) {
+        print('✅ [LogsChunking] Nenhum log pendente restante');
+        continuarEnviando = false;
+        break;
+      }
+
+      print('📤 [LogsChunking] Enviando lote de ${logsPendentes.length} logs...');
+
+      // Preparar payload para envio
+      final logsPayload = logsPendentes.map((log) {
+        return {
+          'cpf': log['cpf'] ?? '',
+          'personName': log['person_name'] ?? '',
+          'colegio': log['colegio'] ?? '',
+          'turma': log['turma'] ?? '',
+          'timestamp': log['timestamp'] ?? DateTime.now().toIso8601String(),
+          'confidence': log['confidence'] ?? 0.0,
+          'tipo': log['tipo'] ?? 'RECONHECIMENTO',
+          'operadorNome': log['operador_nome'] ?? '',
+          'inicio_viagem': log['inicio_viagem'] ?? '',
+          'fim_viagem': log['fim_viagem'] ?? '',
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+      }).toList();
+
+      // Enviar lote para a API
+      final body = {
+        'action': 'addMovementLog',
+        'people': logsPayload,
+      };
+
+      try {
+        final response = await _postWithRedirectTolerance(body);
+
+        if (response == null) {
+          print('❌ [LogsChunking] Sem resposta do servidor, parando envio');
+          continuarEnviando = false;
+          break;
+        }
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          try {
+            final json = jsonDecode(response.body);
+            final success = json is Map && json['success'] == true;
+
+            if (success) {
+              // ✅ SUCESSO: Marcar logs como sincronizados
+              final ids = logsPendentes.map((log) => log['id'] as int).toList();
+              await _db.marcarLogsSincronizados(ids);
+
+              totalSincronizados += logsPendentes.length;
+              print('✅ [LogsChunking] Lote de ${logsPendentes.length} logs sincronizado com sucesso (total: $totalSincronizados)');
+
+              // Se o lote foi menor que o batch size, não há mais logs pendentes
+              if (logsPendentes.length < batchSize) {
+                continuarEnviando = false;
+              }
+            } else {
+              print('❌ [LogsChunking] Servidor retornou success=false, parando envio');
+              print('   Resposta: ${response.body}');
+              continuarEnviando = false;
+              break;
+            }
+          } catch (e) {
+            print('❌ [LogsChunking] Erro ao processar resposta: $e');
+            continuarEnviando = false;
+            break;
+          }
+        } else {
+          print('❌ [LogsChunking] Erro HTTP ${response.statusCode}, parando envio');
+          print('   Resposta: ${response.body}');
+          continuarEnviando = false;
+          break;
+        }
+      } catch (e) {
+        print('❌ [LogsChunking] Erro ao enviar lote: $e');
+        continuarEnviando = false;
+        break;
+      }
+
+      // Pequeno delay entre lotes para não sobrecarregar o servidor
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    // ========================================================================
+    // TAREFA 4: LIMPEZA AUTOMÁTICA - AUTO PURGE
+    // ========================================================================
+    if (totalSincronizados > 0) {
+      print('🧹 [LogsChunking] Iniciando limpeza automática de logs antigos...');
+      await limparLogsAntigos();
+    }
+
+    if (totalSincronizados > 0) {
+      print('✅ [LogsChunking] Sincronização concluída: $totalSincronizados logs enviados');
+    }
+
+    return totalSincronizados;
+  }
+
+  /// TAREFA 4: Limpeza Automática - AUTO PURGE
+  ///
+  /// Limpa logs antigos (mais de 30 dias E sincronizados)
+  /// Mantém o app leve, guardando histórico de apenas 30 dias
+  ///
+  /// Execute após o sucesso da sincronização
+  Future<void> limparLogsAntigos({int diasRetencao = 30}) async {
+    try {
+      final totalRemovidos = await _db.limparLogsAntigos(diasRetencao: diasRetencao);
+
+      if (totalRemovidos > 0) {
+        print('🧹 [AutoPurge] $totalRemovidos logs antigos removidos (>$diasRetencao dias)');
+      } else {
+        print('✅ [AutoPurge] Nenhum log antigo para remover');
+      }
+    } catch (e) {
+      print('❌ [AutoPurge] Erro ao limpar logs antigos: $e');
     }
   }
 }
