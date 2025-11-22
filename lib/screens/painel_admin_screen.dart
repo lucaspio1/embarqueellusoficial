@@ -61,7 +61,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final timestamp = prefs.getString('ultima_sincronizacao');
-      if (timestamp != null) {
+      if (timestamp != null && mounted) {
         setState(() {
           _ultimaAtualizacao = DateTime.parse(timestamp);
         });
@@ -77,9 +77,11 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       final prefs = await SharedPreferences.getInstance();
       final agora = DateTime.now();
       await prefs.setString('ultima_sincronizacao', agora.toIso8601String());
-      setState(() {
-        _ultimaAtualizacao = agora;
-      });
+      if (mounted) {
+        setState(() {
+          _ultimaAtualizacao = agora;
+        });
+      }
     } catch (e) {
       print('❌ Erro ao salvar última atualização: $e');
     }
@@ -97,6 +99,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
   /// Sincroniza todas as tabelas do Google Sheets
   Future<void> _sincronizarTodasTabelas() async {
     if (_sincronizando) return;
+    if (!mounted) return;
 
     setState(() => _sincronizando = true);
 
@@ -630,6 +633,7 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
   }
 
   Future<void> _carregarDados() async {
+    if (!mounted) return;
     setState(() => _carregando = true);
 
     try {
@@ -643,18 +647,22 @@ class _PainelAdminScreenState extends State<PainelAdminScreen> {
       // Agrupar contagens para exibição em 3 cards
       final contagemAgrupada = _agruparContagens(contagemPorLocal);
 
-      setState(() {
-        _totalAlunos = alunos.length;
-        _totalFaciais = alunosComFacial.length;
-        _totalLogs = logs.length;
-        _totalQuartos = quartos.length;
-        _usuario = usuario;
-        _contagemPorLocal = contagemAgrupada;
-        _carregando = false;
-      });
+      if (mounted) {
+        setState(() {
+          _totalAlunos = alunos.length;
+          _totalFaciais = alunosComFacial.length;
+          _totalLogs = logs.length;
+          _totalQuartos = quartos.length;
+          _usuario = usuario;
+          _contagemPorLocal = contagemAgrupada;
+          _carregando = false;
+        });
+      }
     } catch (e) {
       print('❌ Erro ao carregar dados: $e');
-      setState(() => _carregando = false);
+      if (mounted) {
+        setState(() => _carregando = false);
+      }
     }
   }
 
