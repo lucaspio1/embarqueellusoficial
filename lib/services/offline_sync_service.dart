@@ -529,7 +529,7 @@ class OfflineSyncService {
         ],
       };
 
-      print('📤 [OfflineSync] Enviando batch com ${batchBody['requests']?.length} requisições...');
+      print('📤 [OfflineSync] Enviando batch com ${(batchBody['requests'] as List?)?.length} requisições...');
       if (lastSyncPeople != null) {
         print('🔄 [DeltaSync] Última sync de pessoas: $lastSyncPeople');
       }
@@ -999,14 +999,14 @@ class OfflineSyncService {
         final quartos = (data['data'] as List);
         print('📥 [BatchSync] Processando ${quartos.length} quartos');
 
-        await _db.limparQuartos();
+        await _db.clearQuartos();
         int count = 0;
 
         for (final q in quartos) {
           if (q is! Map) continue;
           final quarto = Map<String, dynamic>.from(q);
 
-          await _db.insertQuarto({
+          await _db.upsertQuarto({
             'numero_quarto': quarto['Quarto'] ?? '',
             'escola': quarto['Escola'] ?? '',
             'nome_hospede': quarto['Nome do Hóspede'] ?? '',
