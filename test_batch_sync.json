@@ -1,0 +1,62 @@
+{
+  "action": "batchSync",
+  "requests": [
+    {
+      "action": "getAllUsers",
+      "comment": "Teste 1: Buscar todos os usuários"
+    },
+    {
+      "action": "syncLogs",
+      "logs": [
+        {
+          "nome": "TESTE POSTMAN",
+          "cpf": "99999999999",
+          "movimentacao": "FOI_PARA_BALADA",
+          "timestamp": "2025-11-22T18:30:00.000Z",
+          "operador": "TESTE_API",
+          "colegio": "Colégio Teste",
+          "turma": "9 ANO"
+        }
+      ],
+      "comment": "Teste 2: Enviar um log de teste"
+    },
+    {
+      "action": "getAllQuartos",
+      "comment": "Teste 3: Buscar todos os quartos"
+    },
+    {
+      "action": "getEventos",
+      "lastSync": null,
+      "comment": "Teste 4: Buscar todos os eventos (sem delta sync)"
+    },
+    {
+      "action": "getEventos",
+      "lastSync": "2025-11-22T15:00:00.000Z",
+      "comment": "Teste 5: Buscar eventos com delta sync"
+    },
+    {
+      "action": "getAllPeople",
+      "comment": "Teste 6: Buscar todas as pessoas (com embeddings)"
+    },
+    {
+      "action": "getAllAlunos",
+      "comment": "Teste 7: Buscar todos os alunos"
+    },
+    {
+      "action": "getPessoasByColegio",
+      "colegio": "COC",
+      "comment": "Teste 8: Buscar pessoas por colégio"
+    },
+    {
+      "action": "getPessoasByTurma",
+      "colegio": "COC",
+      "turma": "8 ANO 2",
+      "comment": "Teste 9: Buscar pessoas por turma específica"
+    },
+    {
+      "action": "getQuartoByCPF",
+      "cpf": "123456789",
+      "comment": "Teste 10: Buscar quarto de uma pessoa específica"
+    }
+  ]
+}
