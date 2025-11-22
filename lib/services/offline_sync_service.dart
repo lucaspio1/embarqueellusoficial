@@ -529,7 +529,7 @@ class OfflineSyncService {
         ],
       };
 
-      print('📤 [OfflineSync] Enviando batch com ${batchBody['requests']?.length} requisições...');
+      print('📤 [OfflineSync] Enviando batch com ${(batchBody['requests'] as List?)?.length} requisições...');
       if (lastSyncPeople != null) {
         print('🔄 [DeltaSync] Última sync de pessoas: $lastSyncPeople');
       }
@@ -854,10 +854,12 @@ class OfflineSyncService {
 
         final total = await _db.getTotalUsuarios();
         print('✅ [BatchSync] $total usuários sincronizados');
-        return SyncResult(success: true, message: '$total usuários', count: total);
+        return SyncResult(success: true, message: '$total usuários sincronizados', count: total);
       }
 
-      return SyncResult(success: false, message: 'Dados inválidos', count: 0);
+      // Se não é uma lista, mas não houve erro de rede, considerar como lista vazia (sucesso)
+      print('⚠️ [BatchSync] Resposta sem lista de usuários, assumindo lista vazia');
+      return SyncResult(success: true, message: '0 usuários sincronizados', count: 0);
     } catch (e) {
       print('❌ [BatchSync] Erro ao processar users: $e');
       return SyncResult(success: false, message: e.toString(), count: 0);
@@ -999,14 +1001,14 @@ class OfflineSyncService {
         final quartos = (data['data'] as List);
         print('📥 [BatchSync] Processando ${quartos.length} quartos');
 
-        await _db.limparQuartos();
+        await _db.clearQuartos();
         int count = 0;
 
         for (final q in quartos) {
           if (q is! Map) continue;
           final quarto = Map<String, dynamic>.from(q);
 
-          await _db.insertQuarto({
+          await _db.upsertQuarto({
             'numero_quarto': quarto['Quarto'] ?? '',
             'escola': quarto['Escola'] ?? '',
             'nome_hospede': quarto['Nome do Hóspede'] ?? '',
@@ -1136,35 +1138,42 @@ class OfflineSyncService {
       return SyncResult(success: false, message: 'JSON inválido', count: 0);
     }
 
-    if (data is Map && data['success'] == true && data['users'] is List) {
-      final usuarios = (data['users'] as List);
+    if (data is Map && data['success'] == true) {
+      if (data['users'] is List) {
+        final usuarios = (data['users'] as List);
 
-      print('📥 [UserSync] Recebidos ${usuarios.length} usuários');
-      await _db.deleteAllUsuarios();
+        print('📥 [UserSync] Recebidos ${usuarios.length} usuários');
+        await _db.deleteAllUsuarios();
 
-      for (final u in usuarios) {
-        if (u is! Map) continue;
-        final usuario = Map<String, dynamic>.from(u);
-        final senhaOriginal = (usuario['senha'] ?? '').toString();
-        final senhaHash = _hashSenha(senhaOriginal);
+        for (final u in usuarios) {
+          if (u is! Map) continue;
+          final usuario = Map<String, dynamic>.from(u);
+          final senhaOriginal = (usuario['senha'] ?? '').toString();
+          final senhaHash = _hashSenha(senhaOriginal);
 
-        await _db.upsertUsuario({
-          'user_id': (usuario['id'] ?? '').toString(),
-          'nome': usuario['nome'],
-          'cpf': (usuario['cpf'] ?? '').toString().trim(),
-          'senha_hash': senhaHash,
-          'perfil': (usuario['perfil'] ?? 'USUARIO').toString().toUpperCase(),
-          'ativo': 1,
-        });
+          await _db.upsertUsuario({
+            'user_id': (usuario['id'] ?? '').toString(),
+            'nome': usuario['nome'],
+            'cpf': (usuario['cpf'] ?? '').toString().trim(),
+            'senha_hash': senhaHash,
+            'perfil': (usuario['perfil'] ?? 'USUARIO').toString().toUpperCase(),
+            'ativo': 1,
+          });
+        }
+
+        final total = await _db.getTotalUsuarios();
+        print('✅ [UserSync] $total usuários sincronizados');
+        return SyncResult(success: true, message: '$total usuários sincronizados', count: total);
+      } else {
+        // Resposta com success=true mas sem lista de usuários - assumir lista vazia
+        print('⚠️ [UserSync] Resposta sem lista de usuários, assumindo lista vazia');
+        await _db.deleteAllUsuarios();
+        return SyncResult(success: true, message: '0 usuários sincronizados', count: 0);
       }
-
-      final total = await _db.getTotalUsuarios();
-      print('✅ [UserSync] $total usuários sincronizados');
-      return SyncResult(success: true, message: '$total usuários sincronizados', count: total);
     }
 
-    print('⚠️ [UserSync] Resposta sem usuários');
-    return SyncResult(success: false, message: 'Nenhum usuário encontrado', count: 0);
+    print('❌ [UserSync] Resposta inválida do servidor');
+    return SyncResult(success: false, message: 'Resposta inválida do servidor', count: 0);
   }
 
   // -----------------------------

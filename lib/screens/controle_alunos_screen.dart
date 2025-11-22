@@ -297,7 +297,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
             children: [
               Text('✅ Facial cadastrada: ${aluno['nome']}',
                   style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('🏠 Local inicial: QUARTO'),
               Text('☁️ Sincronizando em segundo plano...'),
             ],
           ),
@@ -429,7 +428,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
               Text('✅ Facial cadastrada com alta precisão!',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               Text('${aluno['nome']} - ${result.processedImages!.length} imagens processadas'),
-              Text('🏠 Local inicial: QUARTO'),
               Text('☁️ Sincronizando em segundo plano...'),
             ],
           ),
