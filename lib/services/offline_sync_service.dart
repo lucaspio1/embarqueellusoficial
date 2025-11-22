@@ -476,190 +476,200 @@ class OfflineSyncService {
     _isSyncing = true;
     print('🔄 [OfflineSync] Iniciando sincronização completa...');
 
-    final results = ConsolidatedSyncResult();
-
-    // Verificar conectividade
-    if (!await _hasInternet()) {
-      print('📵 [OfflineSync] Sem conexão com internet');
-      results.hasInternet = false;
-      _isSyncing = false; // Liberar lock
-      return results;
-    }
-
-    // ✅ OTIMIZAÇÃO 1: BATCHING HTTP - Enviar todas as requisições em um único request
-    // ✅ OTIMIZAÇÃO 2: DELTA SYNC - Buscar apenas mudanças desde a última sync
     try {
-      print('🚀 [OfflineSync] Usando BATCHING HTTP + DELTA SYNC');
+      final results = ConsolidatedSyncResult();
 
-      // Buscar timestamps da última sincronização
-      final prefs = await SharedPreferences.getInstance();
-      final lastSyncUsers = prefs.getString('last_sync_users');
-      final lastSyncPeople = prefs.getString('last_sync_people');
-      final lastSyncStudents = prefs.getString('last_sync_students');
-      final lastSyncLogs = prefs.getString('last_sync_logs');
-      final lastSyncEventos = prefs.getString('last_sync_eventos');
-
-      // Montar requisição em batch
-      final batchBody = {
-        'action': 'batchSync',
-        'requests': [
-          {
-            'action': 'getAllUsers',
-            if (lastSyncUsers != null) 'since': lastSyncUsers,
-          },
-          {
-            'action': 'getAllPeople',
-            if (lastSyncPeople != null) 'since': lastSyncPeople,
-          },
-          {
-            'action': 'getAllStudents',
-            if (lastSyncStudents != null) 'since': lastSyncStudents,
-          },
-          {
-            'action': 'getAllLogs',
-            if (lastSyncLogs != null) 'since': lastSyncLogs,
-          },
-          {
-            'action': 'getQuartos',
-          },
-          {
-            'action': 'getEventos',
-            if (lastSyncEventos != null) 'timestamp': lastSyncEventos,
-          },
-        ],
-      };
-
-      print('📤 [OfflineSync] Enviando batch com ${(batchBody['requests'] as List?)?.length} requisições...');
-      if (lastSyncPeople != null) {
-        print('🔄 [DeltaSync] Última sync de pessoas: $lastSyncPeople');
-      }
-
-      // Enviar requisição única em batch
-      final response = await _postWithRedirectTolerance(batchBody);
-
-      if (response == null || response.statusCode != 200) {
-        print('❌ [OfflineSync] Falha no batch sync: ${response?.statusCode}');
-        _isSyncing = false;
+      // Verificar conectividade
+      if (!await _hasInternet()) {
+        print('📵 [OfflineSync] Sem conexão com internet');
+        results.hasInternet = false;
         return results;
       }
 
-      final batchResponse = jsonDecode(response.body);
+      // ✅ OTIMIZAÇÃO 1: BATCHING HTTP - Enviar todas as requisições em um único request
+      // ✅ OTIMIZAÇÃO 2: DELTA SYNC - Buscar apenas mudanças desde a última sync
+      try {
+        print('🚀 [OfflineSync] Usando BATCHING HTTP + DELTA SYNC');
 
-      if (batchResponse['success'] != true) {
-        print('❌ [OfflineSync] Batch sync retornou success=false');
-        _isSyncing = false;
-        return results;
-      }
+        // Buscar timestamps da última sincronização
+        final prefs = await SharedPreferences.getInstance();
+        final lastSyncUsers = prefs.getString('last_sync_users');
+        final lastSyncPeople = prefs.getString('last_sync_people');
+        final lastSyncStudents = prefs.getString('last_sync_students');
+        final lastSyncLogs = prefs.getString('last_sync_logs');
+        final lastSyncEventos = prefs.getString('last_sync_eventos');
 
-      final responses = batchResponse['data']['responses'] as List;
-      final syncTimestamp = DateTime.now().toIso8601String();
+        // Montar requisição em batch
+        final batchBody = {
+          'action': 'batchSync',
+          'requests': [
+            {
+              'action': 'getAllUsers',
+              if (lastSyncUsers != null) 'since': lastSyncUsers,
+            },
+            {
+              'action': 'getAllPeople',
+              if (lastSyncPeople != null) 'since': lastSyncPeople,
+            },
+            {
+              'action': 'getAllStudents',
+              if (lastSyncStudents != null) 'since': lastSyncStudents,
+            },
+            {
+              'action': 'getAllLogs',
+              if (lastSyncLogs != null) 'since': lastSyncLogs,
+            },
+            {
+              'action': 'getQuartos',
+            },
+            {
+              'action': 'getEventos',
+              if (lastSyncEventos != null) 'timestamp': lastSyncEventos,
+            },
+          ],
+        };
 
-      print('✅ [OfflineSync] Batch recebido com ${responses.length} respostas');
-
-      // Processar cada resposta do batch
-      for (final item in responses) {
-        final action = item['action'] as String;
-        final success = item['success'] as bool;
-        final data = item['data'];
-
-        print('📥 [OfflineSync] Processando resposta: $action (success: $success)');
-
-        if (!success) {
-          print('⚠️ [OfflineSync] $action falhou: ${item['error']}');
-          continue;
+        print('📤 [OfflineSync] Enviando batch com ${(batchBody['requests'] as List?)?.length} requisições...');
+        if (lastSyncPeople != null) {
+          print('🔄 [DeltaSync] Última sync de pessoas: $lastSyncPeople');
         }
 
-        try {
-          switch (action) {
-            case 'getAllUsers':
-              final userResult = await _processUsersResponse(data);
-              results.users = userResult;
-              if (userResult.success) {
-                await prefs.setString('last_sync_users', syncTimestamp);
-              }
-              break;
+        // Enviar requisição única em batch
+        final response = await _postWithRedirectTolerance(batchBody);
 
-            case 'getAllPeople':
-              final pessoasResult = await _processPessoasResponse(data);
-              results.pessoas = pessoasResult;
-              if (pessoasResult.success) {
-                await prefs.setString('last_sync_people', syncTimestamp);
-                FaceRecognitionService.instance.invalidateCache();
-              }
-              break;
+        if (response == null || response.statusCode != 200) {
+          print('❌ [OfflineSync] Falha no batch sync: ${response?.statusCode}');
+          return results;
+        }
 
-            case 'getAllStudents':
-              final alunosResult = await _processAlunosResponse(data);
-              results.alunos = alunosResult;
-              if (alunosResult.success) {
-                await prefs.setString('last_sync_students', syncTimestamp);
-              }
-              break;
+        final batchResponse = jsonDecode(response.body);
 
-            case 'getAllLogs':
-              final logsResult = await _processLogsResponse(data);
-              results.logs = logsResult;
-              if (logsResult.success) {
-                await prefs.setString('last_sync_logs', syncTimestamp);
-              }
-              break;
+        if (batchResponse['success'] != true) {
+          print('❌ [OfflineSync] Batch sync retornou success=false');
+          print('🔄 [OfflineSync] Fallback para sync individual...');
+          return await _syncAllIndividual();
+        }
 
-            case 'getQuartos':
-              final quartosResult = await _processQuartosResponse(data);
-              results.quartos = quartosResult;
-              break;
+        // Validar estrutura da resposta
+        if (batchResponse['data'] == null || batchResponse['data']['responses'] == null) {
+          print('❌ [OfflineSync] Resposta de batch inválida (sem data/responses)');
+          print('🔄 [OfflineSync] Fallback para sync individual...');
+          return await _syncAllIndividual();
+        }
 
-            case 'getEventos':
-              final eventosResult = await _processEventosResponse(data);
-              results.eventos = eventosResult;
-              if (eventosResult.success) {
-                await prefs.setString('last_sync_eventos', syncTimestamp);
-              }
-              break;
+        final responses = batchResponse['data']['responses'] as List;
+        final syncTimestamp = DateTime.now().toIso8601String();
 
-            default:
-              print('⚠️ [OfflineSync] Ação desconhecida no batch: $action');
+        print('✅ [OfflineSync] Batch recebido com ${responses.length} respostas');
+
+        // Processar cada resposta do batch
+        for (final item in responses) {
+          final action = item['action'] as String;
+          final success = item['success'] as bool;
+          final data = item['data'];
+
+          print('📥 [OfflineSync] Processando resposta: $action (success: $success)');
+
+          if (!success) {
+            print('⚠️ [OfflineSync] $action falhou: ${item['error']}');
+            continue;
           }
-        } catch (e) {
-          print('❌ [OfflineSync] Erro ao processar $action: $e');
+
+          try {
+            switch (action) {
+              case 'getAllUsers':
+                final userResult = await _processUsersResponse(data);
+                results.users = userResult;
+                if (userResult.success) {
+                  await prefs.setString('last_sync_users', syncTimestamp);
+                }
+                break;
+
+              case 'getAllPeople':
+                final pessoasResult = await _processPessoasResponse(data);
+                results.pessoas = pessoasResult;
+                if (pessoasResult.success) {
+                  await prefs.setString('last_sync_people', syncTimestamp);
+                  FaceRecognitionService.instance.invalidateCache();
+                }
+                break;
+
+              case 'getAllStudents':
+                final alunosResult = await _processAlunosResponse(data);
+                results.alunos = alunosResult;
+                if (alunosResult.success) {
+                  await prefs.setString('last_sync_students', syncTimestamp);
+                }
+                break;
+
+              case 'getAllLogs':
+                final logsResult = await _processLogsResponse(data);
+                results.logs = logsResult;
+                if (logsResult.success) {
+                  await prefs.setString('last_sync_logs', syncTimestamp);
+                }
+                break;
+
+              case 'getQuartos':
+                final quartosResult = await _processQuartosResponse(data);
+                results.quartos = quartosResult;
+                break;
+
+              case 'getEventos':
+                final eventosResult = await _processEventosResponse(data);
+                results.eventos = eventosResult;
+                if (eventosResult.success) {
+                  await prefs.setString('last_sync_eventos', syncTimestamp);
+                }
+                break;
+
+              default:
+                print('⚠️ [OfflineSync] Ação desconhecida no batch: $action');
+            }
+          } catch (e) {
+            print('❌ [OfflineSync] Erro ao processar $action: $e');
+          }
         }
+
+        print('✅ [OfflineSync] Batch sync processado com sucesso');
+
+      } catch (e) {
+        print('❌ [OfflineSync] Erro no batch sync: $e');
+        // Se o batch falhar, tentar sync individual como fallback
+        print('🔄 [OfflineSync] Fallback para sync individual...');
+        return await _syncAllIndividual();
       }
 
-      print('✅ [OfflineSync] Batch sync processado com sucesso');
+      // 7. Sincronizar Outbox (fila de envio) - após todos os syncs
+      try {
+        final outboxSuccess = await trySyncNow();
+        results.outbox = SyncResult(
+          success: outboxSuccess,
+          message: outboxSuccess ? 'Outbox sincronizado' : 'Falha no outbox',
+          count: 0,
+        );
+        print('${outboxSuccess ? "✅" : "❌"} [Outbox] ${results.outbox.message}');
+      } catch (e) {
+        print('❌ [Outbox] Erro: $e');
+        results.outbox = SyncResult(success: false, message: e.toString(), count: 0);
+      }
 
-    } catch (e) {
-      print('❌ [OfflineSync] Erro no batch sync: $e');
-      // Se o batch falhar, tentar sync individual como fallback
-      print('🔄 [OfflineSync] Fallback para sync individual...');
-      return await _syncAllIndividual();
+      // Resumo final
+      print('\n📊 [OfflineSync] RESUMO DA SINCRONIZAÇÃO:');
+      print('   👥 Usuários: ${results.users.count} (${results.users.success ? "OK" : "FALHA"})');
+      print('   🎓 Alunos: ${results.alunos.count} (${results.alunos.success ? "OK" : "FALHA"})');
+      print('   👤 Pessoas: ${results.pessoas.count} (${results.pessoas.success ? "OK" : "FALHA"})');
+      print('   📝 Logs: ${results.logs.count} (${results.logs.success ? "OK" : "FALHA"})');
+      print('   🏨 Quartos: ${results.quartos.count} (${results.quartos.success ? "OK" : "FALHA"})');
+      print('   📢 Eventos: ${results.eventos.count} (${results.eventos.success ? "OK" : "FALHA"})');
+      print('   📤 Outbox: ${results.outbox.success ? "OK" : "FALHA"}');
+
+      return results;
+    } finally {
+      // SEMPRE resetar a flag, mesmo se houver erro
+      _isSyncing = false;
+      print('🔓 [OfflineSync] Lock liberado');
     }
-
-    // 7. Sincronizar Outbox (fila de envio) - após todos os syncs
-    try {
-      final outboxSuccess = await trySyncNow();
-      results.outbox = SyncResult(
-        success: outboxSuccess,
-        message: outboxSuccess ? 'Outbox sincronizado' : 'Falha no outbox',
-        count: 0,
-      );
-      print('${outboxSuccess ? "✅" : "❌"} [Outbox] ${results.outbox.message}');
-    } catch (e) {
-      print('❌ [Outbox] Erro: $e');
-      results.outbox = SyncResult(success: false, message: e.toString(), count: 0);
-    }
-
-    // Resumo final
-    print('\n📊 [OfflineSync] RESUMO DA SINCRONIZAÇÃO:');
-    print('   👥 Usuários: ${results.users.count} (${results.users.success ? "OK" : "FALHA"})');
-    print('   🎓 Alunos: ${results.alunos.count} (${results.alunos.success ? "OK" : "FALHA"})');
-    print('   👤 Pessoas: ${results.pessoas.count} (${results.pessoas.success ? "OK" : "FALHA"})');
-    print('   📝 Logs: ${results.logs.count} (${results.logs.success ? "OK" : "FALHA"})');
-    print('   🏨 Quartos: ${results.quartos.count} (${results.quartos.success ? "OK" : "FALHA"})');
-    print('   📢 Eventos: ${results.eventos.count} (${results.eventos.success ? "OK" : "FALHA"})');
-    print('   📤 Outbox: ${results.outbox.success ? "OK" : "FALHA"}');
-
-    _isSyncing = false; // Liberar lock
-    return results;
   }
 
   // -----------------------------
