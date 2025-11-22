@@ -1220,6 +1220,7 @@ class OfflineSyncService {
             turma: log['turma'] ?? '',
             inicioViagem: log['inicio_viagem'] ?? '',
             fimViagem: log['fim_viagem'] ?? '',
+            updateMovimentacao: false, // ✅ NÃO atualizar movimentacao com logs históricos
           );
           count++;
         } catch (e) {
