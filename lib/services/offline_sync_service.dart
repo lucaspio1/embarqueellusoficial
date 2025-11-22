@@ -731,20 +731,29 @@ class OfflineSyncService {
         return SyncResult(success: true, count: 0, message: 'Nenhum evento pendente');
       }
 
+      // ✅ CORREÇÃO: Carregar eventos já processados localmente
+      final eventosProcessados = prefs.getStringList('eventos_processados') ?? [];
+
       int processados = 0;
       String? novoTimestamp;
 
       for (final eventoJson in eventosData) {
         try {
           final evento = Evento.fromJson(eventoJson);
-          print('📢 [EventosSync] Processando evento: ${evento.tipoEvento} (${evento.id})');
+
+          // ✅ Verificar se já processou localmente
+          if (eventosProcessados.contains(evento.id)) {
+            print('⏭️ [EventosSync] Evento ${evento.id} já foi processado neste dispositivo, pulando...');
+            continue;
+          }
+
+          print('📢 [EventosSync] Processando evento NOVO: ${evento.tipoEvento} (${evento.id})');
 
           // Processar o evento
           await _processarEvento(evento);
 
-          // Marcar como processado no servidor
-          await _marcarEventoProcessado(evento.id);
-
+          // ✅ MUDANÇA: Marcar como processado LOCALMENTE (não no servidor)
+          eventosProcessados.add(evento.id);
           processados++;
 
           // Atualizar timestamp
@@ -754,16 +763,19 @@ class OfflineSyncService {
         }
       }
 
+      // ✅ Salvar lista de eventos processados localmente
+      await prefs.setStringList('eventos_processados', eventosProcessados);
+
       // Salvar último timestamp processado
       if (novoTimestamp != null) {
         await prefs.setString('ultimo_evento_timestamp', novoTimestamp);
       }
 
-      print('✅ [EventosSync] $processados evento(s) processado(s)');
+      print('✅ [EventosSync] $processados evento(s) NOVO(S) processado(s) (${eventosData.length} total recebidos)');
       return SyncResult(
         success: true,
         count: processados,
-        message: '$processados evento(s) processado(s)',
+        message: '$processados evento(s) processados',
       );
     } catch (e, stack) {
       print('❌ [EventosSync] Erro geral: $e');
@@ -1051,15 +1063,35 @@ class OfflineSyncService {
         final eventos = (data['eventos'] as List);
         print('📥 [BatchSync] Processando ${eventos.length} eventos');
 
+        // ✅ CORREÇÃO: Carregar eventos já processados localmente
+        final prefs = await SharedPreferences.getInstance();
+        final eventosProcessados = prefs.getStringList('eventos_processados') ?? [];
+
+        int novosEventos = 0;
+
         for (final e in eventos) {
           if (e is! Map) continue;
           final evento = Evento.fromJson(Map<String, dynamic>.from(e));
+
+          // ✅ Verificar se já processou localmente
+          if (eventosProcessados.contains(evento.id)) {
+            print('⏭️ [Eventos] Evento ${evento.id} já foi processado neste dispositivo, pulando...');
+            continue;
+          }
+
+          print('📢 [Eventos] Processando evento NOVO: ${evento.tipoEvento} (${evento.id})');
           await _processarEvento(evento);
-          await _marcarEventoProcessado(evento.id);
+
+          // ✅ MUDANÇA: Marcar como processado LOCALMENTE (não no servidor)
+          eventosProcessados.add(evento.id);
+          novosEventos++;
         }
 
-        print('✅ [BatchSync] ${eventos.length} eventos processados');
-        return SyncResult(success: true, message: '${eventos.length} eventos', count: eventos.length);
+        // ✅ Salvar lista de eventos processados localmente
+        await prefs.setStringList('eventos_processados', eventosProcessados);
+
+        print('✅ [BatchSync] ${novosEventos} evento(s) NOVO(S) processado(s) (${eventos.length} total recebidos)');
+        return SyncResult(success: true, message: '$novosEventos eventos processados', count: novosEventos);
       }
 
       return SyncResult(success: true, message: 'Nenhum evento pendente', count: 0);
