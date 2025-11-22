@@ -464,6 +464,7 @@ class OfflineSyncService {
   // ====================================================================
 
   /// Sincroniza TUDO: Usuários, Alunos, Pessoas, Logs e Outbox
+  /// ✅ OTIMIZADO: Usa Batching HTTP + Delta Sync
   /// Retorna resultado consolidado com estatísticas de cada tipo
   Future<ConsolidatedSyncResult> syncAll() async {
     // Evitar sincronizações simultâneas
@@ -485,72 +486,153 @@ class OfflineSyncService {
       return results;
     }
 
-    // ✅ OTIMIZAÇÃO: Sincronizar em PARALELO para reduzir tempo total em 80%
-    print('🚀 [OfflineSync] Executando sincronizações em paralelo...');
+    // ✅ OTIMIZAÇÃO 1: BATCHING HTTP - Enviar todas as requisições em um único request
+    // ✅ OTIMIZAÇÃO 2: DELTA SYNC - Buscar apenas mudanças desde a última sync
+    try {
+      print('🚀 [OfflineSync] Usando BATCHING HTTP + DELTA SYNC');
 
-    await Future.wait([
-      // 1. Sincronizar Usuários
-      _syncUsers().then((userResult) {
-        results.users = userResult;
-        print('${userResult.success ? "✅" : "❌"} [Users] ${userResult.message}');
-      }).catchError((e) {
-        print('❌ [Users] Erro: $e');
-        results.users = SyncResult(success: false, message: e.toString(), count: 0);
-      }),
+      // Buscar timestamps da última sincronização
+      final prefs = await SharedPreferences.getInstance();
+      final lastSyncUsers = prefs.getString('last_sync_users');
+      final lastSyncPeople = prefs.getString('last_sync_people');
+      final lastSyncStudents = prefs.getString('last_sync_students');
+      final lastSyncLogs = prefs.getString('last_sync_logs');
+      final lastSyncEventos = prefs.getString('last_sync_eventos');
 
-      // 2. Sincronizar Alunos
-      _syncAlunos().then((alunosResult) {
-        results.alunos = alunosResult;
-        print('${alunosResult.success ? "✅" : "❌"} [Alunos] ${alunosResult.message}');
-      }).catchError((e) {
-        print('❌ [Alunos] Erro: $e');
-        results.alunos = SyncResult(success: false, message: e.toString(), count: 0);
-      }),
+      // Montar requisição em batch
+      final batchBody = {
+        'action': 'batchSync',
+        'requests': [
+          {
+            'action': 'getAllUsers',
+            if (lastSyncUsers != null) 'since': lastSyncUsers,
+          },
+          {
+            'action': 'getAllPeople',
+            if (lastSyncPeople != null) 'since': lastSyncPeople,
+          },
+          {
+            'action': 'getAllStudents',
+            if (lastSyncStudents != null) 'since': lastSyncStudents,
+          },
+          {
+            'action': 'getAllLogs',
+            if (lastSyncLogs != null) 'since': lastSyncLogs,
+          },
+          {
+            'action': 'getQuartos',
+          },
+          {
+            'action': 'getEventos',
+            if (lastSyncEventos != null) 'timestamp': lastSyncEventos,
+          },
+        ],
+      };
 
-      // 3. Sincronizar Pessoas (com embeddings)
-      _syncPessoas().then((pessoasResult) {
-        results.pessoas = pessoasResult;
-        print('${pessoasResult.success ? "✅" : "❌"} [Pessoas] ${pessoasResult.message}');
+      print('📤 [OfflineSync] Enviando batch com ${batchBody['requests']?.length} requisições...');
+      if (lastSyncPeople != null) {
+        print('🔄 [DeltaSync] Última sync de pessoas: $lastSyncPeople');
+      }
 
-        // ✅ Invalidar cache de embeddings após sync de pessoas
-        if (pessoasResult.success) {
-          FaceRecognitionService.instance.invalidateCache();
-          print('🔄 [OfflineSync] Cache de embeddings invalidado após sync de pessoas');
+      // Enviar requisição única em batch
+      final response = await _postWithRedirectTolerance(batchBody);
+
+      if (response == null || response.statusCode != 200) {
+        print('❌ [OfflineSync] Falha no batch sync: ${response?.statusCode}');
+        _isSyncing = false;
+        return results;
+      }
+
+      final batchResponse = jsonDecode(response.body);
+
+      if (batchResponse['success'] != true) {
+        print('❌ [OfflineSync] Batch sync retornou success=false');
+        _isSyncing = false;
+        return results;
+      }
+
+      final responses = batchResponse['data']['responses'] as List;
+      final syncTimestamp = DateTime.now().toIso8601String();
+
+      print('✅ [OfflineSync] Batch recebido com ${responses.length} respostas');
+
+      // Processar cada resposta do batch
+      for (final item in responses) {
+        final action = item['action'] as String;
+        final success = item['success'] as bool;
+        final data = item['data'];
+
+        print('📥 [OfflineSync] Processando resposta: $action (success: $success)');
+
+        if (!success) {
+          print('⚠️ [OfflineSync] $action falhou: ${item['error']}');
+          continue;
         }
-      }).catchError((e) {
-        print('❌ [Pessoas] Erro: $e');
-        results.pessoas = SyncResult(success: false, message: e.toString(), count: 0);
-      }),
 
-      // 4. Sincronizar Logs
-      _syncLogs().then((logsResult) {
-        results.logs = logsResult;
-        print('${logsResult.success ? "✅" : "❌"} [Logs] ${logsResult.message}');
-      }).catchError((e) {
-        print('❌ [Logs] Erro: $e');
-        results.logs = SyncResult(success: false, message: e.toString(), count: 0);
-      }),
+        try {
+          switch (action) {
+            case 'getAllUsers':
+              final userResult = await _processUsersResponse(data);
+              results.users = userResult;
+              if (userResult.success) {
+                await prefs.setString('last_sync_users', syncTimestamp);
+              }
+              break;
 
-      // 5. Sincronizar Quartos
-      _syncQuartos().then((quartosResult) {
-        results.quartos = quartosResult;
-        print('${quartosResult.success ? "✅" : "❌"} [Quartos] ${quartosResult.message}');
-      }).catchError((e) {
-        print('❌ [Quartos] Erro: $e');
-        results.quartos = SyncResult(success: false, message: e.toString(), count: 0);
-      }),
+            case 'getAllPeople':
+              final pessoasResult = await _processPessoasResponse(data);
+              results.pessoas = pessoasResult;
+              if (pessoasResult.success) {
+                await prefs.setString('last_sync_people', syncTimestamp);
+                FaceRecognitionService.instance.invalidateCache();
+              }
+              break;
 
-      // 6. Sincronizar Eventos (notificações de ações críticas)
-      _syncEventos().then((eventosResult) {
-        results.eventos = eventosResult;
-        print('${eventosResult.success ? "✅" : "❌"} [Eventos] ${eventosResult.message}');
-      }).catchError((e) {
-        print('❌ [Eventos] Erro: $e');
-        results.eventos = SyncResult(success: false, message: e.toString(), count: 0);
-      }),
-    ]);
+            case 'getAllStudents':
+              final alunosResult = await _processAlunosResponse(data);
+              results.alunos = alunosResult;
+              if (alunosResult.success) {
+                await prefs.setString('last_sync_students', syncTimestamp);
+              }
+              break;
 
-    print('✅ [OfflineSync] Sincronizações paralelas concluídas');
+            case 'getAllLogs':
+              final logsResult = await _processLogsResponse(data);
+              results.logs = logsResult;
+              if (logsResult.success) {
+                await prefs.setString('last_sync_logs', syncTimestamp);
+              }
+              break;
+
+            case 'getQuartos':
+              final quartosResult = await _processQuartosResponse(data);
+              results.quartos = quartosResult;
+              break;
+
+            case 'getEventos':
+              final eventosResult = await _processEventosResponse(data);
+              results.eventos = eventosResult;
+              if (eventosResult.success) {
+                await prefs.setString('last_sync_eventos', syncTimestamp);
+              }
+              break;
+
+            default:
+              print('⚠️ [OfflineSync] Ação desconhecida no batch: $action');
+          }
+        } catch (e) {
+          print('❌ [OfflineSync] Erro ao processar $action: $e');
+        }
+      }
+
+      print('✅ [OfflineSync] Batch sync processado com sucesso');
+
+    } catch (e) {
+      print('❌ [OfflineSync] Erro no batch sync: $e');
+      // Se o batch falhar, tentar sync individual como fallback
+      print('🔄 [OfflineSync] Fallback para sync individual...');
+      return await _syncAllIndividual();
+    }
 
     // 7. Sincronizar Outbox (fila de envio) - após todos os syncs
     try {
@@ -739,6 +821,287 @@ class OfflineSyncService {
       print('❌ [EventosSync] Erro ao marcar evento processado: $e');
       // Não propagar erro - não é crítico
     }
+  }
+
+  // ========================================================================
+  // MÉTODOS AUXILIARES PARA BATCHING E DELTA SYNC
+  // ========================================================================
+
+  /// Processa resposta de users do batch
+  Future<SyncResult> _processUsersResponse(Map<String, dynamic> data) async {
+    try {
+      if (data['users'] is List) {
+        final usuarios = (data['users'] as List);
+        print('📥 [BatchSync] Processando ${usuarios.length} usuários');
+
+        await _db.deleteAllUsuarios();
+
+        for (final u in usuarios) {
+          if (u is! Map) continue;
+          final usuario = Map<String, dynamic>.from(u);
+          final senhaOriginal = (usuario['senha'] ?? '').toString();
+          final senhaHash = _hashSenha(senhaOriginal);
+
+          await _db.upsertUsuario({
+            'user_id': (usuario['id'] ?? '').toString(),
+            'nome': usuario['nome'],
+            'cpf': (usuario['cpf'] ?? '').toString().trim(),
+            'senha_hash': senhaHash,
+            'perfil': (usuario['perfil'] ?? 'USUARIO').toString().toUpperCase(),
+            'ativo': 1,
+          });
+        }
+
+        final total = await _db.getTotalUsuarios();
+        print('✅ [BatchSync] $total usuários sincronizados');
+        return SyncResult(success: true, message: '$total usuários', count: total);
+      }
+
+      return SyncResult(success: false, message: 'Dados inválidos', count: 0);
+    } catch (e) {
+      print('❌ [BatchSync] Erro ao processar users: $e');
+      return SyncResult(success: false, message: e.toString(), count: 0);
+    }
+  }
+
+  /// Processa resposta de pessoas do batch
+  Future<SyncResult> _processPessoasResponse(Map<String, dynamic> data) async {
+    try {
+      if (data['data'] is List) {
+        final pessoas = (data['data'] as List);
+        print('📥 [BatchSync] Processando ${pessoas.length} pessoas');
+
+        int count = 0;
+        for (final p in pessoas) {
+          if (p is! Map) continue;
+          final pessoa = Map<String, dynamic>.from(p);
+
+          final embedding = pessoa['embedding'];
+          List<double>? embeddingList;
+          if (embedding != null) {
+            if (embedding is String) {
+              final parsed = jsonDecode(embedding);
+              if (parsed is List) {
+                embeddingList = parsed.map((e) => (e as num).toDouble()).toList();
+              }
+            } else if (embedding is List) {
+              embeddingList = embedding.map((e) => (e as num).toDouble()).toList();
+            }
+          }
+
+          await _db.upsertPessoaFacial({
+            'cpf': (pessoa['cpf'] ?? '').toString().trim(),
+            'nome': pessoa['nome'],
+            'colegio': pessoa['colegio'] ?? '',
+            'turma': pessoa['turma'] ?? '',
+            'email': pessoa['email'] ?? '',
+            'telefone': pessoa['telefone'] ?? '',
+            'embedding': embeddingList != null ? jsonEncode(embeddingList) : null,
+            'facial_status': 'CADASTRADA',
+            'movimentacao': pessoa['movimentacao'] ?? '',
+            'inicio_viagem': pessoa['inicio_viagem'] ?? '',
+            'fim_viagem': pessoa['fim_viagem'] ?? '',
+          });
+          count++;
+        }
+
+        print('✅ [BatchSync] $count pessoas sincronizadas');
+        return SyncResult(success: true, message: '$count pessoas', count: count);
+      }
+
+      return SyncResult(success: false, message: 'Dados inválidos', count: 0);
+    } catch (e) {
+      print('❌ [BatchSync] Erro ao processar pessoas: $e');
+      return SyncResult(success: false, message: e.toString(), count: 0);
+    }
+  }
+
+  /// Processa resposta de alunos do batch
+  Future<SyncResult> _processAlunosResponse(Map<String, dynamic> data) async {
+    try {
+      if (data['data'] is List) {
+        final alunos = (data['data'] as List);
+        print('📥 [BatchSync] Processando ${alunos.length} alunos');
+
+        int count = 0;
+        for (final a in alunos) {
+          if (a is! Map) continue;
+          final aluno = Map<String, dynamic>.from(a);
+
+          await _db.upsertAluno({
+            'cpf': (aluno['cpf'] ?? '').toString().trim(),
+            'nome': aluno['nome'],
+            'colegio': aluno['colegio'] ?? '',
+            'turma': aluno['turma'] ?? '',
+            'email': aluno['email'] ?? '',
+            'telefone': aluno['telefone'] ?? '',
+            'facial': aluno['facial_status'] ?? 'NAO',
+            'tem_qr': aluno['tem_qr'] ?? 'NAO',
+            'inicio_viagem': aluno['inicio_viagem'] ?? '',
+            'fim_viagem': aluno['fim_viagem'] ?? '',
+          });
+          count++;
+        }
+
+        print('✅ [BatchSync] $count alunos sincronizados');
+        return SyncResult(success: true, message: '$count alunos', count: count);
+      }
+
+      return SyncResult(success: false, message: 'Dados inválidos', count: 0);
+    } catch (e) {
+      print('❌ [BatchSync] Erro ao processar alunos: $e');
+      return SyncResult(success: false, message: e.toString(), count: 0);
+    }
+  }
+
+  /// Processa resposta de logs do batch
+  Future<SyncResult> _processLogsResponse(Map<String, dynamic> data) async {
+    try {
+      if (data['data'] is List) {
+        final logs = (data['data'] as List);
+        print('📥 [BatchSync] Processando ${logs.length} logs');
+
+        int count = 0;
+        for (final l in logs) {
+          if (l is! Map) continue;
+          final log = Map<String, dynamic>.from(l);
+
+          await _db.insertLog(
+            cpf: (log['cpf'] ?? '').toString(),
+            personName: log['nome'] ?? '',
+            timestamp: DateTime.parse(log['timestamp']),
+            confidence: (log['confidence'] ?? 0.0) as double,
+            tipo: log['tipo'] ?? 'RECONHECIMENTO',
+            operadorNome: log['operador'] ?? '',
+            colegio: log['colegio'] ?? '',
+            turma: log['turma'] ?? '',
+            inicioViagem: log['inicio_viagem'] ?? '',
+            fimViagem: log['fim_viagem'] ?? '',
+          );
+          count++;
+        }
+
+        print('✅ [BatchSync] $count logs sincronizados');
+        return SyncResult(success: true, message: '$count logs', count: count);
+      }
+
+      return SyncResult(success: false, message: 'Dados inválidos', count: 0);
+    } catch (e) {
+      print('❌ [BatchSync] Erro ao processar logs: $e');
+      return SyncResult(success: false, message: e.toString(), count: 0);
+    }
+  }
+
+  /// Processa resposta de quartos do batch
+  Future<SyncResult> _processQuartosResponse(Map<String, dynamic> data) async {
+    try {
+      if (data['data'] is List) {
+        final quartos = (data['data'] as List);
+        print('📥 [BatchSync] Processando ${quartos.length} quartos');
+
+        await _db.limparQuartos();
+        int count = 0;
+
+        for (final q in quartos) {
+          if (q is! Map) continue;
+          final quarto = Map<String, dynamic>.from(q);
+
+          await _db.insertQuarto({
+            'numero_quarto': quarto['Quarto'] ?? '',
+            'escola': quarto['Escola'] ?? '',
+            'nome_hospede': quarto['Nome do Hóspede'] ?? '',
+            'cpf': quarto['CPF'] ?? '',
+            'inicio_viagem': quarto['Início Viagem'] ?? '',
+            'fim_viagem': quarto['Fim Viagem'] ?? '',
+          });
+          count++;
+        }
+
+        print('✅ [BatchSync] $count quartos sincronizados');
+        return SyncResult(success: true, message: '$count quartos', count: count);
+      }
+
+      return SyncResult(success: false, message: 'Dados inválidos', count: 0);
+    } catch (e) {
+      print('❌ [BatchSync] Erro ao processar quartos: $e');
+      return SyncResult(success: false, message: e.toString(), count: 0);
+    }
+  }
+
+  /// Processa resposta de eventos do batch
+  Future<SyncResult> _processEventosResponse(Map<String, dynamic> data) async {
+    try {
+      if (data['eventos'] is List) {
+        final eventos = (data['eventos'] as List);
+        print('📥 [BatchSync] Processando ${eventos.length} eventos');
+
+        for (final e in eventos) {
+          if (e is! Map) continue;
+          final evento = Evento.fromJson(Map<String, dynamic>.from(e));
+          await _processarEvento(evento);
+          await _marcarEventoProcessado(evento.id);
+        }
+
+        print('✅ [BatchSync] ${eventos.length} eventos processados');
+        return SyncResult(success: true, message: '${eventos.length} eventos', count: eventos.length);
+      }
+
+      return SyncResult(success: true, message: 'Nenhum evento pendente', count: 0);
+    } catch (e) {
+      print('❌ [BatchSync] Erro ao processar eventos: $e');
+      return SyncResult(success: false, message: e.toString(), count: 0);
+    }
+  }
+
+  /// Fallback: Sync individual quando batch falhar
+  Future<ConsolidatedSyncResult> _syncAllIndividual() async {
+    print('🔄 [OfflineSync] Executando sync individual (fallback)...');
+
+    final results = ConsolidatedSyncResult();
+
+    // Executar syncs em paralelo (código antigo)
+    await Future.wait([
+      _syncUsers().then((userResult) {
+        results.users = userResult;
+      }).catchError((e) {
+        results.users = SyncResult(success: false, message: e.toString(), count: 0);
+      }),
+
+      _syncPessoas().then((pessoasResult) {
+        results.pessoas = pessoasResult;
+        if (pessoasResult.success) {
+          FaceRecognitionService.instance.invalidateCache();
+        }
+      }).catchError((e) {
+        results.pessoas = SyncResult(success: false, message: e.toString(), count: 0);
+      }),
+
+      _syncAlunos().then((alunosResult) {
+        results.alunos = alunosResult;
+      }).catchError((e) {
+        results.alunos = SyncResult(success: false, message: e.toString(), count: 0);
+      }),
+
+      _syncLogs().then((logsResult) {
+        results.logs = logsResult;
+      }).catchError((e) {
+        results.logs = SyncResult(success: false, message: e.toString(), count: 0);
+      }),
+
+      _syncQuartos().then((quartosResult) {
+        results.quartos = quartosResult;
+      }).catchError((e) {
+        results.quartos = SyncResult(success: false, message: e.toString(), count: 0);
+      }),
+
+      _syncEventos().then((eventosResult) {
+        results.eventos = eventosResult;
+      }).catchError((e) {
+        results.eventos = SyncResult(success: false, message: e.toString(), count: 0);
+      }),
+    ]);
+
+    return results;
   }
 
   // -----------------------------
