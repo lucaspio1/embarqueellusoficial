@@ -981,6 +981,14 @@ class DatabaseHelper {
     totalRemovidos += alunosRemovidos;
     print('   - Alunos removidos: $alunosRemovidos');
 
+    // ✅ IMPORTANTE: Buscar CPFs ANTES de deletar pessoas_facial (para limpar embeddings)
+    final cpfsViagem = await db.query(
+      'pessoas_facial',
+      columns: ['cpf'],
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+
     // Limpar pessoas_facial
     final pessoasRemovidas = await db.delete(
       'pessoas_facial',
@@ -989,6 +997,22 @@ class DatabaseHelper {
     );
     totalRemovidos += pessoasRemovidas;
     print('   - Pessoas removidas: $pessoasRemovidas');
+
+    // Limpar embeddings (faciais) dos CPFs da viagem
+    int embeddingsRemovidos = 0;
+    for (final row in cpfsViagem) {
+      final cpf = row['cpf'] as String?;
+      if (cpf != null && cpf.isNotEmpty) {
+        final removed = await db.delete(
+          'embeddings',
+          where: 'cpf = ?',
+          whereArgs: [cpf],
+        );
+        embeddingsRemovidos += removed;
+      }
+    }
+    totalRemovidos += embeddingsRemovidos;
+    print('   - Embeddings removidos: $embeddingsRemovidos');
 
     // Limpar logs
     final logsRemovidos = await db.delete(
@@ -1007,6 +1031,12 @@ class DatabaseHelper {
     );
     totalRemovidos += quartosRemovidos;
     print('   - Quartos removidos: $quartosRemovidos');
+
+    // ✅ Limpar outbox/sync_queue para evitar enviar dados órfãos ao servidor
+    // Nota: sync_queue não tem colunas inicio_viagem/fim_viagem, então limpamos TODA a fila
+    final outboxRemovidos = await db.delete('sync_queue');
+    totalRemovidos += outboxRemovidos;
+    print('   - Outbox removidos: $outboxRemovidos');
 
     print('✅ [DB] Total de registros removidos: $totalRemovidos');
   }

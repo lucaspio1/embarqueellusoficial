@@ -386,9 +386,12 @@ class AcoesCriticasService {
     await db.delete('pessoas_facial');
     await db.delete('logs');
     await db.delete('alunos');
-    await db.delete('offline_sync_queue');
+    await db.delete('passageiros');
+    await db.delete('sync_queue');  // ✅ CORRIGIDO: Nome correto da tabela de outbox
+    await db.delete('quartos');
+    await db.delete('embeddings');
 
-    print('✅ Tabelas locais limpas: pessoas_facial, logs, alunos, offline_sync_queue');
+    print('✅ Tabelas locais limpas: pessoas_facial, logs, alunos, passageiros, sync_queue, quartos, embeddings');
   }
 
   /// Limpa registros filtrados por data de viagem do banco de dados local
@@ -414,7 +417,24 @@ class AcoesCriticasService {
       whereArgs: [inicioViagem, fimViagem],
     );
 
-    print('✅ Registros removidos: $totalPessoas pessoas, $totalLogs logs, $totalAlunos alunos');
+    int totalPassageiros = await db.delete(
+      'passageiros',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+
+    int totalQuartos = await db.delete(
+      'quartos',
+      where: 'inicio_viagem = ? AND fim_viagem = ?',
+      whereArgs: [inicioViagem, fimViagem],
+    );
+
+    // ✅ Limpar outbox de registros enfileirados para essa viagem
+    // Nota: sync_queue não tem colunas inicio_viagem/fim_viagem, então limpamos TODA a fila
+    // quando uma viagem específica é encerrada (para evitar enviar dados órfãos ao servidor)
+    int totalOutbox = await db.delete('sync_queue');
+
+    print('✅ Registros removidos: $totalPessoas pessoas, $totalLogs logs, $totalAlunos alunos, $totalPassageiros passageiros, $totalQuartos quartos, $totalOutbox outbox');
   }
 
   // =========================================================================
