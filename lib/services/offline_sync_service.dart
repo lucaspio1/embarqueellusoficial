@@ -1115,6 +1115,11 @@ class OfflineSyncService {
                 continue;
               }
 
+              // 🔍 DIAGNÓSTICO: Ver movimentação recebida do Sheets
+              final movimentacaoRecebida = pessoa['movimentacao'] ?? '';
+              final movimentacaoFinal = movimentacaoRecebida.toString().toUpperCase();
+              print('🔍 [${pessoa['nome']}] Movimentação recebida: "$movimentacaoRecebida" → Final: "$movimentacaoFinal"');
+
               await _db.upsertPessoaFacial({
                 'cpf': pessoa['cpf'] ?? '',
                 'nome': pessoa['nome'] ?? '',
@@ -1124,7 +1129,7 @@ class OfflineSyncService {
                 'telefone': pessoa['telefone'] ?? '',
                 'embedding': jsonEncode(embedding),
                 'facial_status': 'CADASTRADA',
-                'movimentacao': (pessoa['movimentacao'] ?? '').toString().toUpperCase(),
+                'movimentacao': movimentacaoFinal,
                 'inicio_viagem': pessoa['inicio_viagem'] ?? '',
                 'fim_viagem': pessoa['fim_viagem'] ?? '',
               });
