@@ -802,19 +802,14 @@ class OfflineSyncService {
     print('🧹 [ViagemEncerrada] Limpando dados locais...');
 
     final tipo = evento.dados['tipo'];
-    final inicioViagem = evento.inicioViagem?.trim();
-    final fimViagem = evento.fimViagem?.trim();
+    final inicioViagem = evento.inicioViagem;
+    final fimViagem = evento.fimViagem;
 
-    // ✅ CORREÇÃO: Se tipo é TODAS OU se as datas estão vazias, limpar tudo
-    final limparTudo = tipo == 'TODAS' ||
-                       (inicioViagem == null || inicioViagem.isEmpty ||
-                        fimViagem == null || fimViagem.isEmpty);
-
-    if (limparTudo) {
+    if (tipo == 'TODAS') {
       // Limpar TUDO
-      print('🧹 [ViagemEncerrada] Limpando TODAS as viagens (tipo: $tipo, datas vazias: ${inicioViagem == null || inicioViagem.isEmpty})');
+      print('🧹 [ViagemEncerrada] Limpando TODAS as viagens');
       await _db.limparTodosDados();
-    } else {
+    } else if (tipo == 'ESPECIFICA' && inicioViagem != null && fimViagem != null) {
       // Limpar viagem específica
       print('🧹 [ViagemEncerrada] Limpando viagem: $inicioViagem a $fimViagem');
       await _db.limparDadosPorViagem(inicioViagem, fimViagem);

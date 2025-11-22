@@ -1020,10 +1020,9 @@ function listarViagens() {
 
     for (let i = 1; i < values.length; i++) {
       const row = values[i];
-      const inicioViagem = (row[9] || '').toString().trim();
-      const fimViagem = (row[10] || '').toString().trim();
+      const inicioViagem = row[9] || '';
+      const fimViagem = row[10] || '';
 
-      // ✅ CORREÇÃO: Apenas listar viagens com datas válidas (não vazias)
       if (inicioViagem && fimViagem) {
         const chave = inicioViagem + '|' + fimViagem;
         if (!viagensMap.has(chave)) {
