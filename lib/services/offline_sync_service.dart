@@ -236,11 +236,13 @@ class OfflineSyncService {
   // -----------------------------
 
   Future<_BatchResult> _sendMovementsBatch(List<Map<String, dynamic>> items) async {
+    final now = DateTime.now().toIso8601String();
     final body = <String, dynamic>{
       'action': 'addMovementLog',
       'people': items.map((m) {
         final c = Map<String, dynamic>.from(m);
         c.remove('idOutbox');
+        c['updated_at'] = now; // ✅ ESSENCIAL para Delta Sync
         return c;
       }).toList(),
     };
@@ -276,6 +278,7 @@ class OfflineSyncService {
 
   Future<bool> _sendMovementIndividually(Map<String, dynamic> item) async {
     final copy = Map<String, dynamic>.from(item)..remove('idOutbox');
+    copy['updated_at'] = DateTime.now().toIso8601String(); // ✅ ESSENCIAL para Delta Sync
     final body = <String, dynamic>{'action': 'addMovementLog', 'people': [copy]};
     print('📤 [OfflineSync] Enviando movimento com dados: CPF=${copy['cpf']}, Nome=${copy['personName']}, Colégio=${copy['colegio']}, Tipo=${copy['tipo']}');
     return _postWithRetriesAndSuccess(body);
@@ -301,6 +304,7 @@ class OfflineSyncService {
       'movimentacao': copy['movimentacao'] ?? 'QUARTO',
       'inicio_viagem': copy['inicio_viagem'] ?? '',
       'fim_viagem': copy['fim_viagem'] ?? '',
+      'updated_at': DateTime.now().toIso8601String(), // ✅ ESSENCIAL para Delta Sync
     };
     return _postWithRetriesAndSuccess(body);
   }
