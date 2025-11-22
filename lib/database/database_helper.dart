@@ -703,12 +703,23 @@ class DatabaseHelper {
       }
     }).toList();
 
-    return pessoasAtivas.map((pessoa) {
+    final resultado = pessoasAtivas.map((pessoa) {
       return {
         ...pessoa,
         'embedding': jsonDecode(pessoa['embedding']),
       };
     }).toList();
+
+    // 🔍 DEBUG: Verificar se os alunos têm timestamps de viagem
+    if (resultado.isNotEmpty) {
+      final primeiroAluno = resultado.first;
+      print('🔍 [DEBUG getTodosAlunosComFacialAtivos] Total de alunos ativos: ${resultado.length}');
+      print('🔍 [DEBUG getTodosAlunosComFacialAtivos] Exemplo - ${primeiroAluno['nome']}:');
+      print('   - inicio_viagem: ${primeiroAluno['inicio_viagem']} (${primeiroAluno['inicio_viagem']?.toString().isNotEmpty == true ? "PREENCHIDO" : "VAZIO"})');
+      print('   - fim_viagem: ${primeiroAluno['fim_viagem']} (${primeiroAluno['fim_viagem']?.toString().isNotEmpty == true ? "PREENCHIDO" : "VAZIO"})');
+    }
+
+    return resultado;
   }
 
   /// Conta quantos passageiros de uma lista específica têm facial cadastrada
@@ -817,6 +828,12 @@ class DatabaseHelper {
     bool updateMovimentacao = true, // ✅ Controla se deve atualizar movimentacao
   }) async {
     final db = await database;
+
+    // 🔍 DEBUG: Verificar valores antes de inserir no banco
+    print('🔍 [DEBUG insertLog] Inserindo log para $personName');
+    print('🔍 [DEBUG insertLog] inicioViagem: $inicioViagem (${inicioViagem?.isNotEmpty == true ? "PREENCHIDO" : "VAZIO"})');
+    print('🔍 [DEBUG insertLog] fimViagem: $fimViagem (${fimViagem?.isNotEmpty == true ? "PREENCHIDO" : "VAZIO"})');
+
     // ✅ CORREÇÃO: Adicionar conflictAlgorithm.ignore para evitar duplicatas
     // Devido à UNIQUE constraint (cpf, timestamp, tipo), se houver tentativa de inserir
     // um log duplicado, ele será simplesmente ignorado ao invés de dar erro
@@ -837,6 +854,8 @@ class DatabaseHelper {
       },
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
+
+    print('✅ [DEBUG insertLog] Log salvo no banco local com sucesso');
 
     // ✅ CORREÇÃO: Só atualiza movimentacao se for um log NOVO (não histórico)
     // Quando sincronizando logs históricos do Google Sheets, não devemos
