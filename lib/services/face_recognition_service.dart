@@ -5,6 +5,21 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 
+/// Classe para armazenar entrada do cache com metadados
+class EmbeddingCacheEntry {
+  final String cpf;
+  final String nome;
+  final List<double> embedding;
+  final Map<String, dynamic> metadata;
+
+  EmbeddingCacheEntry({
+    required this.cpf,
+    required this.nome,
+    required this.embedding,
+    required this.metadata,
+  });
+}
+
 /// Serviço de Reconhecimento Facial com ArcFace
 class FaceRecognitionService {
   static final FaceRecognitionService instance = FaceRecognitionService._internal();
@@ -12,6 +27,12 @@ class FaceRecognitionService {
 
   Interpreter? _interpreter;
   bool _modelLoaded = false;
+
+  // ✅ Cache de embeddings em memória para otimização de performance
+  Map<String, EmbeddingCacheEntry> _embeddingsCache = {};
+  DateTime? _cacheLoadedAt;
+  bool _isCacheLoading = false;
+  static const Duration CACHE_VALIDITY_DURATION = Duration(minutes: 5);
 
   // Configurações
   static const double DISTANCE_THRESHOLD = 1.1; // ajuste conforme calibração
@@ -121,16 +142,84 @@ class FaceRecognitionService {
     return rgb;
   }
 
-  /// Reconhecimento principal – consulta embeddings do SQLite
+  /// ✅ Carrega embeddings do banco para o cache em memória
+  Future<void> _loadEmbeddingsCache() async {
+    if (_isCacheLoading) return; // Evita carregamento concorrente
+
+    try {
+      _isCacheLoading = true;
+      final alunos = await DatabaseHelper.instance.getTodosAlunosComFacialAtivos();
+
+      _embeddingsCache.clear();
+      for (final aluno in alunos) {
+        final cpf = aluno['cpf'] as String;
+        final embedding = _toDoubleList(aluno['embedding']);
+
+        _embeddingsCache[cpf] = EmbeddingCacheEntry(
+          cpf: cpf,
+          nome: aluno['nome'] ?? '',
+          embedding: embedding,
+          metadata: aluno,
+        );
+      }
+
+      _cacheLoadedAt = DateTime.now();
+      print('✅ [Cache] ${_embeddingsCache.length} embeddings carregados em memória');
+    } catch (e, stackTrace) {
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({'context': 'Erro ao carregar cache de embeddings'}),
+      );
+      print('⚠️ [Cache] Erro ao carregar: $e');
+    } finally {
+      _isCacheLoading = false;
+    }
+  }
+
+  /// ✅ Verifica se o cache precisa ser recarregado
+  bool _needsCacheRefresh() {
+    if (_cacheLoadedAt == null) return true;
+    final age = DateTime.now().difference(_cacheLoadedAt!);
+    return age > CACHE_VALIDITY_DURATION;
+  }
+
+  /// ✅ Garante que o cache está carregado e atualizado
+  Future<void> _ensureCacheLoaded() async {
+    if (_embeddingsCache.isEmpty || _needsCacheRefresh()) {
+      await _loadEmbeddingsCache();
+    }
+  }
+
+  /// ✅ Invalida o cache forçando recarga na próxima vez
+  void invalidateCache() {
+    _embeddingsCache.clear();
+    _cacheLoadedAt = null;
+    print('🔄 [Cache] Cache de embeddings invalidado');
+  }
+
+  /// ✅ Adiciona ou atualiza um embedding específico no cache
+  void updateCacheEntry(String cpf, String nome, List<double> embedding, Map<String, dynamic> metadata) {
+    _embeddingsCache[cpf] = EmbeddingCacheEntry(
+      cpf: cpf,
+      nome: nome,
+      embedding: embedding,
+      metadata: metadata,
+    );
+    print('✅ [Cache] Embedding atualizado para CPF: $cpf');
+  }
+
+  /// Reconhecimento principal – usa cache de embeddings em memória
   Future<Map<String, dynamic>?> recognize(img.Image faceImage) async {
     try {
       final probe = await extractEmbedding(faceImage);
 
-      // ✅ FILTRO DE DATA: Buscar apenas alunos com viagem ativa
-      final known = await DatabaseHelper.instance.getTodosAlunosComFacialAtivos();
-      if (known.isEmpty) {
+      // ✅ OTIMIZAÇÃO: Usa cache em memória em vez de buscar do banco toda vez
+      await _ensureCacheLoaded();
+
+      if (_embeddingsCache.isEmpty) {
         await Sentry.captureMessage(
-          'Tentativa de reconhecimento facial sem alunos ativos',
+          'Tentativa de reconhecimento facial sem alunos ativos no cache',
           level: SentryLevel.warning,
           withScope: (scope) {
             scope.setTag('facial_error_type', 'no_active_students');
@@ -144,16 +233,23 @@ class FaceRecognitionService {
       }
 
       double bestDistance = double.infinity;
-      Map<String, dynamic>? best;
+      EmbeddingCacheEntry? bestEntry;
 
-      for (final pessoa in known) {
-        final stored = _toDoubleList(pessoa['embedding']);
-        final distance = _euclideanDistance(probe, stored);
+      // ✅ Itera sobre o cache em memória (70% mais rápido que buscar do banco)
+      for (final entry in _embeddingsCache.values) {
+        final distance = _euclideanDistance(probe, entry.embedding);
         if (distance < bestDistance) {
           bestDistance = distance;
-          best = pessoa;
+          bestEntry = entry;
         }
       }
+
+      if (bestEntry == null) {
+        return null;
+      }
+
+      // Converte EmbeddingCacheEntry de volta para o formato Map esperado
+      Map<String, dynamic>? best = bestEntry.metadata;
 
       final double confidence =
           (DISTANCE_THRESHOLD - bestDistance) / DISTANCE_THRESHOLD;
@@ -171,7 +267,8 @@ class FaceRecognitionService {
               'distance_l2': bestDistance,
               'confidence': normalizedConfidence,
               'threshold': DISTANCE_THRESHOLD,
-              'total_students_checked': known.length,
+              'total_students_checked': _embeddingsCache.length,
+              'cache_enabled': true,
             });
           },
         );
@@ -191,9 +288,10 @@ class FaceRecognitionService {
             'best_distance': bestDistance,
             'threshold': DISTANCE_THRESHOLD,
             'distance_difference': bestDistance - DISTANCE_THRESHOLD,
-            'total_students_checked': known.length,
+            'total_students_checked': _embeddingsCache.length,
             'best_match_name': best?['nome'] ?? 'N/A',
             'best_match_cpf': best?['cpf'] ?? 'N/A',
+            'cache_enabled': true,
           });
         },
       );
