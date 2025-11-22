@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/config/app_config.dart';
+import 'package:embarqueellus/services/offline_sync_service.dart';
 
 class QuartosSyncService {
   static final QuartosSyncService instance = QuartosSyncService._internal();
@@ -101,17 +102,4 @@ class QuartosSyncService {
     final quartos = await _db.getAllQuartos();
     return quartos.isNotEmpty;
   }
-}
-
-/// Resultado de sincronização
-class SyncResult {
-  final bool success;
-  final String message;
-  final int count;
-
-  SyncResult({
-    required this.success,
-    required this.message,
-    required this.count,
-  });
 }
