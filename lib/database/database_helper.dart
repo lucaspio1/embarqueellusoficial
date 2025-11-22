@@ -1004,9 +1004,13 @@ class DatabaseHelper {
       );
       if (existente.isNotEmpty) {
         data['movimentacao'] = existente.first['movimentacao'];
+        print('🔍 [DB] ${data['nome']}: Preservando movimentação existente: "${data['movimentacao']}"');
       } else {
         data['movimentacao'] = '';
+        print('🔍 [DB] ${data['nome']}: Pessoa nova, movimentação vazia');
       }
+    } else {
+      print('🔍 [DB] ${data['nome']}: Salvando com movimentacao: "${data['movimentacao']}"');
     }
 
     await db.insert(
