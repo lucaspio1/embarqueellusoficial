@@ -140,6 +140,11 @@ function doPost(e) {
     console.log('📥 Ação recebida:', action);
     console.log('📥 Dados:', JSON.stringify(data));
 
+    // ✅ NOVO: Suporte a Batching HTTP
+    if (action === 'batchSync') {
+      return batchSync(data);
+    }
+
     switch (action) {
       case 'login':
         return login(data);
@@ -289,6 +294,89 @@ function doGet(e) {
     return createResponse(false, 'Erro no doGet: ' + err.message);
   }
 }
+
+// ============================================================================
+// BATCHING HTTP - Processa múltiplas requisições em uma única chamada
+// ============================================================================
+function batchSync(data) {
+  try {
+    console.log('🚀 [batchSync] Iniciando batch sync...');
+
+    const requests = data.requests || [];
+
+    if (!Array.isArray(requests) || requests.length === 0) {
+      return createResponse(false, 'Nenhuma requisição no batch');
+    }
+
+    console.log('📥 [batchSync] Processando', requests.length, 'requisição(ões)');
+
+    const responses = [];
+
+    for (let i = 0; i < requests.length; i++) {
+      const request = requests[i];
+      const requestAction = request.action;
+
+      console.log(`📝 [batchSync] [${i + 1}/${requests.length}] Processando:`, requestAction);
+
+      try {
+        let result;
+
+        switch (requestAction) {
+          case 'getAllUsers':
+            result = getAllUsers(request);
+            break;
+          case 'getAllPeople':
+            result = getAllPeople(request);
+            break;
+          case 'getAllStudents':
+            result = getAllStudents(request);
+            break;
+          case 'getAllLogs':
+            result = getAllLogs(request);
+            break;
+          case 'getQuartos':
+            result = getQuartos(request);
+            break;
+          case 'getEventos':
+            result = getEventos(request);
+            break;
+          default:
+            result = createResponse(false, 'Ação não reconhecida: ' + requestAction);
+        }
+
+        // Parsear a resposta para extrair o conteúdo
+        const parsedResult = JSON.parse(result.getContent());
+        responses.push({
+          action: requestAction,
+          success: parsedResult.success,
+          data: parsedResult
+        });
+
+        console.log(`✅ [batchSync] [${i + 1}/${requests.length}] Sucesso:`, requestAction);
+
+      } catch (error) {
+        console.error(`❌ [batchSync] [${i + 1}/${requests.length}] Erro em ${requestAction}:`, error);
+        responses.push({
+          action: requestAction,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    console.log('✅ [batchSync] Batch concluído:', responses.length, 'respostas');
+
+    return createResponse(true, 'Batch sync concluído', {
+      total_requests: requests.length,
+      responses: responses
+    });
+
+  } catch (error) {
+    console.error('❌ [batchSync] Erro:', error);
+    return createResponse(false, 'Erro no batch sync: ' + error.message);
+  }
+}
+
 // ========================================================================
 // FUNÇÃO PARA BUSCAR QUARTOS DA ABA HOMELIST
 // ========================================================================
