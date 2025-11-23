@@ -72,6 +72,9 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
     super.initState();
     _updateStatus();
 
+    // Observar mudanças no estado de sincronização
+    _syncService.isSyncingNotifier.addListener(_onSyncStateChanged);
+
     // Timer periódico para atualizar o status
     _updateTimer = Timer.periodic(
       Duration(seconds: widget.updateIntervalSeconds),
@@ -82,14 +85,20 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
   @override
   void dispose() {
     _updateTimer?.cancel();
+    _syncService.isSyncingNotifier.removeListener(_onSyncStateChanged);
     super.dispose();
+  }
+
+  /// Callback quando o estado de sincronização muda
+  void _onSyncStateChanged() {
+    _updateStatus();
   }
 
   /// Atualiza o status de sincronização
   Future<void> _updateStatus() async {
     try {
-      // Verificar se há sincronização em andamento
-      // (você pode adicionar uma flag no OfflineSyncService para isso)
+      // Verificar se está sincronizando
+      final isSyncing = _syncService.isSyncingNotifier.value;
 
       // Contar itens pendentes
       final logsPendentes = await _db.contarLogsPendentes();
@@ -98,7 +107,9 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
 
       // Determinar novo estado
       SyncState newState;
-      if (totalPendentes > 0) {
+      if (isSyncing) {
+        newState = SyncState.syncing; // Sincronizando agora
+      } else if (totalPendentes > 0) {
         newState = SyncState.error; // Há pendências
       } else {
         newState = SyncState.idle; // Tudo sincronizado

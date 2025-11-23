@@ -4,6 +4,7 @@ import 'package:embarqueellus/screens/reconhecimento_facial_completo.dart';
 import 'package:embarqueellus/screens/painel_admin_screen.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
 import 'package:embarqueellus/services/auth_service.dart';
+import 'package:embarqueellus/widgets/sync_status_icon.dart';
 
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
@@ -96,14 +97,17 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   ),
                   child: Column(
                     children: [
-                      // Botão de logout no canto superior direito
-                      Align(
-                        alignment: Alignment.topRight,
-                        child: IconButton(
-                          onPressed: _realizarLogout,
-                          icon: const Icon(Icons.logout, color: Colors.white),
-                          tooltip: 'Sair',
-                        ),
+                      // Botões de sync e logout no canto superior direito
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          const SyncStatusIcon(iconSize: 28.0),
+                          IconButton(
+                            onPressed: _realizarLogout,
+                            icon: const Icon(Icons.logout, color: Colors.white),
+                            tooltip: 'Sair',
+                          ),
+                        ],
                       ),
                       Container(
                         padding: const EdgeInsets.all(16.0),

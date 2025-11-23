@@ -845,6 +845,7 @@ class DatabaseHelper {
     String? inicioViagem,
     String? fimViagem,
     bool updateMovimentacao = true, // ✅ Controla se deve atualizar movimentacao
+    int sincronizado = 0, // ✅ Controla se log já está sincronizado (históricos = 1, novos = 0)
   }) async {
     final db = await database;
 
@@ -869,6 +870,7 @@ class DatabaseHelper {
         'operador_nome': operadorNome,
         'inicio_viagem': inicioViagem,
         'fim_viagem': fimViagem,
+        'sincronizado': sincronizado, // ✅ Logs históricos = 1, novos = 0
         'created_at': DateTime.now().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.ignore,

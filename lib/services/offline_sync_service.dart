@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart'; // Para ValueNotifier
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -26,6 +27,9 @@ class OfflineSyncService {
 
   Timer? _syncTimer;
   bool _isSyncing = false; // Lock para evitar sincronizações simultâneas
+
+  // ✅ ValueNotifier para que widgets possam observar o estado de sincronização
+  final ValueNotifier<bool> isSyncingNotifier = ValueNotifier<bool>(false);
 
   void init() {
     _syncTimer?.cancel();
@@ -62,6 +66,9 @@ class OfflineSyncService {
     print('🔍 [DEBUG queueLogAcesso] inicioViagem: $inicioViagem (${inicioViagem?.isNotEmpty == true ? "PREENCHIDO" : "VAZIO"})');
     print('🔍 [DEBUG queueLogAcesso] fimViagem: $fimViagem (${fimViagem?.isNotEmpty == true ? "PREENCHIDO" : "VAZIO"})');
 
+    // ✅ CORREÇÃO: Salvar APENAS na tabela logs (sincronizado = 0)
+    // O método sincronizarLogsPendentes() vai enviar em lotes
+    // Removido enqueueOutbox para evitar DUPLICAÇÃO
     await _db.insertLog(
       cpf: cpf,
       personName: personName,
@@ -75,21 +82,7 @@ class OfflineSyncService {
       fimViagem: fimViagem,
     );
 
-    await _db.enqueueOutbox('movement_log', {
-      'cpf': cpf,
-      'personName': personName,
-      'colegio': colegio ?? '',
-      'turma': turma ?? '',
-      'timestamp': timestamp.toIso8601String(),
-      'confidence': confidence,
-      'personId': personId,
-      'tipo': tipo,
-      'operadorNome': operadorNome,
-      'inicio_viagem': inicioViagem ?? '',
-      'fim_viagem': fimViagem ?? '',
-    });
-
-    print('📝 [OfflineSync] Log enfileirado: $personName - $tipo - Colégio: ${colegio ?? "N/A"}, Turma: ${turma ?? "N/A"} (Operador: ${operadorNome ?? "N/A"})');
+    print('📝 [OfflineSync] Log salvo (pendente de sync): $personName - $tipo - Colégio: ${colegio ?? "N/A"}, Turma: ${turma ?? "N/A"} (Operador: ${operadorNome ?? "N/A"})');
   }
 
   Future<void> queueCadastroFacial({
@@ -485,6 +478,7 @@ class OfflineSyncService {
     }
 
     _isSyncing = true;
+    isSyncingNotifier.value = true; // ✅ Notificar widgets
     print('🔄 [OfflineSync] Iniciando sincronização completa...');
 
     try {
@@ -695,6 +689,7 @@ class OfflineSyncService {
     } finally {
       // SEMPRE resetar a flag, mesmo se houver erro
       _isSyncing = false;
+      isSyncingNotifier.value = false; // ✅ Notificar widgets
       print('🔓 [OfflineSync] Lock liberado');
     }
   }
@@ -1670,6 +1665,7 @@ class OfflineSyncService {
             inicioViagem: log['inicio_viagem'] ?? '',
             fimViagem: log['fim_viagem'] ?? '',
             updateMovimentacao: false, // ✅ NÃO atualizar movimentacao com logs históricos
+            sincronizado: 1, // ✅ Logs históricos vindos do servidor já estão sincronizados
           );
           count++;
         } catch (e) {
