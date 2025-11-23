@@ -560,7 +560,7 @@ function addPessoa(data) {
 }
 
 // ============================================================================
-// FUNÇÃO: ADD MOVEMENT LOG
+// FUNÇÃO: ADD MOVEMENT LOG (✅ COM DEDUPLICAÇÃO)
 // ============================================================================
 function addMovementLog(data) {
   try {
@@ -581,7 +581,28 @@ function addMovementLog(data) {
       logsSheet.appendRow(['TIMESTAMP', 'CPF', 'NOME', 'CONFIDENCE', 'TIPO', 'PERSON_ID', 'OPERADOR', 'INICIO_VIAGEM', 'FIM_VIAGEM']);
     }
 
+    // ✅ DEDUPLICAÇÃO: Buscar logs existentes (apenas colunas necessárias)
+    const lastRow = logsSheet.getLastRow();
+    let logsExistentes = new Set();
+
+    if (lastRow > 1) {
+      console.log('🔍 [addMovementLog] Carregando logs existentes para deduplicação...');
+      const timestampCol = logsSheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      const cpfCol = logsSheet.getRange(2, 2, lastRow - 1, 1).getValues();
+      const tipoCol = logsSheet.getRange(2, 5, lastRow - 1, 1).getValues();
+
+      for (let i = 0; i < timestampCol.length; i++) {
+        if (!timestampCol[i][0]) break;
+
+        const chave = `${cpfCol[i][0]}_${timestampCol[i][0]}_${tipoCol[i][0]}`;
+        logsExistentes.add(chave);
+      }
+
+      console.log(`✅ ${logsExistentes.size} log(s) existente(s) carregado(s)`);
+    }
+
     let count = 0;
+    let duplicados = 0;
 
     for (const person of people) {
       const timestamp = person.timestamp || new Date().toISOString();
@@ -601,6 +622,17 @@ function addMovementLog(data) {
       const inicioViagem = person.inicio_viagem || person.inicioViagem || '';
       const fimViagem = person.fim_viagem || person.fimViagem || '';
 
+      // ✅ VERIFICAR SE JÁ EXISTE
+      const chave = `${cpf}_${timestamp}_${tipo}`;
+      if (logsExistentes.has(chave)) {
+        duplicados++;
+        if (duplicados <= 3) {
+          console.log(`⚠️ Duplicado ignorado: ${personName} - ${timestamp}`);
+        }
+        continue; // Pular este log
+      }
+
+      // ✅ ADICIONAR LOG NOVO
       logsSheet.appendRow([
         timestamp,
         cpf,
@@ -612,6 +644,9 @@ function addMovementLog(data) {
         inicioViagem,
         fimViagem
       ]);
+
+      // Adicionar ao Set para evitar duplicatas dentro do mesmo batch
+      logsExistentes.add(chave);
 
       let movimentacao = movimentacaoRecebida;
       if (!movimentacao) {
@@ -628,9 +663,13 @@ function addMovementLog(data) {
       count++;
     }
 
-    console.log('✅ [addMovementLog]', count, 'log(s) registrado(s)');
-    return createResponse(true, count + ' log(s) registrado(s)', {
-      data: { total: count }
+    console.log('✅ [addMovementLog]', count, 'log(s) adicionado(s),', duplicados, 'duplicado(s) ignorado(s)');
+    return createResponse(true, count + ' log(s) adicionado(s), ' + duplicados + ' duplicado(s) ignorado(s)', {
+      data: {
+        total: count,
+        duplicados: duplicados,
+        recebidos: people.length
+      }
     });
   } catch (error) {
     console.error('❌ [addMovementLog] Erro:', error);
