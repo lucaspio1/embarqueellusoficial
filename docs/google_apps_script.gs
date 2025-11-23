@@ -565,7 +565,6 @@ function addPessoa(data) {
 function addMovementLog(data) {
   try {
     const people = data.people || [];
-
     console.log('📥 [addMovementLog] Recebendo', people.length, 'log(s)');
 
     if (people.length === 0) {
@@ -576,9 +575,8 @@ function addMovementLog(data) {
     let logsSheet = ss.getSheetByName('LOGS');
 
     if (!logsSheet) {
-      console.log('📝 Criando aba LOGS...');
       logsSheet = ss.insertSheet('LOGS');
-      logsSheet.appendRow(['TIMESTAMP', 'CPF', 'NOME', 'CONFIDENCE', 'TIPO', 'PERSON_ID', 'OPERADOR', 'INICIO_VIAGEM', 'FIM_VIAGEM']);
+      logsSheet.appendRow(['TIMESTAMP', 'CPF', 'COLÉGIO', 'TURMA', 'NOME', 'CONFIDENCE', 'TIPO', 'PERSON_ID', 'OPERADOR', 'INÍCIO_VIAGEM', 'FIM_VIAGEM', 'UPDATED_AT']);
     }
 
     // ✅ DEDUPLICAÇÃO: Buscar logs existentes (apenas colunas necessárias)
@@ -589,7 +587,7 @@ function addMovementLog(data) {
       console.log('🔍 [addMovementLog] Carregando logs existentes para deduplicação...');
       const timestampCol = logsSheet.getRange(2, 1, lastRow - 1, 1).getValues();
       const cpfCol = logsSheet.getRange(2, 2, lastRow - 1, 1).getValues();
-      const tipoCol = logsSheet.getRange(2, 5, lastRow - 1, 1).getValues();
+      const tipoCol = logsSheet.getRange(2, 7, lastRow - 1, 1).getValues();
 
       for (let i = 0; i < timestampCol.length; i++) {
         if (!timestampCol[i][0]) break;
@@ -607,27 +605,16 @@ function addMovementLog(data) {
     for (const person of people) {
       const timestamp = person.timestamp || new Date().toISOString();
       const cpf = person.cpf || '';
-      const personName = person.personName || person.nome || '';
-      const confidence = person.confidence || 0;
       const tipo = (person.tipo || 'RECONHECIMENTO').toString().toUpperCase();
-      const movimentacaoRecebida = (
-        person.movimentacao ||
-        person.movimento ||
-        ''
-      )
-        .toString()
-        .trim();
-      const personId = person.personId || cpf;
-      const operadorNome = person.operadorNome || 'Sistema';
-      const inicioViagem = person.inicio_viagem || person.inicioViagem || '';
-      const fimViagem = person.fim_viagem || person.fimViagem || '';
+      const movimentacaoRecebida = (person.movimentacao || person.movimento || '').toString().trim();
+      const updatedAt = person.updated_at || new Date().toISOString();
 
       // ✅ VERIFICAR SE JÁ EXISTE
       const chave = `${cpf}_${timestamp}_${tipo}`;
       if (logsExistentes.has(chave)) {
         duplicados++;
         if (duplicados <= 3) {
-          console.log(`⚠️ Duplicado ignorado: ${personName} - ${timestamp}`);
+          console.log(`⚠️ Duplicado ignorado: ${person.personName || person.nome} - ${timestamp}`);
         }
         continue; // Pular este log
       }
@@ -636,13 +623,16 @@ function addMovementLog(data) {
       logsSheet.appendRow([
         timestamp,
         cpf,
-        personName,
-        confidence,
+        person.colegio || '',
+        person.turma || '',
+        person.personName || person.nome || '',
+        person.confidence || 0,
         tipo,
-        personId,
-        operadorNome,
-        inicioViagem,
-        fimViagem
+        person.personId || cpf,
+        person.operadorNome || 'Sistema',
+        person.inicio_viagem || person.inicioViagem || '',
+        person.fim_viagem || person.fimViagem || '',
+        updatedAt
       ]);
 
       // Adicionar ao Set para evitar duplicatas dentro do mesmo batch
@@ -663,13 +653,8 @@ function addMovementLog(data) {
       count++;
     }
 
-    console.log('✅ [addMovementLog]', count, 'log(s) adicionado(s),', duplicados, 'duplicado(s) ignorado(s)');
-    return createResponse(true, count + ' log(s) adicionado(s), ' + duplicados + ' duplicado(s) ignorado(s)', {
-      data: {
-        total: count,
-        duplicados: duplicados,
-        recebidos: people.length
-      }
+    return createResponse(true, count + ' log(s) registrado(s)', {
+      data: { total: count }
     });
   } catch (error) {
     console.error('❌ [addMovementLog] Erro:', error);
