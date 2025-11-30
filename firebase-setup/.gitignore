@@ -1,0 +1,16 @@
+# Ignore service account key
+serviceAccountKey.json
+
+# Node modules
+node_modules/
+
+# CSV files
+csv/
+*.csv
+
+# Generated files
+firestore.rules
+
+# Logs
+*.log
+npm-debug.log*
