@@ -1,37 +1,57 @@
-// lib/services/alunos_sync_service.dart — FACADE (FASE 1)
-// Mantém compatibilidade com código existente, mas delega para OfflineSyncService
-import 'package:embarqueellus/services/offline_sync_service.dart';
+// lib/services/alunos_sync_service.dart — FACADE
+// Mantém compatibilidade com código existente, mas agora usa Firebase
+import 'package:sqflite/sqflite.dart' as Sqflite;
+import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/services/user_sync_service.dart';
 
 /// Facade para sincronização de alunos e pessoas
-/// Mantém interface pública mas delega para OfflineSyncService
+/// Agora os dados vêm automaticamente do Firebase via listeners em tempo real
 class AlunosSyncService {
   static final AlunosSyncService instance = AlunosSyncService._internal();
   AlunosSyncService._internal();
 
-  final _offlineSync = OfflineSyncService.instance;
+  final DatabaseHelper _db = DatabaseHelper.instance;
 
-  /// Sincroniza PESSOAS da aba PESSOAS do Google Sheets (com embeddings)
-  /// Delega para OfflineSyncService._syncPessoas()
+  /// Sincroniza PESSOAS do Firebase
+  /// Nota: A sincronização é automática via listeners, este método existe para compatibilidade
   Future<SyncResult> syncPessoasFromSheets() async {
-    print('🔄 [AlunosSyncService] Delegando sincronização de pessoas...');
-    return await _offlineSync.syncAll().then((result) {
-      print('✅ [AlunosSyncService] Pessoas sincronizadas: ${result.pessoas}');
-      return result.pessoas;
-    });
+    print('ℹ️ [AlunosSyncService] Sincronização automática de pessoas via Firebase listeners');
+
+    final db = await _db.database;
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM pessoas_facial')
+    ) ?? 0;
+
+    return SyncResult(
+      success: true,
+      message: 'Sincronização automática ativa',
+      itemsProcessed: count,
+    );
   }
 
-  /// Sincroniza ALUNOS da aba ALUNOS do Google Sheets
-  /// Delega para OfflineSyncService._syncAlunos()
+  /// Sincroniza ALUNOS do Firebase
+  /// Nota: A sincronização é automática via listeners, este método existe para compatibilidade
   Future<SyncResult> syncAlunosFromSheets() async {
-    print('🔄 [AlunosSyncService] Delegando sincronização de alunos...');
-    return await _offlineSync.syncAll().then((result) {
-      print('✅ [AlunosSyncService] Alunos sincronizados: ${result.alunos}');
-      return result.alunos;
-    });
+    print('ℹ️ [AlunosSyncService] Sincronização automática de alunos via Firebase listeners');
+
+    final db = await _db.database;
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM alunos')
+    ) ?? 0;
+
+    return SyncResult(
+      success: true,
+      message: 'Sincronização automática ativa',
+      itemsProcessed: count,
+    );
   }
 
-  /// Verifica se há alunos locais (delegado para OfflineSyncService)
+  /// Verifica se há alunos locais
   Future<bool> temAlunosLocais() async {
-    return await _offlineSync.temAlunosLocais();
+    final db = await _db.database;
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM alunos')
+    ) ?? 0;
+    return count > 0;
   }
 }
