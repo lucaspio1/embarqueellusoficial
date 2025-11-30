@@ -1,0 +1,27 @@
+{
+  "name": "firebase-setup-cli",
+  "version": "1.0.0",
+  "description": "CLI para configurar Firebase Firestore para Embarque Ellus",
+  "main": "setup.js",
+  "type": "module",
+  "scripts": {
+    "setup": "node setup.js",
+    "import": "node import-data.js",
+    "create-indexes": "node create-indexes.js"
+  },
+  "keywords": [
+    "firebase",
+    "firestore",
+    "setup"
+  ],
+  "author": "Embarque Ellus",
+  "license": "MIT",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "csv-parser": "^3.0.0",
+    "inquirer": "^9.2.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.0",
+    "cli-table3": "^0.6.3"
+  }
+}
