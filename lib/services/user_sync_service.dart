@@ -1,32 +1,62 @@
-// lib/services/user_sync_service.dart — FACADE (FASE 1)
-// Mantém compatibilidade com código existente, mas delega para OfflineSyncService
-import 'package:embarqueellus/services/offline_sync_service.dart';
+// lib/services/user_sync_service.dart — FACADE
+// Mantém compatibilidade com código existente, mas agora usa Firebase
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
+import 'package:sqflite/sqflite.dart' as Sqflite;
+import 'package:embarqueellus/database/database_helper.dart';
 
 /// Facade para sincronização de usuários
-/// Mantém interface pública mas delega para OfflineSyncService
+/// Agora os dados vêm automaticamente do Firebase via listeners em tempo real
 class UserSyncService {
   static final UserSyncService instance = UserSyncService._internal();
   UserSyncService._internal();
 
-  final _offlineSync = OfflineSyncService.instance;
+  final DatabaseHelper _db = DatabaseHelper.instance;
 
-  /// Sincroniza usuários do Google Sheets
-  /// Delega para OfflineSyncService._syncUsers()
+  /// Sincroniza usuários do Firebase
+  /// Nota: A sincronização é automática via listeners, este método existe para compatibilidade
   Future<SyncResult> syncUsuariosFromSheets() async {
-    print('🔄 [UserSyncService] Delegando para OfflineSyncService...');
-    return await _offlineSync.syncAll().then((result) {
-      print('✅ [UserSyncService] Sincronização completa: ${result.users}');
-      return result.users;
-    });
+    print('ℹ️ [UserSyncService] Sincronização automática via Firebase listeners');
+
+    // Retorna resultado dummy para manter compatibilidade
+    final db = await _db.database;
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM usuarios')
+    ) ?? 0;
+
+    return SyncResult(
+      success: true,
+      message: 'Sincronização automática ativa',
+      itemsProcessed: count,
+    );
   }
 
-  /// Verifica senha (delegado para OfflineSyncService)
+  /// Verifica senha usando SHA-256
   bool verificarSenha(String senha, String senhaHash) {
-    return _offlineSync.verificarSenha(senha, senhaHash);
+    final bytes = utf8.encode(senha);
+    final hash = sha256.convert(bytes).toString();
+    return hash == senhaHash;
   }
 
-  /// Verifica se há usuários locais (delegado para OfflineSyncService)
+  /// Verifica se há usuários locais
   Future<bool> temUsuariosLocais() async {
-    return await _offlineSync.temUsuariosLocais();
+    final db = await _db.database;
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM usuarios WHERE ativo = 1')
+    ) ?? 0;
+    return count > 0;
   }
+}
+
+/// Classe de resultado de sincronização
+class SyncResult {
+  final bool success;
+  final String message;
+  final int itemsProcessed;
+
+  SyncResult({
+    required this.success,
+    required this.message,
+    required this.itemsProcessed,
+  });
 }

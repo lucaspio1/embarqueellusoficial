@@ -1,27 +1,40 @@
-// lib/services/logs_sync_service.dart — FACADE (FASE 1)
-// Mantém compatibilidade com código existente, mas delega para OfflineSyncService
-import 'package:embarqueellus/services/offline_sync_service.dart';
+// lib/services/logs_sync_service.dart — FACADE
+// Mantém compatibilidade com código existente, mas agora usa Firebase
+import 'package:sqflite/sqflite.dart' as Sqflite;
+import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/services/user_sync_service.dart';
 
 /// Facade para sincronização de logs
-/// Mantém interface pública mas delega para OfflineSyncService
+/// Agora os dados vêm automaticamente do Firebase via listeners em tempo real
 class LogsSyncService {
   static final LogsSyncService instance = LogsSyncService._internal();
   LogsSyncService._internal();
 
-  final _offlineSync = OfflineSyncService.instance;
+  final DatabaseHelper _db = DatabaseHelper.instance;
 
-  /// Sincroniza LOGS da aba LOGS do Google Sheets
-  /// Delega para OfflineSyncService._syncLogs()
+  /// Sincroniza LOGS do Firebase
+  /// Nota: A sincronização é automática via listeners, este método existe para compatibilidade
   Future<SyncResult> syncLogsFromSheets() async {
-    print('🔄 [LogsSyncService] Delegando sincronização de logs...');
-    return await _offlineSync.syncAll().then((result) {
-      print('✅ [LogsSyncService] Logs sincronizados: ${result.logs}');
-      return result.logs;
-    });
+    print('ℹ️ [LogsSyncService] Sincronização automática de logs via Firebase listeners');
+
+    final db = await _db.database;
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM logs')
+    ) ?? 0;
+
+    return SyncResult(
+      success: true,
+      message: 'Sincronização automática ativa',
+      itemsProcessed: count,
+    );
   }
 
-  /// Verifica se há logs locais (delegado para OfflineSyncService)
+  /// Verifica se há logs locais
   Future<bool> temLogsLocais() async {
-    return await _offlineSync.temLogsLocais();
+    final db = await _db.database;
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM logs')
+    ) ?? 0;
+    return count > 0;
   }
 }

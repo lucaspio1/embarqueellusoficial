@@ -5,12 +5,13 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/screens/main_menu_screen.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
-import 'package:embarqueellus/services/offline_sync_service.dart';
+import 'package:embarqueellus/services/firebase_service.dart';
 import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/config/app_config.dart';
 
@@ -67,6 +68,11 @@ Future<void> main() async {
       }
 
       try {
+        // ✅ IMPORTANTE: Inicializar Firebase ANTES de tudo
+        print('🔥 Inicializando Firebase...');
+        await Firebase.initializeApp();
+        print('✅ Firebase inicializado com sucesso');
+
         AppConfig.instance.printConfig();
         if (!AppConfig.instance.isValid) {
           await Sentry.captureMessage(
@@ -88,12 +94,17 @@ Future<void> main() async {
           );
         }
 
-        OfflineSyncService.instance.init();
+        // ✅ Inicializar FirebaseService (substitui OfflineSyncService)
+        print('🔥 Inicializando FirebaseService...');
+        FirebaseService.instance.init();
+        print('✅ FirebaseService inicializado com sucesso');
+
         runApp(const MyApp());
 
         Future.delayed(Duration(seconds: 2), () async {
           try {
-            OfflineSyncService.instance.trySyncInBackground();
+            // ✅ Usar FirebaseService para sincronização em background
+            FirebaseService.instance.trySyncInBackground();
           } catch (e) {
             await Sentry.captureException(
               e,

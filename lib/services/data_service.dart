@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:embarqueellus/models/passageiro.dart';
-import 'package:embarqueellus/config/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/services/firebase_service.dart';
 
 class DataService {
   static final DataService _instance = DataService._internal();
@@ -14,10 +14,11 @@ class DataService {
 
   DataService._internal() {
     _loadPendingData();
+    _initRealtimeListener();
   }
 
-  // URL lida do arquivo .env (script de embarques)
-  String get _apiUrl => AppConfig.instance.embarqueScriptUrl;
+  final FirebaseService _firebaseService = FirebaseService.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final ValueNotifier<List<Passageiro>> passageirosEmbarque = ValueNotifier([]);
 
@@ -27,7 +28,39 @@ class DataService {
   List<Map<String, dynamic>> _pendentesDeSincronizacao = [];
 
   // =========================================================
-  // BUSCAR DADOS DO SERVIDOR
+  // LISTENER EM TEMPO REAL
+  // =========================================================
+  StreamSubscription? _embarqueListener;
+
+  void _initRealtimeListener() {
+    // O listener será inicializado quando fetchData for chamado
+  }
+
+  void _startListeningToEmbarques(String colegio, String idPasseio, String onibus) {
+    _embarqueListener?.cancel();
+
+    Query query = _firestore.collection('embarques')
+        .where('colegio', isEqualTo: colegio)
+        .where('idPasseio', isEqualTo: idPasseio);
+
+    if (onibus.isNotEmpty) {
+      query = query.where('onibus', isEqualTo: onibus);
+    }
+
+    _embarqueListener = query.snapshots().listen((snapshot) {
+      final passageiros = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return Passageiro.fromJson(data);
+      }).toList();
+
+      passageirosEmbarque.value = passageiros;
+      saveLocalData(colegio, onibus, passageiros);
+      print('✅ [DataService] ${passageiros.length} passageiros atualizados via Firebase');
+    });
+  }
+
+  // =========================================================
+  // BUSCAR DADOS DO FIREBASE
   // =========================================================
   Future<void> fetchData(String nomeAba, {String? onibus}) async {
     _nomeAba = nomeAba;
@@ -37,39 +70,34 @@ class DataService {
     final nomePasseio = prefs.getString('nome_passeio') ?? '';
 
     try {
-      final url =
-          '$_apiUrl?colegio=$nomeAba&id_passeio=$nomePasseio&onibus=$_numeroOnibus';
-      print('🔍 [DataService] URL: $url');
+      print('🔍 [DataService] Buscando do Firebase: colegio=$nomeAba, passeio=$nomePasseio, onibus=$_numeroOnibus');
 
-      final response = await http.get(Uri.parse(url));
-      print('📡 [DataService] Status: ${response.statusCode}');
+      // Iniciar listener em tempo real
+      _startListeningToEmbarques(_nomeAba, nomePasseio, _numeroOnibus);
 
-      if (response.statusCode == 200) {
-        final dynamic responseData = json.decode(response.body);
+      // Buscar dados iniciais
+      Query query = _firestore.collection('embarques')
+          .where('colegio', isEqualTo: _nomeAba)
+          .where('idPasseio', isEqualTo: nomePasseio);
 
-        if (responseData is Map<String, dynamic> &&
-            responseData.containsKey('passageiros')) {
-          final List<dynamic> passageirosJson = responseData['passageiros'];
-          final List<Passageiro> fetchedList = List<Passageiro>.from(
-            passageirosJson.map((json) => Passageiro.fromJson(json)),
-          );
-
-          passageirosEmbarque.value = fetchedList;
-          _pendentesDeSincronizacao.clear();
-          _startSyncTimer();
-
-          await saveLocalData(nomeAba, _numeroOnibus, fetchedList);
-          print('✅ [DataService] ${fetchedList.length} passageiros carregados');
-        } else {
-          passageirosEmbarque.value = [];
-          print('⚠️ [DataService] Nenhum passageiro encontrado');
-        }
-      } else {
-        passageirosEmbarque.value = [];
-        print('❌ [DataService] Erro HTTP: ${response.statusCode}');
+      if (_numeroOnibus.isNotEmpty) {
+        query = query.where('onibus', isEqualTo: _numeroOnibus);
       }
+
+      final snapshot = await query.get();
+      final List<Passageiro> fetchedList = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return Passageiro.fromJson(data);
+      }).toList();
+
+      passageirosEmbarque.value = fetchedList;
+      _pendentesDeSincronizacao.clear();
+      _startSyncTimer();
+
+      await saveLocalData(nomeAba, _numeroOnibus, fetchedList);
+      print('✅ [DataService] ${fetchedList.length} passageiros carregados do Firebase');
     } catch (e) {
-      print('❌ [DataService] Erro ao buscar: $e');
+      print('❌ [DataService] Erro ao buscar do Firebase: $e');
       await loadLocalData(_nomeAba, _numeroOnibus);
       rethrow;
     }
@@ -181,7 +209,7 @@ class DataService {
   }
 
   // =========================================================
-  // SINCRONIZAÇÃO AUTOMÁTICA COM SERVIDOR
+  // SINCRONIZAÇÃO AUTOMÁTICA COM FIREBASE
   // =========================================================
   Future<void> _syncChanges() async {
     if (_pendentesDeSincronizacao.isEmpty) {
@@ -218,51 +246,27 @@ class DataService {
         ),
       );
 
-      final requestBody = {
-        'colegio': _nomeAba,
-        'cpf': cpf,
-        'operacao': operacao,
-      };
+      final prefs = await SharedPreferences.getInstance();
+      final nomePasseio = prefs.getString('nome_passeio') ?? '';
 
+      // Atualizar no Firebase
+      final updateData = <String, dynamic>{};
       if (operacao == 'embarque') {
-        requestBody['novoStatus'] = valor;
+        updateData['embarque'] = valor;
       } else if (operacao == 'retorno') {
-        requestBody['novoRetorno'] = valor;
+        updateData['retorno'] = valor;
       }
+      updateData['updated_at'] = FieldValue.serverTimestamp();
 
-      print('📤 [DataService] Enviando: ${json.encode(requestBody)}');
+      final docId = '${cpf}_${nomePasseio}_${_numeroOnibus}';
 
-      final response = await http.post(
-        Uri.parse(_apiUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: json.encode(requestBody),
-      );
+      print('📤 [DataService] Enviando para Firebase: $docId - $updateData');
 
-      print('📥 [DataService] Status: ${response.statusCode}');
+      await _firestore.collection('embarques').doc(docId).set(updateData, SetOptions(merge: true));
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'sucesso') {
-          print('✅ [DataService] Sync OK para CPF $cpf');
-        } else {
-          print('⚠️ [DataService] Erro API: ${data['mensagem']}');
-          if (data['status'] == 'erro') {
-            _pendentesDeSincronizacao.add(item);
-            _savePendingData();
-          }
-        }
-      } else if (response.statusCode == 302) {
-        print('⚠️ [DataService] Resposta 302 — verifique se o apiUrl termina com /exec');
-      } else {
-        print('❌ [DataService] HTTP ${response.statusCode}');
-        _pendentesDeSincronizacao.add(item);
-        _savePendingData();
-      }
+      print('✅ [DataService] Sync OK para CPF $cpf');
     } catch (e) {
-      print('❌ [DataService] Erro ao sincronizar: $e');
+      print('❌ [DataService] Erro ao sincronizar com Firebase: $e');
       _pendentesDeSincronizacao.add(item);
       _savePendingData();
     }
@@ -323,27 +327,25 @@ class DataService {
 // =========================================================
 Future<Passageiro?> fetchByCpf(String colegio, String cpf) async {
   try {
-    final apiUrl = AppConfig.instance.embarqueScriptUrl;
-    final url = '$apiUrl?colegio=$colegio&cpf=$cpf';
-    print('🔍 [DataService] Buscando por CPF: $url');
+    print('🔍 [DataService] Buscando por CPF no Firebase: $cpf');
 
-    final response = await http.get(Uri.parse(url));
-    print('📡 [DataService] Status: ${response.statusCode}');
+    final snapshot = await FirebaseFirestore.instance
+        .collection('embarques')
+        .where('colegio', isEqualTo: colegio)
+        .where('cpf', isEqualTo: cpf)
+        .limit(1)
+        .get();
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      if (data['status'] == 'sucesso') {
-        final passageiro = Passageiro.fromJson(data);
-        print('✅ [DataService] Aluno encontrado: ${passageiro.nome}');
-        return passageiro;
-      } else {
-        print('⚠️ [DataService] ${data['mensagem']}');
-      }
+    if (snapshot.docs.isNotEmpty) {
+      final data = snapshot.docs.first.data();
+      final passageiro = Passageiro.fromJson(data);
+      print('✅ [DataService] Aluno encontrado: ${passageiro.nome}');
+      return passageiro;
     } else {
-      print('❌ [DataService] Erro HTTP: ${response.statusCode}');
+      print('⚠️ [DataService] Aluno não encontrado com CPF: $cpf');
     }
   } catch (e) {
-    print('❌ [DataService] Erro ao buscar CPF: $e');
+    print('❌ [DataService] Erro ao buscar CPF no Firebase: $e');
   }
   return null;
 }
