@@ -61,6 +61,45 @@ class FirebaseService {
   }
 
   // =============================
+  // HELPER: Campo case-insensitive
+  // =============================
+
+  /// Helper para ler campo do Firestore aceitando maiúsculo ou minúsculo
+  dynamic _getField(Map<String, dynamic> data, String fieldName, [dynamic defaultValue]) {
+    // Tenta minúsculo primeiro (padrão)
+    if (data.containsKey(fieldName)) {
+      return data[fieldName] ?? defaultValue;
+    }
+    // Tenta MAIÚSCULO
+    final upperFieldName = fieldName.toUpperCase();
+    if (data.containsKey(upperFieldName)) {
+      return data[upperFieldName] ?? defaultValue;
+    }
+    // Tenta primeira letra maiúscula (ex: Nome, Cpf)
+    final capitalizedFieldName = fieldName[0].toUpperCase() + fieldName.substring(1);
+    if (data.containsKey(capitalizedFieldName)) {
+      return data[capitalizedFieldName] ?? defaultValue;
+    }
+    return defaultValue;
+  }
+
+  /// Converte Timestamp do Firebase ou String para formato dd/MM/yyyy
+  String _convertTimestampToDate(dynamic value) {
+    if (value == null) return '';
+
+    // Se já é uma string, retorna direto
+    if (value is String) return value;
+
+    // Se é Timestamp do Firestore
+    if (value is Timestamp) {
+      final date = value.toDate();
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    }
+
+    return '';
+  }
+
+  // =============================
   // LISTENERS EM TEMPO REAL
   // =============================
 
@@ -136,17 +175,17 @@ class FirebaseService {
         final data = doc.data() as Map<String, dynamic>;
 
         // Aceita tanto 'senha_hash' (hash) quanto 'senha' (texto plano)
-        final senhaArmazenada = data['senha_hash'] ?? data['senha'] ?? '';
+        final senhaArmazenada = _getField(data, 'senha_hash') ?? _getField(data, 'senha') ?? '';
 
         batch.insert(
           'usuarios',
           {
             'user_id': doc.id,
-            'nome': data['nome'] ?? '',
-            'cpf': data['cpf'] ?? '',
+            'nome': _getField(data, 'nome', ''),
+            'cpf': _getField(data, 'cpf', ''),
             'senha_hash': senhaArmazenada,
-            'perfil': data['perfil'] ?? 'USUARIO',
-            'ativo': data['ativo'] == true ? 1 : 0,
+            'perfil': _getField(data, 'perfil', 'USUARIO'),
+            'ativo': _getField(data, 'ativo', false) == true ? 1 : 0,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -167,19 +206,24 @@ class FirebaseService {
 
       for (var doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
+
+        // Converter timestamps do Firebase para strings dd/MM/yyyy
+        final inicioViagem = _convertTimestampToDate(_getField(data, 'inicio_viagem'));
+        final fimViagem = _convertTimestampToDate(_getField(data, 'fim_viagem'));
+
         batch.insert(
           'alunos',
           {
-            'cpf': data['cpf'] ?? '',
-            'nome': data['nome'] ?? '',
-            'colegio': data['colegio'] ?? '',
-            'turma': data['turma'] ?? '',
-            'email': data['email'] ?? '',
-            'telefone': data['telefone'] ?? '',
-            'facial_status': data['facial_status'] ?? 'NAO',
-            'tem_qr': data['tem_qr'] == true ? 1 : 0,
-            'inicio_viagem': data['inicio_viagem'] ?? '',
-            'fim_viagem': data['fim_viagem'] ?? '',
+            'cpf': _getField(data, 'cpf', ''),
+            'nome': _getField(data, 'nome', ''),
+            'colegio': _getField(data, 'colegio', ''),
+            'turma': _getField(data, 'turma', ''),
+            'email': _getField(data, 'email', ''),
+            'telefone': _getField(data, 'telefone', ''),
+            'facial_status': _getField(data, 'facial_status', 'NAO'),
+            'tem_qr': _getField(data, 'tem_qr', false) == true ? 1 : 0,
+            'inicio_viagem': inicioViagem,
+            'fim_viagem': fimViagem,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -202,26 +246,31 @@ class FirebaseService {
         final data = doc.data() as Map<String, dynamic>;
 
         // Extrair embedding (array de 512 floats)
-        final embeddingList = (data['embedding'] as List<dynamic>?)
+        final embeddingData = _getField(data, 'embedding');
+        final embeddingList = (embeddingData as List<dynamic>?)
             ?.map((e) => (e as num).toDouble())
             .toList() ?? [];
+
+        // Converter timestamps
+        final inicioViagem = _convertTimestampToDate(_getField(data, 'inicio_viagem'));
+        final fimViagem = _convertTimestampToDate(_getField(data, 'fim_viagem'));
 
         batch.insert(
           'pessoas_facial',
           {
             'person_id': doc.id,
-            'cpf': data['cpf'] ?? '',
-            'nome': data['nome'] ?? '',
-            'colegio': data['colegio'] ?? '',
-            'turma': data['turma'] ?? '',
-            'email': data['email'] ?? '',
-            'telefone': data['telefone'] ?? '',
+            'cpf': _getField(data, 'cpf', ''),
+            'nome': _getField(data, 'nome', ''),
+            'colegio': _getField(data, 'colegio', ''),
+            'turma': _getField(data, 'turma', ''),
+            'email': _getField(data, 'email', ''),
+            'telefone': _getField(data, 'telefone', ''),
             'embedding': embeddingList.join(','),
-            'facial_status': data['facial_status'] ?? 'CADASTRADA',
-            'movimentacao': data['movimentacao'] ?? 'QUARTO',
-            'inicio_viagem': data['inicio_viagem'] ?? '',
-            'fim_viagem': data['fim_viagem'] ?? '',
-            'updated_at': data['updated_at']?.toString() ?? DateTime.now().toIso8601String(),
+            'facial_status': _getField(data, 'facial_status', 'CADASTRADA'),
+            'movimentacao': _getField(data, 'movimentacao', 'QUARTO'),
+            'inicio_viagem': inicioViagem,
+            'fim_viagem': fimViagem,
+            'updated_at': _getField(data, 'updated_at')?.toString() ?? DateTime.now().toIso8601String(),
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -243,21 +292,26 @@ class FirebaseService {
       for (var doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
 
-        final timestamp = (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
+        final timestampData = _getField(data, 'timestamp');
+        final timestamp = (timestampData as Timestamp?)?.toDate() ?? DateTime.now();
+
+        // Converter timestamps de viagem
+        final inicioViagem = _convertTimestampToDate(_getField(data, 'inicio_viagem'));
+        final fimViagem = _convertTimestampToDate(_getField(data, 'fim_viagem'));
 
         batch.insert(
           'logs',
           {
-            'cpf': data['cpf'] ?? '',
-            'person_name': data['person_name'] ?? '',
+            'cpf': _getField(data, 'cpf', ''),
+            'person_name': _getField(data, 'person_name', ''),
             'timestamp': timestamp.toIso8601String(),
-            'confidence': (data['confidence'] as num?)?.toDouble() ?? 0.0,
-            'tipo': data['tipo'] ?? 'RECONHECIMENTO',
-            'operador_nome': data['operador_nome'] ?? '',
-            'colegio': data['colegio'] ?? '',
-            'turma': data['turma'] ?? '',
-            'inicio_viagem': data['inicio_viagem'] ?? '',
-            'fim_viagem': data['fim_viagem'] ?? '',
+            'confidence': (_getField(data, 'confidence') as num?)?.toDouble() ?? 0.0,
+            'tipo': _getField(data, 'tipo', 'RECONHECIMENTO'),
+            'operador_nome': _getField(data, 'operador_nome', ''),
+            'colegio': _getField(data, 'colegio', ''),
+            'turma': _getField(data, 'turma', ''),
+            'inicio_viagem': inicioViagem,
+            'fim_viagem': fimViagem,
             'sincronizado': 1, // Vem do Firebase, já está sincronizado
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
@@ -279,15 +333,20 @@ class FirebaseService {
 
       for (var doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
+
+        // Converter timestamps
+        final inicioViagem = _convertTimestampToDate(_getField(data, 'inicio_viagem'));
+        final fimViagem = _convertTimestampToDate(_getField(data, 'fim_viagem'));
+
         batch.insert(
           'quartos',
           {
-            'numero_quarto': data['numero_quarto'] ?? '',
-            'escola': data['escola'] ?? '',
-            'nome_hospede': data['nome_hospede'] ?? '',
-            'cpf': data['cpf'] ?? '',
-            'inicio_viagem': data['inicio_viagem'] ?? '',
-            'fim_viagem': data['fim_viagem'] ?? '',
+            'numero_quarto': _getField(data, 'numero_quarto', ''),
+            'escola': _getField(data, 'escola', ''),
+            'nome_hospede': _getField(data, 'nome_hospede', ''),
+            'cpf': _getField(data, 'cpf', ''),
+            'inicio_viagem': inicioViagem,
+            'fim_viagem': fimViagem,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
