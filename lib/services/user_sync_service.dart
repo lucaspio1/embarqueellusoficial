@@ -30,11 +30,17 @@ class UserSyncService {
     );
   }
 
-  /// Verifica senha usando SHA-256
-  bool verificarSenha(String senha, String senhaHash) {
+  /// Verifica senha (aceita texto plano ou hash SHA-256)
+  bool verificarSenha(String senha, String senhaArmazenada) {
+    // Primeiro tenta comparação direta (texto plano)
+    if (senha == senhaArmazenada) {
+      return true;
+    }
+
+    // Se não der match, tenta com hash SHA-256 (para compatibilidade)
     final bytes = utf8.encode(senha);
     final hash = sha256.convert(bytes).toString();
-    return hash == senhaHash;
+    return hash == senhaArmazenada;
   }
 
   /// Verifica se há usuários locais

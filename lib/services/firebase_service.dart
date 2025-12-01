@@ -134,13 +134,17 @@ class FirebaseService {
 
       for (var doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
+
+        // Aceita tanto 'senha_hash' (hash) quanto 'senha' (texto plano)
+        final senhaArmazenada = data['senha_hash'] ?? data['senha'] ?? '';
+
         batch.insert(
           'usuarios',
           {
             'user_id': doc.id,
             'nome': data['nome'] ?? '',
             'cpf': data['cpf'] ?? '',
-            'senha_hash': data['senha_hash'] ?? '',
+            'senha_hash': senhaArmazenada,
             'perfil': data['perfil'] ?? 'USUARIO',
             'ativo': data['ativo'] == true ? 1 : 0,
           },
