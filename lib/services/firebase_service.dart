@@ -1,9 +1,11 @@
 // lib/services/firebase_service.dart
 // Serviço principal de sincronização usando Firebase Firestore
 import 'dart:async';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/models/evento.dart';
@@ -534,8 +536,9 @@ class FirebaseService {
             }, SetOptions(merge: true));
           }
 
-          // Remover da outbox
-          await _db.removeFromOutbox(row['id'] as int);
+          // Remover da outbox (deletar da sync_queue)
+          final db = await _db.database;
+          await db.delete('sync_queue', where: 'id = ?', whereArgs: [row['id']]);
           print('✅ [FirebaseService] Item ${row['id']} sincronizado e removido da outbox');
         } catch (e) {
           print('❌ [FirebaseService] Erro ao sincronizar item ${row['id']}: $e');
