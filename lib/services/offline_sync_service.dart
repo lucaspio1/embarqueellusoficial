@@ -652,7 +652,7 @@ class OfflineSyncService {
         results.outbox = SyncResult(
           success: outboxSuccess,
           message: outboxSuccess ? 'Outbox sincronizado' : 'Falha no outbox',
-          count: 0,
+          itemsProcessed: 0,
         );
         print('${outboxSuccess ? "✅" : "❌"} [Outbox] ${results.outbox.message}');
       } catch (e) {
@@ -678,12 +678,12 @@ class OfflineSyncService {
 
       // Resumo final
       print('\n📊 [OfflineSync] RESUMO DA SINCRONIZAÇÃO:');
-      print('   👥 Usuários: ${results.users.count} (${results.users.success ? "OK" : "FALHA"})');
-      print('   🎓 Alunos: ${results.alunos.count} (${results.alunos.success ? "OK" : "FALHA"})');
-      print('   👤 Pessoas: ${results.pessoas.count} (${results.pessoas.success ? "OK" : "FALHA"})');
-      print('   📝 Logs: ${results.logs.count} (${results.logs.success ? "OK" : "FALHA"})');
-      print('   🏨 Quartos: ${results.quartos.count} (${results.quartos.success ? "OK" : "FALHA"})');
-      print('   📢 Eventos: ${results.eventos.count} (${results.eventos.success ? "OK" : "FALHA"})');
+      print('   👥 Usuários: ${results.users.itemsProcessed} (${results.users.success ? "OK" : "FALHA"})');
+      print('   🎓 Alunos: ${results.alunos.itemsProcessed} (${results.alunos.success ? "OK" : "FALHA"})');
+      print('   👤 Pessoas: ${results.pessoas.itemsProcessed} (${results.pessoas.success ? "OK" : "FALHA"})');
+      print('   📝 Logs: ${results.logs.itemsProcessed} (${results.logs.success ? "OK" : "FALHA"})');
+      print('   🏨 Quartos: ${results.quartos.itemsProcessed} (${results.quartos.success ? "OK" : "FALHA"})');
+      print('   📢 Eventos: ${results.eventos.itemsProcessed} (${results.eventos.success ? "OK" : "FALHA"})');
       print('   📤 Outbox: ${results.outbox.success ? "OK" : "FALHA"}');
 
       return results;
@@ -729,7 +729,7 @@ class OfflineSyncService {
         print('❌ [EventosSync] Erro HTTP ${response.statusCode}');
         return SyncResult(
           success: false,
-          count: 0,
+          itemsProcessed: 0,
           message: 'Erro HTTP ${response.statusCode}',
         );
       }
@@ -793,7 +793,7 @@ class OfflineSyncService {
       print('✅ [EventosSync] $processados evento(s) NOVO(S) processado(s) (${eventosData.length} total recebidos)');
       return SyncResult(
         success: true,
-        count: processados,
+        itemsProcessed: processados,
         message: '$processados evento(s) processados',
       );
     } catch (e, stack) {
@@ -1290,7 +1290,7 @@ class OfflineSyncService {
 
       return SyncResult(
         success: false,
-        count: 0,
+        itemsProcessed: 0,
         message: 'Erro HTTP ${response.statusCode}',
       );
     } catch (e, stack) {
@@ -1349,7 +1349,7 @@ class OfflineSyncService {
 
       return SyncResult(
         success: false,
-        count: 0,
+        itemsProcessed: 0,
         message: 'Erro HTTP ${response.statusCode}',
       );
     } catch (e, stack) {
@@ -1399,7 +1399,7 @@ class OfflineSyncService {
 
       return SyncResult(
         success: false,
-        count: 0,
+        itemsProcessed: 0,
         message: 'Erro HTTP ${response.statusCode}',
       );
     } catch (e, stack) {
@@ -1612,7 +1612,7 @@ class OfflineSyncService {
 
       return SyncResult(
         success: true,
-        count: countPessoas,
+        itemsProcessed: countPessoas,
         message: '$countPessoas pessoas e $countEmbeddings embeddings sincronizados'
       );
     } catch (e) {
@@ -1905,12 +1905,12 @@ class ConsolidatedSyncResult {
 
   /// Total de itens sincronizados
   int get totalCount =>
-      users.count +
-      alunos.count +
-      pessoas.count +
-      logs.count +
-      quartos.count +
-      eventos.count;
+      users.itemsProcessed +
+      alunos.itemsProcessed +
+      pessoas.itemsProcessed +
+      logs.itemsProcessed +
+      quartos.itemsProcessed +
+      eventos.itemsProcessed;
 
   @override
   String toString() {
@@ -1920,12 +1920,12 @@ ConsolidatedSyncResult(
   allSuccess: $allSuccess,
   anySuccess: $anySuccess,
   totalCount: $totalCount,
-  users: ${users.count} (${users.success ? "OK" : "FALHA"}),
-  alunos: ${alunos.count} (${alunos.success ? "OK" : "FALHA"}),
-  pessoas: ${pessoas.count} (${pessoas.success ? "OK" : "FALHA"}),
-  logs: ${logs.count} (${logs.success ? "OK" : "FALHA"}),
-  quartos: ${quartos.count} (${quartos.success ? "OK" : "FALHA"}),
-  eventos: ${eventos.count} (${eventos.success ? "OK" : "FALHA"}),
+  users: ${users.itemsProcessed} (${users.success ? "OK" : "FALHA"}),
+  alunos: ${alunos.itemsProcessed} (${alunos.success ? "OK" : "FALHA"}),
+  pessoas: ${pessoas.itemsProcessed} (${pessoas.success ? "OK" : "FALHA"}),
+  logs: ${logs.itemsProcessed} (${logs.success ? "OK" : "FALHA"}),
+  quartos: ${quartos.itemsProcessed} (${quartos.success ? "OK" : "FALHA"}),
+  eventos: ${eventos.itemsProcessed} (${eventos.success ? "OK" : "FALHA"}),
   outbox: ${outbox.success ? "OK" : "FALHA"}
 )''';
   }
