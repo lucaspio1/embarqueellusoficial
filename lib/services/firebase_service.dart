@@ -211,17 +211,23 @@ class FirebaseService {
         final inicioViagem = _convertTimestampToDate(_getField(data, 'inicio_viagem'));
         final fimViagem = _convertTimestampToDate(_getField(data, 'fim_viagem'));
 
+        // Converter tem_qr para TEXT ('SIM'/'NAO')
+        final temQr = _getField(data, 'tem_qr', false) == true ? 'SIM' : 'NAO';
+
+        // facial_status do Firebase → facial no SQLite
+        final facialStatus = _getField(data, 'facial_status', 'NAO');
+
         batch.insert(
           'alunos',
           {
             'cpf': _getField(data, 'cpf', ''),
             'nome': _getField(data, 'nome', ''),
             'colegio': _getField(data, 'colegio', ''),
-            'turma': _getField(data, 'turma', ''),
             'email': _getField(data, 'email', ''),
             'telefone': _getField(data, 'telefone', ''),
-            'facial_status': _getField(data, 'facial_status', 'NAO'),
-            'tem_qr': _getField(data, 'tem_qr', false) == true ? 1 : 0,
+            'turma': _getField(data, 'turma', ''),
+            'facial': facialStatus,  // ← Campo correto no SQLite
+            'tem_qr': temQr,  // ← TEXT 'SIM'/'NAO'
             'inicio_viagem': inicioViagem,
             'fim_viagem': fimViagem,
           },
@@ -258,13 +264,13 @@ class FirebaseService {
         batch.insert(
           'pessoas_facial',
           {
-            'person_id': doc.id,
+            // ⚠️ NÃO inserir 'person_id' - a tabela usa 'id' auto-increment
             'cpf': _getField(data, 'cpf', ''),
             'nome': _getField(data, 'nome', ''),
             'colegio': _getField(data, 'colegio', ''),
-            'turma': _getField(data, 'turma', ''),
             'email': _getField(data, 'email', ''),
             'telefone': _getField(data, 'telefone', ''),
+            'turma': _getField(data, 'turma', ''),
             'embedding': embeddingList.join(','),
             'facial_status': _getField(data, 'facial_status', 'CADASTRADA'),
             'movimentacao': _getField(data, 'movimentacao', 'QUARTO'),
