@@ -35,6 +35,13 @@ class FirebaseService {
   void init() {
     _syncTimer?.cancel();
 
+    // ✅ HABILITAR PERSISTÊNCIA OFFLINE DO FIRESTORE
+    // Cache automático de dados para funcionar offline
+    _firestore.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+
     // Sincronização automática a cada 1 minuto (para sincronizar dados locais pendentes)
     _syncTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
       print('⏰ [FirebaseService] Timer de sincronização disparado');
@@ -42,6 +49,7 @@ class FirebaseService {
     });
 
     print('✅ [FirebaseService] Sincronização automática iniciada');
+    print('✅ [FirebaseService] Cache offline habilitado (UNLIMITED)');
     trySyncInBackground();
 
     // Iniciar listeners em tempo real

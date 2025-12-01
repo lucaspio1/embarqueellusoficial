@@ -18,8 +18,8 @@ class LogsSyncService {
     print('ℹ️ [LogsSyncService] Sincronização automática de logs via Firebase listeners');
 
     final db = await _db.database;
-    final countResult = await db.rawQuery('SELECT COUNT(*) FROM logs');
-    final count = Sqflite.firstIntValue(countResult) ?? 0;
+    final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM logs');
+    final count = (countResult.first['count'] as int?) ?? 0;
 
     return SyncResult(
       success: true,
@@ -31,8 +31,8 @@ class LogsSyncService {
   /// Verifica se há logs locais
   Future<bool> temLogsLocais() async {
     final db = await _db.database;
-    final countResult = await db.rawQuery('SELECT COUNT(*) FROM logs');
-    final count = Sqflite.firstIntValue(countResult) ?? 0;
+    final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM logs');
+    final count = (countResult.first['count'] as int?) ?? 0;
     return count > 0;
   }
 }

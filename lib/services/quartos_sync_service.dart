@@ -16,8 +16,8 @@ class QuartosSyncService {
     print('ℹ️ [QuartosSyncService] Sincronização automática de quartos via Firebase listeners');
 
     final db = await _db.database;
-    final countResult = await db.rawQuery('SELECT COUNT(*) FROM quartos');
-    final count = Sqflite.firstIntValue(countResult) ?? 0;
+    final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM quartos');
+    final count = (countResult.first['count'] as int?) ?? 0;
 
     return SyncResult(
       success: true,
