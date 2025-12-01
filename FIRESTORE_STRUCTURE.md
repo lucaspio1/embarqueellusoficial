@@ -17,12 +17,12 @@ O Firestore substitui o Google Sheets como banco de dados central, oferecendo:
 
 Armazena informações de login e autenticação.
 
-**Documento ID**: `{user_id}` (gerado automaticamente)
+**Documento ID**: `{user_id}` (ex: `user_admin_001`, ou auto-gerado)
 
 **Campos**:
 ```javascript
 {
-  user_id: string,           // ID único do usuário
+  // ⚠️ NÃO incluir user_id como campo - o Document ID já é o user_id!
   nome: string,              // Nome completo
   cpf: string,               // CPF (único)
   senha_hash: string,        // Hash SHA-256 da senha
@@ -38,9 +38,12 @@ Armazena informações de login e autenticação.
 - `ativo`
 
 **Exemplo**:
+
+**Document ID**: `user_12345`
+
+**Campos**:
 ```javascript
 {
-  user_id: "user_12345",
   nome: "João Silva",
   cpf: "12345678900",
   senha_hash: "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
@@ -50,6 +53,8 @@ Armazena informações de login e autenticação.
   updated_at: "2025-01-15T10:00:00Z"
 }
 ```
+
+**📝 Nota**: O código lê o Document ID do Firestore e o salva como `user_id` no banco SQLite local (`lib/services/firebase_service.dart:140`).
 
 ---
 

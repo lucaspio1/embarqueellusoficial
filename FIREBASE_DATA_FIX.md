@@ -16,9 +16,12 @@ Você cadastrou o usuário com campos em **MAIÚSCULO**, mas o código espera ca
 ```
 
 ### ✅ O que deveria ser (CORRETO):
+
+**Document ID**: `user_admin_001` (ou deixe auto-gerar)
+
+**Campos do documento**:
 ```javascript
 {
-  "user_id": "user_admin_001", // ✅ ID do usuário (string)
   "nome": "PIO",               // ✅ Minúsculo
   "cpf": "08943760981",        // ✅ Minúsculo
   "senha_hash": "5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5", // ✅ Hash SHA-256 de "12345"
@@ -28,6 +31,8 @@ Você cadastrou o usuário com campos em **MAIÚSCULO**, mas o código espera ca
   "updated_at": "2025-12-01T18:00:00Z"   // ✅ Timestamp
 }
 ```
+
+**📝 Nota**: O campo `user_id` NÃO é necessário dentro do documento, pois o código usa automaticamente o **Document ID** do Firestore como `user_id`.
 
 ---
 
@@ -54,14 +59,15 @@ Você cadastrou o usuário com campos em **MAIÚSCULO**, mas o código espera ca
 
 | Campo | Tipo | Valor |
 |-------|------|-------|
-| `user_id` | string | `user_admin_001` |
 | `nome` | string | `PIO` |
 | `cpf` | string | `08943760981` |
 | `senha_hash` | string | `5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5` |
 | `perfil` | string | `ADMIN` |
-| `ativo` | boolean | `true` |
+| `ativo` | boolean | `true` ← **tipo boolean!** |
 | `created_at` | timestamp | (use o botão "data e hora" e selecione agora) |
 | `updated_at` | timestamp | (use o botão "data e hora" e selecione agora) |
+
+**⚠️ IMPORTANTE**: NÃO adicione o campo `user_id` - ele não é necessário! O código usa automaticamente o Document ID.
 
 4. Clique em **Salvar**
 
