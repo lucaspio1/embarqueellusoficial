@@ -120,15 +120,25 @@ firebase-setup/
 
 ## 🗂️ Coleções Criadas
 
-O script cria as seguintes coleções:
+O script cria as seguintes coleções com dados de exemplo:
 
 1. **usuarios** - Usuários do sistema
+   - Exemplo: Admin com CPF `08943760981`, senha `12345`
+
 2. **alunos** - Cadastro geral de alunos
+   - Exemplo: ALICE LOPES MARTINS, SARAPIQUA, 9° ANO
+   - Datas: 01/12/2025 a 10/12/2025 (hoje + 9 dias)
+
 3. **pessoas** - Pessoas com reconhecimento facial
+   - Exemplo: Pessoa com embedding facial
+   - Datas: 01/12/2025 a 10/12/2025 (hoje + 9 dias)
+
 4. **logs** - Histórico de movimentações
 5. **quartos** - Hospedagem/quartos
 6. **embarques** - Listas de embarque/passeios
 7. **eventos** - Notificações de ações críticas
+
+**📅 Nota**: Os exemplos usam a data de **hoje (01/12/2025)** para funcionar com filtros de data do app.
 
 ## 📊 Índices Compostos
 

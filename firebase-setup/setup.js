@@ -32,10 +32,9 @@ const COLLECTIONS = [
     name: 'usuarios',
     description: 'Usuários do sistema',
     sampleDoc: {
-      user_id: 'user_example',
-      nome: 'Usuário de Exemplo',
-      cpf: '00000000000',
-      senha_hash: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', // "password"
+      nome: 'Admin Sistema',
+      cpf: '08943760981',
+      senha: '12345',  // Texto plano (ou use senha_hash com SHA-256)
       perfil: 'ADMIN',
       ativo: true,
       created_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -46,16 +45,16 @@ const COLLECTIONS = [
     name: 'alunos',
     description: 'Cadastro geral de alunos',
     sampleDoc: {
-      cpf: '11111111111',
-      nome: 'Aluno de Exemplo',
-      colegio: 'Colégio Exemplo',
-      turma: '3A',
-      email: 'aluno@exemplo.com',
-      telefone: '(11) 98765-4321',
+      cpf: '44533457800',
+      nome: 'ALICE LOPES MARTINS',
+      colegio: 'SARAPIQUA',
+      turma: '9° ANO',
+      email: 'alice@exemplo.com',
+      telefone: '48988168320',
       facial_status: 'NAO',
       tem_qr: true,
-      inicio_viagem: '01/02/2025',
-      fim_viagem: '10/02/2025',
+      inicio_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-01T00:00:00')), // Hoje
+      fim_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-10T00:00:00')), // +9 dias
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp()
     }
@@ -73,8 +72,8 @@ const COLLECTIONS = [
       embedding: Array(512).fill(0), // Array de 512 floats
       facial_status: 'CADASTRADA',
       movimentacao: 'QUARTO',
-      inicio_viagem: '01/02/2025',
-      fim_viagem: '10/02/2025',
+      inicio_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-01T00:00:00')), // Hoje
+      fim_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-10T00:00:00')), // +9 dias
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp()
     }
@@ -91,8 +90,8 @@ const COLLECTIONS = [
       operador_nome: '',
       colegio: 'Colégio Exemplo',
       turma: '3A',
-      inicio_viagem: '01/02/2025',
-      fim_viagem: '10/02/2025',
+      inicio_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-01T00:00:00')),
+      fim_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-10T00:00:00')),
       created_at: admin.firestore.FieldValue.serverTimestamp()
     }
   },
@@ -104,8 +103,8 @@ const COLLECTIONS = [
       escola: 'Colégio Exemplo',
       nome_hospede: 'Pessoa de Exemplo',
       cpf: '22222222222',
-      inicio_viagem: '01/02/2025',
-      fim_viagem: '10/02/2025',
+      inicio_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-01T00:00:00')),
+      fim_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-10T00:00:00')),
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp()
     }
@@ -118,12 +117,12 @@ const COLLECTIONS = [
       cpf: '22222222222',
       colegio: 'Colégio Exemplo',
       turma: '3A',
-      idPasseio: 'PRAIA_2025_02_01',
+      idPasseio: 'PRAIA_2025_12_01',
       onibus: '1',
       embarque: '',
       retorno: '',
-      inicioViagem: '01/02/2025',
-      fimViagem: '10/02/2025',
+      inicioViagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-01T00:00:00')),
+      fimViagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-10T00:00:00')),
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp()
     }
