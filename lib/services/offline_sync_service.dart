@@ -13,6 +13,7 @@ import 'package:embarqueellus/models/evento.dart';
 import 'package:embarqueellus/services/quartos_sync_service.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/sync_manager.dart';
+import 'package:embarqueellus/services/user_sync_service.dart' show SyncResult;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class OfflineSyncService {
@@ -656,7 +657,7 @@ class OfflineSyncService {
         print('${outboxSuccess ? "✅" : "❌"} [Outbox] ${results.outbox.message}');
       } catch (e) {
         print('❌ [Outbox] Erro: $e');
-        results.outbox = SyncResult(success: false, message: e.toString(), count: 0);
+        results.outbox = SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
       }
 
       // 8. Sincronizar Logs Pendentes em Lotes (Chunking)
@@ -738,7 +739,7 @@ class OfflineSyncService {
       if (data['success'] != true) {
         final msg = data['message'] ?? 'Erro desconhecido';
         print('⚠️ [EventosSync] $msg');
-        return SyncResult(success: true, count: 0, message: msg);
+        return SyncResult(success: true, itemsProcessed: 0, message: msg);
       }
 
       final eventosData = data['eventos'] ?? [];
@@ -746,7 +747,7 @@ class OfflineSyncService {
 
       if (eventosData.isEmpty) {
         print('✅ [EventosSync] Nenhum evento pendente');
-        return SyncResult(success: true, count: 0, message: 'Nenhum evento pendente');
+        return SyncResult(success: true, itemsProcessed: 0, message: 'Nenhum evento pendente');
       }
 
       // ✅ CORREÇÃO: Carregar eventos já processados localmente
@@ -798,7 +799,7 @@ class OfflineSyncService {
     } catch (e, stack) {
       print('❌ [EventosSync] Erro geral: $e');
       await Sentry.captureException(e, stackTrace: stack);
-      return SyncResult(success: false, count: 0, message: e.toString());
+      return SyncResult(success: false, itemsProcessed: 0, message: e.toString());
     }
   }
 
@@ -898,15 +899,15 @@ class OfflineSyncService {
 
         final total = await _db.getTotalUsuarios();
         print('✅ [BatchSync] $total usuários sincronizados');
-        return SyncResult(success: true, message: '$total usuários sincronizados', count: total);
+        return SyncResult(success: true, message: '$total usuários sincronizados', itemsProcessed: total);
       }
 
       // Se não é uma lista, mas não houve erro de rede, considerar como lista vazia (sucesso)
       print('⚠️ [BatchSync] Resposta sem lista de usuários, assumindo lista vazia');
-      return SyncResult(success: true, message: '0 usuários sincronizados', count: 0);
+      return SyncResult(success: true, message: '0 usuários sincronizados', itemsProcessed: 0);
     } catch (e) {
       print('❌ [BatchSync] Erro ao processar users: $e');
-      return SyncResult(success: false, message: e.toString(), count: 0);
+      return SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
     }
   }
 
@@ -952,13 +953,13 @@ class OfflineSyncService {
         }
 
         print('✅ [BatchSync] $count pessoas sincronizadas');
-        return SyncResult(success: true, message: '$count pessoas', count: count);
+        return SyncResult(success: true, message: '$count pessoas', itemsProcessed: count);
       }
 
-      return SyncResult(success: false, message: 'Dados inválidos', count: 0);
+      return SyncResult(success: false, message: 'Dados inválidos', itemsProcessed: 0);
     } catch (e) {
       print('❌ [BatchSync] Erro ao processar pessoas: $e');
-      return SyncResult(success: false, message: e.toString(), count: 0);
+      return SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
     }
   }
 
@@ -990,13 +991,13 @@ class OfflineSyncService {
         }
 
         print('✅ [BatchSync] $count alunos sincronizados');
-        return SyncResult(success: true, message: '$count alunos', count: count);
+        return SyncResult(success: true, message: '$count alunos', itemsProcessed: count);
       }
 
-      return SyncResult(success: false, message: 'Dados inválidos', count: 0);
+      return SyncResult(success: false, message: 'Dados inválidos', itemsProcessed: 0);
     } catch (e) {
       print('❌ [BatchSync] Erro ao processar alunos: $e');
-      return SyncResult(success: false, message: e.toString(), count: 0);
+      return SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
     }
   }
 
@@ -1028,13 +1029,13 @@ class OfflineSyncService {
         }
 
         print('✅ [BatchSync] $count logs sincronizados');
-        return SyncResult(success: true, message: '$count logs', count: count);
+        return SyncResult(success: true, message: '$count logs', itemsProcessed: count);
       }
 
-      return SyncResult(success: false, message: 'Dados inválidos', count: 0);
+      return SyncResult(success: false, message: 'Dados inválidos', itemsProcessed: 0);
     } catch (e) {
       print('❌ [BatchSync] Erro ao processar logs: $e');
-      return SyncResult(success: false, message: e.toString(), count: 0);
+      return SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
     }
   }
 
@@ -1064,13 +1065,13 @@ class OfflineSyncService {
         }
 
         print('✅ [BatchSync] $count quartos sincronizados');
-        return SyncResult(success: true, message: '$count quartos', count: count);
+        return SyncResult(success: true, message: '$count quartos', itemsProcessed: count);
       }
 
-      return SyncResult(success: false, message: 'Dados inválidos', count: 0);
+      return SyncResult(success: false, message: 'Dados inválidos', itemsProcessed: 0);
     } catch (e) {
       print('❌ [BatchSync] Erro ao processar quartos: $e');
-      return SyncResult(success: false, message: e.toString(), count: 0);
+      return SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
     }
   }
 
@@ -1109,13 +1110,13 @@ class OfflineSyncService {
         await prefs.setStringList('eventos_processados', eventosProcessados);
 
         print('✅ [BatchSync] ${novosEventos} evento(s) NOVO(S) processado(s) (${eventos.length} total recebidos)');
-        return SyncResult(success: true, message: '$novosEventos eventos processados', count: novosEventos);
+        return SyncResult(success: true, message: '$novosEventos eventos processados', itemsProcessed: novosEventos);
       }
 
-      return SyncResult(success: true, message: 'Nenhum evento pendente', count: 0);
+      return SyncResult(success: true, message: 'Nenhum evento pendente', itemsProcessed: 0);
     } catch (e) {
       print('❌ [BatchSync] Erro ao processar eventos: $e');
-      return SyncResult(success: false, message: e.toString(), count: 0);
+      return SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
     }
   }
 
@@ -1130,7 +1131,7 @@ class OfflineSyncService {
       _syncUsers().then((userResult) {
         results.users = userResult;
       }).catchError((e) {
-        results.users = SyncResult(success: false, message: e.toString(), count: 0);
+        results.users = SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
       }),
 
       _syncPessoas().then((pessoasResult) {
@@ -1139,31 +1140,31 @@ class OfflineSyncService {
           FaceRecognitionService.instance.invalidateCache();
         }
       }).catchError((e) {
-        results.pessoas = SyncResult(success: false, message: e.toString(), count: 0);
+        results.pessoas = SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
       }),
 
       _syncAlunos().then((alunosResult) {
         results.alunos = alunosResult;
       }).catchError((e) {
-        results.alunos = SyncResult(success: false, message: e.toString(), count: 0);
+        results.alunos = SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
       }),
 
       _syncLogs().then((logsResult) {
         results.logs = logsResult;
       }).catchError((e) {
-        results.logs = SyncResult(success: false, message: e.toString(), count: 0);
+        results.logs = SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
       }),
 
       _syncQuartos().then((quartosResult) {
         results.quartos = quartosResult;
       }).catchError((e) {
-        results.quartos = SyncResult(success: false, message: e.toString(), count: 0);
+        results.quartos = SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
       }),
 
       _syncEventos().then((eventosResult) {
         results.eventos = eventosResult;
       }).catchError((e) {
-        results.eventos = SyncResult(success: false, message: e.toString(), count: 0);
+        results.eventos = SyncResult(success: false, message: e.toString(), itemsProcessed: 0);
       }),
     ]);
 
@@ -1184,14 +1185,14 @@ class OfflineSyncService {
           .timeout(const Duration(seconds: 30));
     } catch (e) {
       print('❌ [UserSync] Falha de conexão: $e');
-      return SyncResult(success: false, message: 'Falha de conexão', count: 0);
+      return SyncResult(success: false, message: 'Falha de conexão', itemsProcessed: 0);
     }
 
     print('📥 [UserSync] Status: ${resp.statusCode}');
 
     if (resp.statusCode != 200) {
       print('📥 [UserSync] Body (não-200): ${resp.body}');
-      return SyncResult(success: false, message: 'Erro HTTP: ${resp.statusCode}', count: 0);
+      return SyncResult(success: false, message: 'Erro HTTP: ${resp.statusCode}', itemsProcessed: 0);
     }
 
     dynamic data;
@@ -1199,7 +1200,7 @@ class OfflineSyncService {
       data = jsonDecode(resp.body);
     } catch (e) {
       print('❌ [UserSync] JSON inválido: $e');
-      return SyncResult(success: false, message: 'JSON inválido', count: 0);
+      return SyncResult(success: false, message: 'JSON inválido', itemsProcessed: 0);
     }
 
     if (data is Map && data['success'] == true) {
@@ -1227,17 +1228,17 @@ class OfflineSyncService {
 
         final total = await _db.getTotalUsuarios();
         print('✅ [UserSync] $total usuários sincronizados');
-        return SyncResult(success: true, message: '$total usuários sincronizados', count: total);
+        return SyncResult(success: true, message: '$total usuários sincronizados', itemsProcessed: total);
       } else {
         // Resposta com success=true mas sem lista de usuários - assumir lista vazia
         print('⚠️ [UserSync] Resposta sem lista de usuários, assumindo lista vazia');
         await _db.deleteAllUsuarios();
-        return SyncResult(success: true, message: '0 usuários sincronizados', count: 0);
+        return SyncResult(success: true, message: '0 usuários sincronizados', itemsProcessed: 0);
       }
     }
 
     print('❌ [UserSync] Resposta inválida do servidor');
-    return SyncResult(success: false, message: 'Resposta inválida do servidor', count: 0);
+    return SyncResult(success: false, message: 'Resposta inválida do servidor', itemsProcessed: 0);
   }
 
   // -----------------------------
@@ -1295,7 +1296,7 @@ class OfflineSyncService {
     } catch (e, stack) {
       print('❌ [AlunosSync] Erro geral: $e');
       await Sentry.captureException(e, stackTrace: stack);
-      return SyncResult(success: false, count: 0, message: e.toString());
+      return SyncResult(success: false, itemsProcessed: 0, message: e.toString());
     }
   }
 
@@ -1354,7 +1355,7 @@ class OfflineSyncService {
     } catch (e, stack) {
       print('❌ [PessoasSync] Erro geral: $e');
       await Sentry.captureException(e, stackTrace: stack);
-      return SyncResult(success: false, count: 0, message: e.toString());
+      return SyncResult(success: false, itemsProcessed: 0, message: e.toString());
     }
   }
 
@@ -1403,7 +1404,7 @@ class OfflineSyncService {
       );
     } catch (e, stack) {
       print('❌ [LogsSync] Erro geral: $e');
-      return SyncResult(success: false, count: 0, message: e.toString());
+      return SyncResult(success: false, itemsProcessed: 0, message: e.toString());
     }
   }
 
@@ -1423,7 +1424,7 @@ class OfflineSyncService {
     } catch (e, stack) {
       print('❌ [QuartosSync] Erro geral: $e');
       await Sentry.captureException(e, stackTrace: stack);
-      return SyncResult(success: false, count: 0, message: e.toString());
+      return SyncResult(success: false, itemsProcessed: 0, message: e.toString());
     }
   }
 
@@ -1480,7 +1481,7 @@ class OfflineSyncService {
       if (data['success'] != true) {
         final msg = data['message'] ?? 'Erro desconhecido';
         print('❌ [AlunosSync] Erro: $msg');
-        return SyncResult(success: false, count: 0, message: msg);
+        return SyncResult(success: false, itemsProcessed: 0, message: msg);
       }
 
       final alunos = data['data'] ?? [];
@@ -1515,11 +1516,11 @@ class OfflineSyncService {
         level: SentryLevel.info,
       );
 
-      return SyncResult(success: true, count: count, message: 'Alunos sincronizados');
+      return SyncResult(success: true, itemsProcessed: count, message: 'Alunos sincronizados');
     } catch (e) {
       print('❌ [ProcessarRespostaAlunos] Erro: $e');
       await Sentry.captureException(e);
-      return SyncResult(success: false, count: 0, message: e.toString());
+      return SyncResult(success: false, itemsProcessed: 0, message: e.toString());
     }
   }
 
@@ -1530,7 +1531,7 @@ class OfflineSyncService {
       if (data['success'] != true) {
         final msg = data['message'] ?? 'Erro desconhecido';
         print('❌ [PessoasSync] Erro: $msg');
-        return SyncResult(success: false, count: 0, message: msg);
+        return SyncResult(success: false, itemsProcessed: 0, message: msg);
       }
 
       final pessoas = data['data'] ?? [];
@@ -1617,7 +1618,7 @@ class OfflineSyncService {
     } catch (e) {
       print('❌ [ProcessarRespostaPessoas] Erro: $e');
       await Sentry.captureException(e);
-      return SyncResult(success: false, count: 0, message: e.toString());
+      return SyncResult(success: false, itemsProcessed: 0, message: e.toString());
     }
   }
 
@@ -1628,7 +1629,7 @@ class OfflineSyncService {
       if (data['success'] != true) {
         final msg = data['message'] ?? 'Erro desconhecido';
         print('❌ [LogsSync] Erro: $msg');
-        return SyncResult(success: false, count: 0, message: msg);
+        return SyncResult(success: false, itemsProcessed: 0, message: msg);
       }
 
       final logs = data['data'] ?? [];
@@ -1676,10 +1677,10 @@ class OfflineSyncService {
       }
 
       print('✅ [$count] logs sincronizados com sucesso');
-      return SyncResult(success: true, count: count, message: '$count logs sincronizados');
+      return SyncResult(success: true, itemsProcessed: count, message: '$count logs sincronizados');
     } catch (e) {
       print('❌ [ProcessarRespostaLogs] Erro: $e');
-      return SyncResult(success: false, count: 0, message: e.toString());
+      return SyncResult(success: false, itemsProcessed: 0, message: e.toString());
     }
   }
 
@@ -1870,32 +1871,16 @@ class _BatchResult {
 // CLASSES DE RESULTADO PARA SINCRONIZAÇÃO
 // ====================================================================
 
-/// Resultado de sincronização individual (Users, Alunos, Logs, etc)
-class SyncResult {
-  final bool success;
-  final String message;
-  final int count;
-
-  SyncResult({
-    required this.success,
-    required this.message,
-    required this.count,
-  });
-
-  @override
-  String toString() => 'SyncResult(success: $success, count: $count, message: $message)';
-}
-
 /// Resultado consolidado de sincronização completa
 class ConsolidatedSyncResult {
   bool hasInternet = true;
-  SyncResult users = SyncResult(success: false, message: 'Não sincronizado', count: 0);
-  SyncResult alunos = SyncResult(success: false, message: 'Não sincronizado', count: 0);
-  SyncResult pessoas = SyncResult(success: false, message: 'Não sincronizado', count: 0);
-  SyncResult logs = SyncResult(success: false, message: 'Não sincronizado', count: 0);
-  SyncResult quartos = SyncResult(success: false, message: 'Não sincronizado', count: 0);
-  SyncResult eventos = SyncResult(success: false, message: 'Não sincronizado', count: 0);
-  SyncResult outbox = SyncResult(success: false, message: 'Não sincronizado', count: 0);
+  SyncResult users = SyncResult(success: false, message: 'Não sincronizado', itemsProcessed: 0);
+  SyncResult alunos = SyncResult(success: false, message: 'Não sincronizado', itemsProcessed: 0);
+  SyncResult pessoas = SyncResult(success: false, message: 'Não sincronizado', itemsProcessed: 0);
+  SyncResult logs = SyncResult(success: false, message: 'Não sincronizado', itemsProcessed: 0);
+  SyncResult quartos = SyncResult(success: false, message: 'Não sincronizado', itemsProcessed: 0);
+  SyncResult eventos = SyncResult(success: false, message: 'Não sincronizado', itemsProcessed: 0);
+  SyncResult outbox = SyncResult(success: false, message: 'Não sincronizado', itemsProcessed: 0);
 
   /// Retorna true se TODAS as sincronizações foram bem-sucedidas
   bool get allSuccess =>
