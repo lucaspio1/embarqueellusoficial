@@ -8,10 +8,10 @@ Você cadastrou o usuário com campos em **MAIÚSCULO**, mas o código espera ca
 ```javascript
 {
   "CPF": "08943760981",        // ❌ Maiúsculo
-  "ID": 1,                     // ❌ Campo errado (deveria ser user_id string)
+  "ID": 1,                     // ❌ Campo errado
   "NOME": "PIO",               // ❌ Maiúsculo
   "PERFIL": "ADMIN",           // ❌ Maiúsculo
-  "SENHA": "12345"             // ❌ Senha em texto plano
+  "SENHA": "12345"             // ❌ Maiúsculo
 }
 ```
 
@@ -24,7 +24,7 @@ Você cadastrou o usuário com campos em **MAIÚSCULO**, mas o código espera ca
 {
   "nome": "PIO",               // ✅ Minúsculo
   "cpf": "08943760981",        // ✅ Minúsculo
-  "senha_hash": "5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5", // ✅ Hash SHA-256 de "12345"
+  "senha": "12345",            // ✅ Texto plano (ou use "senha_hash" com hash SHA-256)
   "perfil": "ADMIN",           // ✅ Minúsculo (valor ADMIN continua maiúsculo)
   "ativo": true,               // ✅ Boolean
   "created_at": "2025-12-01T18:00:00Z",  // ✅ Timestamp
@@ -32,7 +32,9 @@ Você cadastrou o usuário com campos em **MAIÚSCULO**, mas o código espera ca
 }
 ```
 
-**📝 Nota**: O campo `user_id` NÃO é necessário dentro do documento, pois o código usa automaticamente o **Document ID** do Firestore como `user_id`.
+**📝 Notas**:
+- O campo `user_id` NÃO é necessário dentro do documento, pois o código usa automaticamente o **Document ID** do Firestore como `user_id`.
+- Você pode usar `"senha"` (texto plano) ou `"senha_hash"` (hash SHA-256) - o código aceita ambos!
 
 ---
 
@@ -61,30 +63,44 @@ Você cadastrou o usuário com campos em **MAIÚSCULO**, mas o código espera ca
 |-------|------|-------|
 | `nome` | string | `PIO` |
 | `cpf` | string | `08943760981` |
-| `senha_hash` | string | `5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5` |
+| `senha` | string | `12345` ← **texto plano!** |
 | `perfil` | string | `ADMIN` |
 | `ativo` | boolean | `true` ← **tipo boolean!** |
 | `created_at` | timestamp | (use o botão "data e hora" e selecione agora) |
 | `updated_at` | timestamp | (use o botão "data e hora" e selecione agora) |
 
-**⚠️ IMPORTANTE**: NÃO adicione o campo `user_id` - ele não é necessário! O código usa automaticamente o Document ID.
+**⚠️ IMPORTANTE**:
+- NÃO adicione o campo `user_id` - ele não é necessário! O código usa automaticamente o Document ID.
+- Use `senha` para texto plano (mais fácil!) ou `senha_hash` para hash SHA-256 (mais seguro)
 
 4. Clique em **Salvar**
 
 ---
 
-## 🔐 Hashes de Senhas Comuns
+## 🔐 Sobre Senhas
 
-Para facilitar, aqui estão os hashes SHA-256 de senhas comuns:
+### Texto Plano (Recomendado para simplicidade)
+
+Você pode usar senhas em **texto plano** diretamente:
+```javascript
+{
+  "senha": "12345"  // ← Direto, sem hash!
+}
+```
+
+### Hash SHA-256 (Recomendado para segurança)
+
+Se preferir mais segurança, use hashes SHA-256:
 
 | Senha | Hash SHA-256 |
 |-------|--------------|
 | `12345` | `5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5` |
 | `123456` | `8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92` |
 | `admin` | `8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918` |
-| `senha123` | `8f5793a44f78f22f465e7e0c3e64c5e6e4e0b7fba7e84a9b4e12c4b8f0c74a3d` |
 
-**⚠️ IMPORTANTE**: Em produção, use senhas fortes! Estas são apenas para testes.
+Neste caso, use o campo `senha_hash` em vez de `senha`.
+
+**⚠️ IMPORTANTE**: O código aceita **ambos os formatos** automaticamente!
 
 ---
 
