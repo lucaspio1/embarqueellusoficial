@@ -18,9 +18,8 @@ class AlunosSyncService {
     print('ℹ️ [AlunosSyncService] Sincronização automática de pessoas via Firebase listeners');
 
     final db = await _db.database;
-    final count = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM pessoas_facial')
-    ) ?? 0;
+    final countResult = await db.rawQuery('SELECT COUNT(*) FROM pessoas_facial');
+    final count = Sqflite.firstIntValue(countResult) ?? 0;
 
     return SyncResult(
       success: true,
@@ -35,9 +34,8 @@ class AlunosSyncService {
     print('ℹ️ [AlunosSyncService] Sincronização automática de alunos via Firebase listeners');
 
     final db = await _db.database;
-    final count = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM alunos')
-    ) ?? 0;
+    final countResult = await db.rawQuery('SELECT COUNT(*) FROM alunos');
+    final count = Sqflite.firstIntValue(countResult) ?? 0;
 
     return SyncResult(
       success: true,
@@ -49,9 +47,8 @@ class AlunosSyncService {
   /// Verifica se há alunos locais
   Future<bool> temAlunosLocais() async {
     final db = await _db.database;
-    final count = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM alunos')
-    ) ?? 0;
+    final countResult = await db.rawQuery('SELECT COUNT(*) FROM alunos');
+    final count = Sqflite.firstIntValue(countResult) ?? 0;
     return count > 0;
   }
 }
