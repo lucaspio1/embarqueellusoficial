@@ -20,8 +20,8 @@ class UserSyncService {
 
     // Retorna resultado dummy para manter compatibilidade
     final db = await _db.database;
-    final countResult = await db.rawQuery('SELECT COUNT(*) FROM usuarios');
-    final count = Sqflite.firstIntValue(countResult) ?? 0;
+    final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM usuarios');
+    final count = (countResult.first['count'] as int?) ?? 0;
 
     return SyncResult(
       success: true,
@@ -40,8 +40,8 @@ class UserSyncService {
   /// Verifica se há usuários locais
   Future<bool> temUsuariosLocais() async {
     final db = await _db.database;
-    final countResult = await db.rawQuery('SELECT COUNT(*) FROM usuarios WHERE ativo = 1');
-    final count = Sqflite.firstIntValue(countResult) ?? 0;
+    final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM usuarios WHERE ativo = 1');
+    final count = (countResult.first['count'] as int?) ?? 0;
     return count > 0;
   }
 }
