@@ -585,35 +585,131 @@ class DatabaseHelper {
     }
   }
 
-  // Métodos para passageiros
+  // ========================================================================
+  // MÉTODOS PARA PASSAGEIROS (Refatorados para usar tabela alunos)
+  // ========================================================================
+
+  /// Insere um passageiro marcando o aluno como embarcado
+  /// REFATORADO v10: Atualiza tabela alunos ao invés de inserir em passageiros
   Future<void> insertPassageiro(Passageiro passageiro) async {
     final db = await database;
-    await db.insert('passageiros', passageiro.toMap());
+    final timestamp = DateTime.now().toIso8601String();
+
+    await db.update(
+      'alunos',
+      {
+        'embarcado': passageiro.embarque == 'SIM' ? 1 : 0,
+        'data_embarque': passageiro.embarque == 'SIM' ? timestamp : null,
+        'retornado': passageiro.retorno == 'SIM' ? 1 : 0,
+        'data_retorno': passageiro.retorno == 'SIM' ? timestamp : null,
+        'onibus': passageiro.onibus,
+        'codigo_pulseira': passageiro.codigoPulseira,
+        'id_passeio': passageiro.idPasseio,
+        'colegio': passageiro.colegio,
+        'turma': passageiro.turma,
+        'inicio_viagem': passageiro.inicioViagem,
+        'fim_viagem': passageiro.fimViagem,
+        'updated_at': timestamp,
+      },
+      where: 'cpf = ?',
+      whereArgs: [passageiro.cpf],
+    );
   }
 
+  /// Busca todos os passageiros (alunos embarcados ou com id_passeio)
+  /// REFATORADO v10: Consulta tabela alunos
   Future<List<Passageiro>> getPassageiros() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('passageiros');
-    return maps.map((map) => Passageiro.fromMap(map)).toList();
+    final List<Map<String, dynamic>> maps = await db.query(
+      'alunos',
+      where: 'embarcado = 1 OR id_passeio IS NOT NULL',
+    );
+
+    // Converter de alunos para Passageiro (compatibilidade)
+    return maps.map((map) => Passageiro(
+      cpf: map['cpf'] ?? '',
+      nome: map['nome'] ?? '',
+      colegio: map['colegio'] ?? '',
+      embarque: map['embarcado'] == 1 ? 'SIM' : 'NAO',
+      retorno: map['retornado'] == 1 ? 'SIM' : 'NAO',
+      onibus: map['onibus'] ?? '',
+      codigoPulseira: map['codigo_pulseira'] ?? '',
+      idPasseio: map['id_passeio'] ?? '',
+      email: map['email'] ?? '',
+      telefone: map['telefone'] ?? '',
+      turma: map['turma'] ?? '',
+      inicioViagem: map['inicio_viagem'] ?? '',
+      fimViagem: map['fim_viagem'] ?? '',
+    )).toList();
   }
 
+  /// Busca passageiros embarcados (embarque = SIM)
+  /// REFATORADO v10: Consulta tabela alunos
   Future<List<Map<String, dynamic>>> getPassageirosEmbarcados() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'passageiros',
-      where: 'embarque = ?',
-      whereArgs: ['SIM'],
+    return await db.query(
+      'alunos',
+      where: 'embarcado = ?',
+      whereArgs: [1],
     );
-    return maps;
   }
 
+  /// Atualiza dados de um passageiro
+  /// REFATORADO v10: Atualiza tabela alunos
   Future<void> updatePassageiro(Passageiro passageiro) async {
     final db = await database;
     await db.update(
-      'passageiros',
-      passageiro.toMap(),
+      'alunos',
+      {
+        'nome': passageiro.nome,
+        'colegio': passageiro.colegio,
+        'email': passageiro.email,
+        'telefone': passageiro.telefone,
+        'turma': passageiro.turma,
+        'embarcado': passageiro.embarque == 'SIM' ? 1 : 0,
+        'data_embarque': passageiro.embarque == 'SIM' ? DateTime.now().toIso8601String() : null,
+        'retornado': passageiro.retorno == 'SIM' ? 1 : 0,
+        'data_retorno': passageiro.retorno == 'SIM' ? DateTime.now().toIso8601String() : null,
+        'onibus': passageiro.onibus,
+        'codigo_pulseira': passageiro.codigoPulseira,
+        'id_passeio': passageiro.idPasseio,
+        'inicio_viagem': passageiro.inicioViagem,
+        'fim_viagem': passageiro.fimViagem,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
       where: 'cpf = ?',
       whereArgs: [passageiro.cpf],
+    );
+  }
+
+  /// Deleta um passageiro (marca como não embarcado)
+  /// REFATORADO v10: Atualiza tabela alunos ao invés de deletar
+  Future<void> deletePassageiro(String cpf) async {
+    final db = await database;
+    await db.update(
+      'alunos',
+      {
+        'embarcado': 0,
+        'data_embarque': null,
+        'retornado': 0,
+        'data_retorno': null,
+        'onibus': null,
+        'codigo_pulseira': null,
+        'id_passeio': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'cpf = ?',
+      whereArgs: [cpf],
+    );
+  }
+
+  /// Busca todos os passageiros (usado para listagem genérica)
+  /// REFATORADO v10: Consulta tabela alunos
+  Future<List<Map<String, dynamic>>> getAllPassageiros() async {
+    final db = await database;
+    return await db.query(
+      'alunos',
+      where: 'embarcado = 1 OR id_passeio IS NOT NULL',
     );
   }
 
@@ -675,23 +771,42 @@ class DatabaseHelper {
     );
   }
 
-  // Métodos para embeddings
+  // ========================================================================
+  // MÉTODOS PARA EMBEDDINGS (Refatorados para usar tabela alunos)
+  // ========================================================================
+
+  /// Insere/atualiza embedding de um aluno
+  /// REFATORADO v10: Atualiza tabela alunos ao invés de inserir em embeddings
+  /// @deprecated Use upsertPessoaFacial() para cadastrar facial completo
   Future<void> insertEmbedding(Map<String, dynamic> embedding) async {
     final db = await database;
-    await db.insert(
-      'embeddings',
+    final cpf = embedding['cpf'];
+    if (cpf == null || cpf.isEmpty) {
+      print('⚠️ [DB] Tentativa de inserir embedding sem CPF');
+      return;
+    }
+
+    await db.update(
+      'alunos',
       {
-        ...embedding,
         'embedding': jsonEncode(embedding['embedding']),
-        'created_at': DateTime.now().toIso8601String(),
+        'facial_cadastrada': 1,
+        'data_cadastro_facial': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
       },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      where: 'cpf = ?',
+      whereArgs: [cpf],
     );
   }
 
+  /// Busca todos os embeddings (alunos com facial cadastrada)
+  /// REFATORADO v10: Consulta tabela alunos
   Future<List<Map<String, dynamic>>> getAllEmbeddings() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('embeddings');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'alunos',
+      where: 'facial_cadastrada = 1 AND embedding IS NOT NULL',
+    );
 
     return maps.map((map) {
       dynamic embedding;
@@ -715,21 +830,21 @@ class DatabaseHelper {
     }).toList();
   }
 
+  /// Busca TODOS os alunos com facial cadastrada (sem filtro de data)
+  /// REFATORADO v10: Consulta tabela alunos unificada
   Future<List<Map<String, dynamic>>> getTodosAlunosComFacial() async {
     final db = await database;
 
-    // ✅ CORREÇÃO: Buscar APENAS da tabela pessoas_facial (fonte única da verdade)
-    // Removido UNION desnecessário - pessoas_facial já contém tudo
-    final List<Map<String, dynamic>> pessoasComFacial = await db.rawQuery('''
-      SELECT cpf, nome, email, telefone, turma, embedding, movimentacao, inicio_viagem, fim_viagem
-      FROM pessoas_facial
-      WHERE facial_status = 'CADASTRADA' AND embedding IS NOT NULL
-    ''');
+    // Buscar da tabela alunos onde facial_cadastrada = 1
+    final List<Map<String, dynamic>> alunosComFacial = await db.query(
+      'alunos',
+      where: 'facial_cadastrada = 1 AND embedding IS NOT NULL',
+    );
 
-    return pessoasComFacial.map((pessoa) {
+    return alunosComFacial.map((aluno) {
       dynamic embedding;
       try {
-        final embeddingStr = pessoa['embedding']?.toString() ?? '';
+        final embeddingStr = aluno['embedding']?.toString() ?? '';
         if (embeddingStr.isNotEmpty) {
           // Se não começa com '[', adiciona colchetes (formato CSV legado)
           final jsonStr = embeddingStr.startsWith('[')
@@ -738,12 +853,12 @@ class DatabaseHelper {
           embedding = jsonDecode(jsonStr);
         }
       } catch (e) {
-        print('⚠️ [DB] Erro ao fazer parse de embedding para ${pessoa['cpf']}: $e');
+        print('⚠️ [DB] Erro ao fazer parse de embedding para ${aluno['cpf']}: $e');
         embedding = null;
       }
 
       return {
-        ...pessoa,
+        ...aluno,
         'embedding': embedding,
       };
     }).toList();
@@ -751,16 +866,16 @@ class DatabaseHelper {
 
   /// Retorna alunos com facial ATIVOS (dentro do período de viagem)
   /// Filtra por data: hoje >= inicio_viagem E hoje <= fim_viagem
+  /// REFATORADO v10: Consulta tabela alunos unificada
   Future<List<Map<String, dynamic>>> getTodosAlunosComFacialAtivos() async {
     final db = await database;
     final hoje = DateTime.now();
 
-    // Buscar todas as pessoas com facial
-    final List<Map<String, dynamic>> pessoasComFacial = await db.rawQuery('''
-      SELECT cpf, nome, colegio, email, telefone, turma, embedding, movimentacao, inicio_viagem, fim_viagem
-      FROM pessoas_facial
-      WHERE facial_status = 'CADASTRADA' AND embedding IS NOT NULL
-    ''');
+    // Buscar todos os alunos com facial da tabela alunos
+    final List<Map<String, dynamic>> pessoasComFacial = await db.query(
+      'alunos',
+      where: 'facial_cadastrada = 1 AND embedding IS NOT NULL',
+    );
 
     // 🔍 DEBUG: Log inicial
     print('🔍 [Filtro de Data] Total de pessoas com facial no banco: ${pessoasComFacial.length}');
@@ -882,6 +997,7 @@ class DatabaseHelper {
 
   /// Conta quantos passageiros de uma lista específica têm facial cadastrada
   /// Usado no controle de embarque para contar faciais apenas da lista atual
+  /// REFATORADO v10: Consulta tabela alunos
   Future<int> contarFaciaisDaListaEmbarque(List<String> cpfs) async {
     if (cpfs.isEmpty) return 0;
 
@@ -890,8 +1006,8 @@ class DatabaseHelper {
 
     final result = await db.rawQuery('''
       SELECT COUNT(*) as total
-      FROM pessoas_facial
-      WHERE facial_status = 'CADASTRADA'
+      FROM alunos
+      WHERE facial_cadastrada = 1
         AND embedding IS NOT NULL
         AND cpf IN ($placeholders)
     ''', cpfs);
@@ -901,6 +1017,7 @@ class DatabaseHelper {
 
   /// Retorna pessoas com facial cadastrada filtradas por lista de CPFs
   /// Usado na tela Gerenciar Alunos para marcar quais têm facial
+  /// REFATORADO v10: Consulta tabela alunos
   Future<List<Map<String, dynamic>>> getPessoasFaciaisPorCPFs(List<String> cpfs) async {
     if (cpfs.isEmpty) return [];
 
@@ -909,8 +1026,8 @@ class DatabaseHelper {
 
     final result = await db.rawQuery('''
       SELECT cpf, nome, email, telefone, turma, movimentacao, inicio_viagem, fim_viagem
-      FROM pessoas_facial
-      WHERE facial_status = 'CADASTRADA'
+      FROM alunos
+      WHERE facial_cadastrada = 1
         AND embedding IS NOT NULL
         AND cpf IN ($placeholders)
     ''', cpfs);
@@ -918,12 +1035,14 @@ class DatabaseHelper {
     return result;
   }
 
+  /// Atualiza a movimentação de um aluno
+  /// REFATORADO v10: Atualiza tabela alunos
   Future<void> updatePessoaMovimentacao(
       String cpf, String movimentacao) async {
     if (cpf.isEmpty) return;
     final db = await database;
     await db.update(
-      'pessoas_facial',
+      'alunos',
       {
         'movimentacao': movimentacao,
         'updated_at': DateTime.now().toIso8601String(),
@@ -933,16 +1052,19 @@ class DatabaseHelper {
     );
   }
 
+  /// Retorna contagem de alunos por tipo de movimentação
+  /// REFATORADO v10: Consulta tabela alunos
   Future<Map<String, int>> getContagemPorMovimentacao() async {
     final db = await database;
 
-    // ✅ Buscar da tabela pessoas_facial (onde as pessoas ESTÃO AGORA)
+    // Buscar da tabela alunos (onde as pessoas ESTÃO AGORA)
     // Não dos logs (histórico), para ser consistente com a listagem
     final result = await db.rawQuery('''
     SELECT TRIM(UPPER(movimentacao)) AS tipo,
            COUNT(*) AS total
-    FROM pessoas_facial
-    WHERE UPPER(TRIM(movimentacao)) IN ('QUARTO', 'SAIU_DO_QUARTO', 'VOLTOU_AO_QUARTO', 'FOI_PARA_BALADA')
+    FROM alunos
+    WHERE facial_cadastrada = 1
+      AND UPPER(TRIM(movimentacao)) IN ('QUARTO', 'SAIU_DO_QUARTO', 'VOLTOU_AO_QUARTO', 'FOI_PARA_BALADA')
     GROUP BY TRIM(UPPER(movimentacao))
     ORDER BY
       CASE TRIM(UPPER(movimentacao))
@@ -1103,28 +1225,27 @@ class DatabaseHelper {
     );
   }
 
+  /// Limpa todos os dados gerais (mantém usuários para login offline)
+  /// REFATORADO v10: Remove referências a tabelas antigas
   Future<void> clearAllData() async {
     final db = await database;
-    await db.delete('passageiros');
     await db.delete('alunos');
-    await db.delete('embeddings');
     await db.delete('logs');
     await db.delete('sync_queue');
+    await db.delete('quartos');
     // NÃO deletar usuarios para manter login offline
     print('✅ Todos os dados foram limpos do banco de dados');
   }
 
-  /// Limpa TODOS os dados de viagens (incluindo pessoas_facial)
+  /// Limpa TODOS os dados de viagens (versão completa)
   /// Usado quando o admin encerra TODAS as viagens
+  /// REFATORADO v10: Remove referências a tabelas antigas
   Future<void> limparTodosDados() async {
     final db = await database;
 
     print('🧹 [DB] Limpando TODOS os dados de viagens...');
 
-    await db.delete('passageiros');
     await db.delete('alunos');
-    await db.delete('embeddings');
-    await db.delete('pessoas_facial');
     await db.delete('logs');
     await db.delete('sync_queue');
     await db.delete('quartos');
@@ -1135,6 +1256,7 @@ class DatabaseHelper {
 
   /// Limpa dados de uma viagem específica
   /// Usado quando o admin encerra uma viagem específica
+  /// REFATORADO v10: Usa apenas tabela alunos unificada
   Future<void> limparDadosPorViagem(String inicioViagem, String fimViagem) async {
     final db = await database;
 
@@ -1142,16 +1264,7 @@ class DatabaseHelper {
 
     int totalRemovidos = 0;
 
-    // Limpar passageiros
-    final passageirosRemovidos = await db.delete(
-      'passageiros',
-      where: 'inicio_viagem = ? AND fim_viagem = ?',
-      whereArgs: [inicioViagem, fimViagem],
-    );
-    totalRemovidos += passageirosRemovidos;
-    print('   - Passageiros removidos: $passageirosRemovidos');
-
-    // Limpar alunos
+    // Limpar alunos da viagem
     final alunosRemovidos = await db.delete(
       'alunos',
       where: 'inicio_viagem = ? AND fim_viagem = ?',
@@ -1160,40 +1273,7 @@ class DatabaseHelper {
     totalRemovidos += alunosRemovidos;
     print('   - Alunos removidos: $alunosRemovidos');
 
-    // ✅ IMPORTANTE: Buscar CPFs ANTES de deletar pessoas_facial (para limpar embeddings)
-    final cpfsViagem = await db.query(
-      'pessoas_facial',
-      columns: ['cpf'],
-      where: 'inicio_viagem = ? AND fim_viagem = ?',
-      whereArgs: [inicioViagem, fimViagem],
-    );
-
-    // Limpar pessoas_facial
-    final pessoasRemovidas = await db.delete(
-      'pessoas_facial',
-      where: 'inicio_viagem = ? AND fim_viagem = ?',
-      whereArgs: [inicioViagem, fimViagem],
-    );
-    totalRemovidos += pessoasRemovidas;
-    print('   - Pessoas removidas: $pessoasRemovidas');
-
-    // Limpar embeddings (faciais) dos CPFs da viagem
-    int embeddingsRemovidos = 0;
-    for (final row in cpfsViagem) {
-      final cpf = row['cpf'] as String?;
-      if (cpf != null && cpf.isNotEmpty) {
-        final removed = await db.delete(
-          'embeddings',
-          where: 'cpf = ?',
-          whereArgs: [cpf],
-        );
-        embeddingsRemovidos += removed;
-      }
-    }
-    totalRemovidos += embeddingsRemovidos;
-    print('   - Embeddings removidos: $embeddingsRemovidos');
-
-    // Limpar logs
+    // Limpar logs da viagem
     final logsRemovidos = await db.delete(
       'logs',
       where: 'inicio_viagem = ? AND fim_viagem = ?',
@@ -1202,7 +1282,7 @@ class DatabaseHelper {
     totalRemovidos += logsRemovidos;
     print('   - Logs removidos: $logsRemovidos');
 
-    // Limpar quartos
+    // Limpar quartos da viagem
     final quartosRemovidos = await db.delete(
       'quartos',
       where: 'inicio_viagem = ? AND fim_viagem = ?',
@@ -1266,46 +1346,59 @@ class DatabaseHelper {
 
   // ========================================================================
   // MÉTODOS PARA PESSOAS_FACIAL (Reconhecimento Facial)
+  // REFATORADOS v10: Agora usam tabela alunos unificada
   // ========================================================================
 
   /// Insere ou atualiza uma pessoa com facial cadastrada
+  /// REFATORADO v10: Usa tabela alunos ao invés de pessoas_facial
   Future<void> upsertPessoaFacial(Map<String, dynamic> pessoa) async {
     final db = await database;
     final data = Map<String, dynamic>.from(pessoa);
     data['updated_at'] = DateTime.now().toIso8601String();
-    data['created_at'] =
-        pessoa['created_at'] ?? DateTime.now().toIso8601String();
+    data['created_at'] = pessoa['created_at'] ?? DateTime.now().toIso8601String();
+    data['facial_cadastrada'] = 1; // Marca como tendo facial
+    data['data_cadastro_facial'] = DateTime.now().toIso8601String();
 
-    if (!data.containsKey('movimentacao')) {
+    // Preservar movimentação existente se não for fornecida
+    if (!data.containsKey('movimentacao') || data['movimentacao'] == null) {
       final existente = await db.query(
-        'pessoas_facial',
+        'alunos',
         columns: ['movimentacao'],
         where: 'cpf = ?',
         whereArgs: [data['cpf']],
         limit: 1,
       );
-      if (existente.isNotEmpty) {
+      if (existente.isNotEmpty && existente.first['movimentacao'] != null) {
         data['movimentacao'] = existente.first['movimentacao'];
         print('🔍 [DB] ${data['nome']}: Preservando movimentação existente: "${data['movimentacao']}"');
       } else {
-        data['movimentacao'] = '';
-        print('🔍 [DB] ${data['nome']}: Pessoa nova, movimentação vazia');
+        data['movimentacao'] = 'QUARTO'; // Default
+        print('🔍 [DB] ${data['nome']}: Aluno novo, movimentação = QUARTO');
       }
     } else {
       print('🔍 [DB] ${data['nome']}: Salvando com movimentacao: "${data['movimentacao']}"');
     }
 
+    // Converter embedding para JSON string se necessário
+    if (data.containsKey('embedding') && data['embedding'] is List) {
+      data['embedding'] = jsonEncode(data['embedding']);
+    }
+
     await db.insert(
-      'pessoas_facial',
+      'alunos',
       data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
   /// Busca todas as pessoas com facial cadastrada
+  /// REFATORADO v10: Consulta tabela alunos
   Future<List<Map<String, dynamic>>> getAllPessoasFacial() async {
     final db = await database;
-    final List<Map<String, dynamic>> pessoas = await db.query('pessoas_facial');
+    final List<Map<String, dynamic>> pessoas = await db.query(
+      'alunos',
+      where: 'facial_cadastrada = 1',
+    );
 
     // Decodificar embeddings
     return pessoas.map((pessoa) {
@@ -1330,10 +1423,11 @@ class DatabaseHelper {
   }
 
   /// Busca uma pessoa por CPF
+  /// REFATORADO v10: Consulta tabela alunos
   Future<Map<String, dynamic>?> getPessoaFacialByCpf(String cpf) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
-      'pessoas_facial',
+      'alunos',
       where: 'cpf = ?',
       whereArgs: [cpf],
     );
@@ -1356,20 +1450,30 @@ class DatabaseHelper {
     return pessoa;
   }
 
-  /// Deleta uma pessoa facial por CPF
+  /// Deleta uma pessoa facial por CPF (marca como sem facial)
+  /// REFATORADO v10: Atualiza tabela alunos ao invés de deletar
   Future<void> deletePessoaFacial(String cpf) async {
     final db = await database;
-    await db.delete(
-      'pessoas_facial',
+    await db.update(
+      'alunos',
+      {
+        'facial_cadastrada': 0,
+        'embedding': null,
+        'data_cadastro_facial': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
       where: 'cpf = ?',
       whereArgs: [cpf],
     );
   }
 
   /// Conta total de pessoas com facial
+  /// REFATORADO v10: Consulta tabela alunos
   Future<int> getTotalPessoasFacial() async {
     final db = await database;
-    final result = await db.rawQuery('SELECT COUNT(*) as count FROM pessoas_facial');
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM alunos WHERE facial_cadastrada = 1'
+    );
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
@@ -1415,11 +1519,12 @@ class DatabaseHelper {
   }
 
   /// Busca hóspedes de um quarto específico com informação de presença
-  /// Cruza dados com a tabela pessoas_facial para verificar movimentação
+  /// Cruza dados com a tabela alunos para verificar movimentação
+  /// REFATORADO v10: JOIN com tabela alunos ao invés de pessoas_facial
   Future<List<Map<String, dynamic>>> getHospedesDoQuarto(String numeroQuarto) async {
     final db = await database;
 
-    // JOIN entre quartos e pessoas_facial para pegar a movimentação atual
+    // JOIN entre quartos e alunos para pegar a movimentação atual
     // USANDO TRIM para garantir que espaços em branco não atrapalhem o JOIN
     final result = await db.rawQuery('''
       SELECT
@@ -1429,10 +1534,10 @@ class DatabaseHelper {
         q.cpf as cpf_quarto,
         q.inicio_viagem,
         q.fim_viagem,
-        p.cpf as cpf_pessoa,
-        COALESCE(p.movimentacao, '') as movimentacao
+        a.cpf as cpf_aluno,
+        COALESCE(a.movimentacao, '') as movimentacao
       FROM quartos q
-      LEFT JOIN pessoas_facial p ON TRIM(q.cpf) = TRIM(p.cpf)
+      LEFT JOIN alunos a ON TRIM(q.cpf) = TRIM(a.cpf)
       WHERE q.numero_quarto = ?
       ORDER BY q.nome_hospede ASC
     ''', [numeroQuarto]);
@@ -1440,7 +1545,7 @@ class DatabaseHelper {
     // 🔍 DIAGNÓSTICO: Ver o que está retornando do JOIN
     print('🔍 [JOIN] Quarto $numeroQuarto:');
     for (final row in result) {
-      print('   ${row['nome_hospede']}: CPF_Q="${row['cpf_quarto']}" CPF_P="${row['cpf_pessoa']}" MOV="${row['movimentacao']}"');
+      print('   ${row['nome_hospede']}: CPF_Q="${row['cpf_quarto']}" CPF_A="${row['cpf_aluno']}" MOV="${row['movimentacao']}"');
     }
 
     return result;
