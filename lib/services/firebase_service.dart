@@ -106,6 +106,10 @@ class FirebaseService {
   void _initRealtimeListeners() {
     // Listener para usuários
     _usuariosCollection.snapshots().listen((snapshot) {
+      print('🔥 [Listener] Recebido snapshot de USUÁRIOS: ${snapshot.docs.length} documento(s)');
+      if (snapshot.docs.isEmpty) {
+        print('⚠️ [Listener] ATENÇÃO: Nenhum usuário encontrado no Firebase!');
+      }
       _syncUsuariosFromSnapshot(snapshot);
     }, onError: (error) {
       print('❌ [FirebaseService] Erro no listener de usuários: $error');
@@ -114,6 +118,10 @@ class FirebaseService {
 
     // Listener para alunos
     _alunosCollection.snapshots().listen((snapshot) {
+      print('🔥 [Listener] Recebido snapshot de ALUNOS: ${snapshot.docs.length} documento(s)');
+      if (snapshot.docs.isEmpty) {
+        print('⚠️ [Listener] ATENÇÃO: Nenhum aluno encontrado no Firebase!');
+      }
       _syncAlunosFromSnapshot(snapshot);
     }, onError: (error) {
       print('❌ [FirebaseService] Erro no listener de alunos: $error');
@@ -122,6 +130,10 @@ class FirebaseService {
 
     // Listener para pessoas
     _pessoasCollection.snapshots().listen((snapshot) {
+      print('🔥 [Listener] Recebido snapshot de PESSOAS: ${snapshot.docs.length} documento(s)');
+      if (snapshot.docs.isEmpty) {
+        print('⚠️ [Listener] ATENÇÃO: Nenhuma pessoa encontrada no Firebase!');
+      }
       _syncPessoasFromSnapshot(snapshot);
     }, onError: (error) {
       print('❌ [FirebaseService] Erro no listener de pessoas: $error');
@@ -134,6 +146,7 @@ class FirebaseService {
         .limit(1000)
         .snapshots()
         .listen((snapshot) {
+      print('🔥 [Listener] Recebido snapshot de LOGS: ${snapshot.docs.length} documento(s)');
       _syncLogsFromSnapshot(snapshot);
     }, onError: (error) {
       print('❌ [FirebaseService] Erro no listener de logs: $error');
@@ -142,6 +155,7 @@ class FirebaseService {
 
     // Listener para quartos
     _quartosCollection.snapshots().listen((snapshot) {
+      print('🔥 [Listener] Recebido snapshot de QUARTOS: ${snapshot.docs.length} documento(s)');
       _syncQuartosFromSnapshot(snapshot);
     }, onError: (error) {
       print('❌ [FirebaseService] Erro no listener de quartos: $error');
@@ -153,6 +167,7 @@ class FirebaseService {
         .where('processado', isEqualTo: false)
         .snapshots()
         .listen((snapshot) {
+      print('🔥 [Listener] Recebido snapshot de EVENTOS: ${snapshot.docs.length} documento(s)');
       _processEventos(snapshot);
     }, onError: (error) {
       print('❌ [FirebaseService] Erro no listener de eventos: $error');

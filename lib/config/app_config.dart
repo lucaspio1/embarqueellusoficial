@@ -8,7 +8,12 @@ class AppConfig {
   AppConfig._();
   static final AppConfig instance = AppConfig._();
 
-  /// URL do Google Apps Script - DADOS GERAIS (ALUNOS, PESSOAS, LOGS, LOGIN)
+  /// ⚠️ DEPRECATED: URL do Google Apps Script - DADOS GERAIS (ALUNOS, PESSOAS, LOGS, LOGIN)
+  ///
+  /// **Firebase é agora a fonte principal de dados.**
+  /// Esta configuração é mantida apenas para compatibilidade com código legado (outbox sync).
+  /// Novos dados vêm automaticamente do Firebase via listeners em tempo real.
+  @Deprecated('Use Firebase como fonte de dados. Mantido apenas para outbox sync legado.')
   String get googleAppsScriptUrl {
     return dotenv.get(
       'GOOGLE_APPS_SCRIPT_URL',
@@ -16,7 +21,11 @@ class AppConfig {
     );
   }
 
-  /// URL do Google Apps Script - EMBARQUES/PASSEIOS
+  /// ⚠️ DEPRECATED: URL do Google Apps Script - EMBARQUES/PASSEIOS
+  ///
+  /// **Firebase é agora a fonte principal de dados.**
+  /// Esta configuração é mantida apenas para compatibilidade com código legado.
+  @Deprecated('Use Firebase como fonte de dados.')
   String get embarqueScriptUrl {
     return dotenv.get(
       'EMBARQUE_SCRIPT_URL',
@@ -24,7 +33,11 @@ class AppConfig {
     );
   }
 
-  /// ID da Planilha do Google Sheets
+  /// ⚠️ DEPRECATED: ID da Planilha do Google Sheets
+  ///
+  /// **Firebase é agora a fonte principal de dados.**
+  /// Esta configuração é mantida apenas para compatibilidade com código legado.
+  @Deprecated('Use Firebase como fonte de dados.')
   String get spreadsheetId {
     return dotenv.get(
       'SPREADSHEET_ID',
