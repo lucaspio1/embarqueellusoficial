@@ -244,7 +244,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         'telefone': aluno['telefone'] ?? '',
         'turma': aluno['turma'] ?? '',
         'embedding': jsonEncode(embedding),
-        'facial_status': 'CADASTRADA',
+        // ✅ CORREÇÃO: Remover facial_status (não existe no SQLite - facial_cadastrada é setado automaticamente)
         // NÃO setar 'movimentacao' - preserva a existente do Google Sheets
         'inicio_viagem': aluno['inicio_viagem'] ?? '',
         'fim_viagem': aluno['fim_viagem'] ?? '',
@@ -373,7 +373,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         'telefone': aluno['telefone'] ?? '',
         'turma': aluno['turma'] ?? '',
         'embedding': jsonEncode(embedding),
-        'facial_status': 'CADASTRADA',
+        // ✅ CORREÇÃO: Remover facial_status (não existe no SQLite - facial_cadastrada é setado automaticamente)
         // NÃO setar 'movimentacao' - preserva a existente do Google Sheets
         'inicio_viagem': aluno['inicio_viagem'] ?? '',
         'fim_viagem': aluno['fim_viagem'] ?? '',

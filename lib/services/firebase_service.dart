@@ -490,6 +490,7 @@ class FirebaseService {
 
     // Tentar enviar para Firebase
     try {
+      // 1. Atualizar coleção alunos
       await _alunosCollection.doc(cpf).set({
         'cpf': cpf,
         'nome': nome,
@@ -507,7 +508,15 @@ class FirebaseService {
         'updated_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      // 2. ✅ CORREÇÃO: Atualizar coleção embarques com Facial: "CADASTRADA"
+      await _embarquesCollection.doc(cpf).set({
+        'cpf': cpf,
+        'Facial': 'CADASTRADA',
+        'updated_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
       print('✅ [FirebaseService] Cadastro facial enviado para Firebase: $nome');
+      print('✅ [FirebaseService] Embarque atualizado com Facial: CADASTRADA');
     } catch (e) {
       print('⚠️ [FirebaseService] Erro ao enviar cadastro facial: $e');
       // Enfileirar para retry
@@ -781,8 +790,8 @@ class FirebaseService {
     String? retorno,
   }) async {
     try {
-      final docId = '${cpf}_${idPasseio}_$onibus';
-      await _embarquesCollection.doc(docId).set({
+      // ✅ CORREÇÃO: Usar apenas CPF como docId para atualizar documento existente
+      await _embarquesCollection.doc(cpf).set({
         'cpf': cpf,
         'idPasseio': idPasseio,
         'onibus': onibus,

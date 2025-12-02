@@ -973,7 +973,7 @@ class OfflineSyncService {
             'email': pessoa['email'] ?? '',
             'telefone': pessoa['telefone'] ?? '',
             'embedding': embeddingList != null ? jsonEncode(embeddingList) : null,
-            'facial_status': 'CADASTRADA',
+            // ✅ CORREÇÃO: Remover facial_status - facial_cadastrada é setado automaticamente
             'movimentacao': pessoa['movimentacao'] ?? '',
             'inicio_viagem': pessoa['inicio_viagem'] ?? '',
             'fim_viagem': pessoa['fim_viagem'] ?? '',
@@ -1011,6 +1011,7 @@ class OfflineSyncService {
             'turma': aluno['turma'] ?? '',
             'email': aluno['email'] ?? '',
             'telefone': aluno['telefone'] ?? '',
+            // ✅ CORREÇÃO: facial_status vem do Firebase, facial vai pro SQLite
             'facial': aluno['facial_status'] ?? 'NAO',
             'tem_qr': aluno['tem_qr'] ?? 'NAO',
             'inicio_viagem': aluno['inicio_viagem'] ?? '',
@@ -1536,7 +1537,8 @@ class OfflineSyncService {
             'turma': aluno['turma'] ?? '',
             'email': aluno['email'] ?? '',
             'telefone': aluno['telefone'] ?? '',
-            'facial': aluno['facial_status'],
+            // ✅ CORREÇÃO: facial_status vem do Firebase, facial vai pro SQLite
+            'facial': aluno['facial_status'] ?? 'NAO',
             'tem_qr': aluno['tem_qr'] ?? aluno['pulseira'] ?? 'NAO',
             'inicio_viagem': aluno['inicio_viagem'] ?? '',
             'fim_viagem': aluno['fim_viagem'] ?? '',
@@ -1622,7 +1624,7 @@ class OfflineSyncService {
                 'email': pessoa['email'] ?? '',
                 'telefone': pessoa['telefone'] ?? '',
                 'embedding': jsonEncode(embedding),
-                'facial_status': 'CADASTRADA',
+                // ✅ CORREÇÃO: Remover facial_status - facial_cadastrada é setado automaticamente no upsertPessoaFacial
                 'movimentacao': movimentacaoFinal,
                 'inicio_viagem': pessoa['inicio_viagem'] ?? '',
                 'fim_viagem': pessoa['fim_viagem'] ?? '',
