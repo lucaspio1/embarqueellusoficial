@@ -1034,7 +1034,21 @@ class DatabaseHelper {
       String cpf, String movimentacao) async {
     if (cpf.isEmpty) return;
     final db = await database;
-    await db.update(
+
+    // ✅ CORREÇÃO: Verificar se registro existe antes de atualizar
+    final existing = await db.query(
+      'alunos',
+      where: 'cpf = ?',
+      whereArgs: [cpf],
+      limit: 1,
+    );
+
+    if (existing.isEmpty) {
+      print('⚠️ [DB] updatePessoaMovimentacao: Aluno com CPF $cpf não encontrado na tabela alunos');
+      return;
+    }
+
+    final rowsAffected = await db.update(
       'alunos',
       {
         'movimentacao': movimentacao,
@@ -1043,6 +1057,8 @@ class DatabaseHelper {
       where: 'cpf = ?',
       whereArgs: [cpf],
     );
+
+    print('✅ [DB] updatePessoaMovimentacao: CPF $cpf → $movimentacao ($rowsAffected row(s) updated)');
   }
 
   /// Retorna contagem de alunos por tipo de movimentação
