@@ -270,14 +270,27 @@ class DataService {
       // ✅ Usar apenas CPF como docId (REMOVER espaços extras!)
       final docId = cpf.toString().trim();
 
-      print('📤 [DataService] Enviando para Firebase:');
-      print('   docId (CPF): "$docId" (length: ${docId.length})');
+      print('📤 [DataService] === SYNC PARA FIREBASE ===');
+      print('   CPF original: "$cpf"');
+      print('   CPF após trim (docId): "$docId"');
+      print('   Length: ${docId.length}');
+      print('   Bytes: ${docId.codeUnits}');
       print('   Operação: $operacao = $valor');
       print('   Nome: ${passageiro.nome}');
+      print('   Dados completos: $updateData');
+
+      // Verificar se documento já existe
+      final docSnapshot = await _firestore.collection('embarques').doc(docId).get();
+      if (docSnapshot.exists) {
+        print('   ✅ Documento EXISTE - fazendo merge');
+        print('   Dados atuais: ${docSnapshot.data()}');
+      } else {
+        print('   ⚠️ Documento NÃO EXISTE - criando novo');
+      }
 
       await _firestore.collection('embarques').doc(docId).set(updateData, SetOptions(merge: true));
 
-      print('✅ [DataService] Sync OK para CPF $docId');
+      print('✅ [DataService] Sync concluído para CPF $docId');
     } catch (e) {
       print('❌ [DataService] Erro ao sincronizar com Firebase: $e');
       _pendentesDeSincronizacao.add(item);
