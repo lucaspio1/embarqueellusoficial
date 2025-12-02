@@ -678,15 +678,18 @@ class FirebaseService {
           final tipo = row['tipo'] as String;
 
           if (tipo == 'face_register') {
-            await _alunosCollection.doc(payload['cpf']).set({
-              'cpf': payload['cpf'],
+            final cpf = payload['cpf'];
+
+            // Atualizar coleção alunos
+            await _alunosCollection.doc(cpf).set({
+              'cpf': cpf,
               'nome': payload['nome'],
               'colegio': payload['colegio'] ?? '',
               'turma': payload['turma'] ?? '',
               'email': payload['email'],
               'telefone': payload['telefone'],
               'embedding': payload['embedding'],
-              'facial_status': 'CADASTRADA',
+              // ✅ CORREÇÃO: Remover facial_status duplicado - só usar facial_cadastrada
               'facial_cadastrada': true,
               'data_cadastro_facial': FieldValue.serverTimestamp(),
               'movimentacao': payload['movimentacao'] ?? 'QUARTO',
@@ -694,6 +697,16 @@ class FirebaseService {
               'fim_viagem': payload['fim_viagem'] ?? '',
               'updated_at': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
+
+            // Atualizar coleção embarques
+            await _embarquesCollection.doc(cpf).set({
+              'cpf': cpf,
+              'Facial': 'CADASTRADA',
+              'facial_cadastrada': true,
+              'updated_at': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+
+            print('✅ [FirebaseService] Cadastro facial (retry) enviado: ${payload['nome']}');
           }
 
           // Remover da outbox (deletar da sync_queue)
