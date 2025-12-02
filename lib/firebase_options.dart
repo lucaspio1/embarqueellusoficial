@@ -50,21 +50,15 @@ class DefaultFirebaseOptions {
   }
 
   // ============================================================================
-  // CONFIGURAÇÃO ANDROID
+  // CONFIGURAÇÃO ANDROID - ✅ CONFIGURADO
   // ============================================================================
-  // ⚠️ ATENÇÃO: App ID do Android ainda precisa ser configurado
-  // Os valores abaixo usam as configurações do projeto Firebase, mas o appId
-  // precisa ser obtido do Firebase Console para o app Android específico.
-  //
-  // Para obter o App ID do Android:
-  // 1. Acesse: https://console.firebase.google.com/
-  // 2. Selecione o projeto "embarqueellus"
-  // 3. Vá em Configurações do Projeto > Geral > Seus apps > Android
-  // 4. Copie o "ID do app" (formato: 1:720926401522:android:xxxxx)
+  // Configurações obtidas do google-services.json
+  // Projeto Firebase: embarqueellus
+  // Package Name: br.com.embarqueellus
   // ============================================================================
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCioVECOLEOrn5ZeRo1L2Mu5TBqYcSUxhs',
-    appId: '1:720926401522:android:CONFIGURE_APP_ID_HERE',  // ⚠️ Obtenha do Firebase Console
+    apiKey: 'AIzaSyCFA6Xq4Mt-FGrc_vI1t9cdW1-nTDLNWH0',
+    appId: '1:720926401522:android:84425bf393bf3412fb416b',
     messagingSenderId: '720926401522',
     projectId: 'embarqueellus',
     storageBucket: 'embarqueellus.firebasestorage.app',

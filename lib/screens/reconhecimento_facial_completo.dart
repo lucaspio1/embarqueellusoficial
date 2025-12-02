@@ -137,7 +137,16 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       setState(() => _processando = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Erro: $e')),
+        SnackBar(
+          content: Text('❌ Erro: $e'),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            top: 50,
+            left: 10,
+            right: 10,
+            bottom: MediaQuery.of(context).size.height - 150,
+          ),
+        ),
       );
     }
   }
@@ -221,6 +230,13 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
             content: Text('✅ ${aluno['nome']} registrado: ${_getTipoLabel(tipo)}'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(
+              top: 50,
+              left: 10,
+              right: 10,
+              bottom: MediaQuery.of(context).size.height - 150,
+            ),
           ),
         );
       }
@@ -232,6 +248,13 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
           SnackBar(
             content: Text('❌ Erro ao registrar: $e'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(
+              top: 50,
+              left: 10,
+              right: 10,
+              bottom: MediaQuery.of(context).size.height - 150,
+            ),
           ),
         );
       }
@@ -258,7 +281,16 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       return result;
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao abrir câmera: $e')),
+        SnackBar(
+          content: Text('Erro ao abrir câmera: $e'),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            top: 50,
+            left: 10,
+            right: 10,
+            bottom: MediaQuery.of(context).size.height - 150,
+          ),
+        ),
       );
       return null;
     }
