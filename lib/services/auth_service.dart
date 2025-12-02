@@ -99,9 +99,16 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString('usuario_logado');
 
-    if (userJson != null) {
-      _usuarioLogado = jsonDecode(userJson);
-      return _usuarioLogado;
+    if (userJson != null && userJson.isNotEmpty) {
+      try {
+        _usuarioLogado = jsonDecode(userJson);
+        return _usuarioLogado;
+      } catch (e) {
+        print('⚠️ [Auth] Erro ao fazer parse do usuário: $e');
+        // Remove dado corrompido
+        await prefs.remove('usuario_logado');
+        return null;
+      }
     }
 
     return null;
