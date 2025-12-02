@@ -170,12 +170,23 @@ class OfflineSyncService {
     final movementLogs = <Map<String, dynamic>>[];
 
     for (final row in batch) {
-      final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
-      payload['idOutbox'] = row['id'];
-      if (row['tipo'] == 'face_register') {
-        faceRegisters.add(payload);
-      } else {
-        movementLogs.add(payload);
+      try {
+        final payloadStr = row['payload'] as String;
+        if (payloadStr.isEmpty) {
+          print('⚠️ [OfflineSync] Payload vazio para item ${row['id']}, ignorando');
+          continue;
+        }
+
+        final payload = jsonDecode(payloadStr) as Map<String, dynamic>;
+        payload['idOutbox'] = row['id'];
+        if (row['tipo'] == 'face_register') {
+          faceRegisters.add(payload);
+        } else {
+          movementLogs.add(payload);
+        }
+      } catch (e) {
+        print('❌ [OfflineSync] Erro ao processar payload do item ${row['id']}: $e');
+        continue;
       }
     }
 
@@ -940,10 +951,14 @@ class OfflineSyncService {
           final embedding = pessoa['embedding'];
           List<double>? embeddingList;
           if (embedding != null) {
-            if (embedding is String) {
-              final parsed = jsonDecode(embedding);
-              if (parsed is List) {
-                embeddingList = parsed.map((e) => (e as num).toDouble()).toList();
+            if (embedding is String && embedding.isNotEmpty) {
+              try {
+                final parsed = jsonDecode(embedding);
+                if (parsed is List) {
+                  embeddingList = parsed.map((e) => (e as num).toDouble()).toList();
+                }
+              } catch (e) {
+                print('⚠️ [Sync] Erro ao fazer parse de embedding: $e');
               }
             } else if (embedding is List) {
               embeddingList = embedding.map((e) => (e as num).toDouble()).toList();

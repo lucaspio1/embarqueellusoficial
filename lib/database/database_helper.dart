@@ -626,9 +626,20 @@ class DatabaseHelper {
     final List<Map<String, dynamic>> maps = await db.query('embeddings');
 
     return maps.map((map) {
+      dynamic embedding;
+      try {
+        final embeddingStr = map['embedding'];
+        if (embeddingStr != null && embeddingStr.toString().isNotEmpty) {
+          embedding = jsonDecode(embeddingStr);
+        }
+      } catch (e) {
+        print('⚠️ [DB] Erro ao fazer parse de embedding: $e');
+        embedding = null;
+      }
+
       return {
         ...map,
-        'embedding': jsonDecode(map['embedding']),
+        'embedding': embedding,
       };
     }).toList();
   }
