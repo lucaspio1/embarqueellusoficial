@@ -135,7 +135,7 @@ class AcoesCriticasService {
       print('🔄 Atualizando banco de dados local...');
       final db = await _db.database;
       final result = await db.update(
-        'pessoas_facial',
+        'alunos',
         {'movimentacao': 'QUARTO'},
       );
       print('✅ $result pessoas atualizadas localmente');
@@ -172,25 +172,17 @@ class AcoesCriticasService {
   Future<void> _limparBancoDadosLocal() async {
     final db = await _db.database;
 
-    // Limpar tabela de pessoas_facial
-    await db.delete('pessoas_facial');
-    print('  ✅ Tabela pessoas_facial limpa');
+    // Limpar tabela de alunos
+    await db.delete('alunos');
+    print('  ✅ Tabela alunos limpa');
 
     // Limpar tabela de logs
     await db.delete('logs');
     print('  ✅ Tabela logs limpa');
 
-    // Limpar tabela de alunos
-    await db.delete('alunos');
-    print('  ✅ Tabela alunos limpa');
-
     // Limpar tabela de quartos
     await db.delete('quartos');
     print('  ✅ Tabela quartos limpa');
-
-    // Limpar tabela de passageiros
-    await db.delete('passageiros');
-    print('  ✅ Tabela passageiros limpa');
 
     // Limpar sync_queue (fila de sincronização)
     await db.delete('sync_queue');
@@ -201,9 +193,9 @@ class AcoesCriticasService {
   Future<void> _limparBancoDadosLocalFiltrado(String inicioViagem, String fimViagem) async {
     final db = await _db.database;
 
-    // Limpar pessoas_facial da viagem
+    // Limpar alunos da viagem
     final pessoasRemovidas = await db.delete(
-      'pessoas_facial',
+      'alunos',
       where: 'inicio_viagem = ? AND fim_viagem = ?',
       whereArgs: [inicioViagem, fimViagem],
     );

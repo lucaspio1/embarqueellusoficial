@@ -63,7 +63,7 @@ class _ListaPorLocalScreenState extends State<ListaPorLocalScreen> {
       final result = await db.rawQuery('''
         SELECT DISTINCT p.cpf, p.nome, p.email, p.telefone, p.turma, p.movimentacao,
                l.timestamp, l.operador_nome
-        FROM pessoas_facial p
+        FROM alunos p
         LEFT JOIN (
           SELECT cpf, timestamp, operador_nome, tipo
           FROM logs
