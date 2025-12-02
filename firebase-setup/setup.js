@@ -61,19 +61,19 @@ const COLLECTIONS = [
   },
   {
     name: 'pessoas',
-    description: 'Pessoas com reconhecimento facial',
+    description: 'Pessoas com reconhecimento facial (múltiplos exemplos criados)',
     sampleDoc: {
-      cpf: '22222222222',
-      nome: 'Pessoa de Exemplo',
-      colegio: 'Colégio Exemplo',
-      turma: '3A',
-      email: 'pessoa@exemplo.com',
-      telefone: '(11) 98765-4321',
-      embedding: Array(512).fill(0), // Array de 512 floats
+      cpf: '55566677788',
+      nome: 'DANIEL PEREIRA SOUZA',
+      colegio: 'SARAPIQUA',
+      turma: '9° ANO',
+      email: 'daniel@exemplo.com',
+      telefone: '48977665544',
+      embedding: Array(512).fill(0).map((_, i) => Math.random()), // Embedding fake mas válido
       facial_status: 'CADASTRADA',
       movimentacao: 'QUARTO',
-      inicio_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-01T00:00:00')), // Hoje
-      fim_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-10T00:00:00')), // +9 dias
+      inicio_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-01T00:00:00')),
+      fim_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-10T00:00:00')),
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp()
     }
@@ -245,6 +245,61 @@ function initializeFirebase(serviceAccountPath) {
 // ============================================================================
 // CRIAÇÃO DE COLEÇÕES
 // ============================================================================
+
+/**
+ * Cria múltiplas pessoas com facial cadastrada (embedding fake para testes)
+ */
+async function createMultiplePessoasSamples(db, collection) {
+  const hoje = new Date('2025-12-01T00:00:00');
+  const fimViagem = new Date('2025-12-10T00:00:00');
+
+  // Gerar embedding fake (512 números aleatórios entre 0 e 1)
+  const generateFakeEmbedding = () => Array(512).fill(0).map(() => Math.random());
+
+  const pessoasSamples = [
+    {
+      cpf: '55566677788',
+      nome: 'DANIEL PEREIRA SOUZA',
+      colegio: 'SARAPIQUA',
+      turma: '9° ANO',
+      email: 'daniel@exemplo.com',
+      telefone: '48977665544',
+      embedding: generateFakeEmbedding(),
+      facial_status: 'CADASTRADA',
+      movimentacao: 'QUARTO',
+      inicio_viagem: admin.firestore.Timestamp.fromDate(hoje),
+      fim_viagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    {
+      cpf: '44533457800',
+      nome: 'ALICE LOPES MARTINS',
+      colegio: 'SARAPIQUA',
+      turma: '9° ANO',
+      email: 'alice@exemplo.com',
+      telefone: '48988168320',
+      embedding: generateFakeEmbedding(),
+      facial_status: 'CADASTRADA',
+      movimentacao: 'QUARTO',
+      inicio_viagem: admin.firestore.Timestamp.fromDate(hoje),
+      fim_viagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    }
+  ];
+
+  // Criar todos os documentos
+  const batch = db.batch();
+  pessoasSamples.forEach(pessoa => {
+    const docRef = db.collection('pessoas').doc();
+    batch.set(docRef, pessoa);
+  });
+
+  await batch.commit();
+
+  return pessoasSamples.length;
+}
 
 /**
  * Cria múltiplos embarques de exemplo correspondentes aos alunos e QR codes
@@ -456,6 +511,12 @@ async function createCollections(db, options = {}) {
         if (collection.name === 'alunos') {
           await createMultipleStudentSamples(db, collection);
           spinner.succeed(chalk.green(`Coleção "${collection.name}" criada com múltiplos documentos de exemplo (incluindo QR codes)`));
+          results.push({ collection: collection.name, status: 'created', doc: 'multiple' });
+        }
+        // Para pessoas, criar múltiplos exemplos com facial cadastrada
+        else if (collection.name === 'pessoas') {
+          await createMultiplePessoasSamples(db, collection);
+          spinner.succeed(chalk.green(`Coleção "${collection.name}" criada com múltiplos documentos com facial (DANIEL e ALICE)`));
           results.push({ collection: collection.name, status: 'created', doc: 'multiple' });
         }
         // Para embarques, criar múltiplos exemplos correspondentes aos alunos
