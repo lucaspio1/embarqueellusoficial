@@ -266,11 +266,30 @@ class FirebaseService {
       for (var doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
 
-        // Extrair embedding (array de 512 floats)
+        // Extrair embedding (pode ser array ou string JSON)
         final embeddingData = _getField(data, 'embedding');
-        final embeddingList = (embeddingData as List<dynamic>?)
-            ?.map((e) => (e as num).toDouble())
-            .toList() ?? [];
+        List<double> embeddingList = [];
+
+        if (embeddingData != null) {
+          if (embeddingData is List) {
+            // Embedding como array
+            embeddingList = embeddingData
+                .map((e) => (e as num).toDouble())
+                .toList();
+          } else if (embeddingData is String && embeddingData.isNotEmpty) {
+            // Embedding como string JSON
+            try {
+              final parsed = jsonDecode(embeddingData);
+              if (parsed is List) {
+                embeddingList = parsed
+                    .map((e) => (e as num).toDouble())
+                    .toList();
+              }
+            } catch (e) {
+              print('⚠️ [FirebaseService] Erro ao fazer parse de embedding para ${_getField(data, 'cpf')}: $e');
+            }
+          }
+        }
 
         // Converter timestamps
         final inicioViagem = _convertTimestampToDate(_getField(data, 'inicio_viagem'));
