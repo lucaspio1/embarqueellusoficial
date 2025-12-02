@@ -267,14 +267,17 @@ class DataService {
       }
       updateData['updated_at'] = FieldValue.serverTimestamp();
 
-      // ✅ Usar apenas CPF como docId
-      final docId = cpf;
+      // ✅ Usar apenas CPF como docId (REMOVER espaços extras!)
+      final docId = cpf.toString().trim();
 
-      print('📤 [DataService] Enviando para Firebase: $docId - $updateData');
+      print('📤 [DataService] Enviando para Firebase:');
+      print('   docId (CPF): "$docId" (length: ${docId.length})');
+      print('   Operação: $operacao = $valor');
+      print('   Nome: ${passageiro.nome}');
 
       await _firestore.collection('embarques').doc(docId).set(updateData, SetOptions(merge: true));
 
-      print('✅ [DataService] Sync OK para CPF $cpf');
+      print('✅ [DataService] Sync OK para CPF $docId');
     } catch (e) {
       print('❌ [DataService] Erro ao sincronizar com Firebase: $e');
       _pendentesDeSincronizacao.add(item);

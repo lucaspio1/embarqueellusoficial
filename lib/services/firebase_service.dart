@@ -436,27 +436,20 @@ class FirebaseService {
       });
       print('✅ [FirebaseService] Log enviado para Firebase: $personName - $tipo');
 
-      // ✅ Atualizar movimentação do aluno no Firebase (alunos + embarques)
+      // ✅ Atualizar movimentação do aluno no Firebase (APENAS alunos, NÃO embarques)
       final tipoNormalizado = tipo.trim().toUpperCase();
       if (tipoNormalizado.isNotEmpty &&
           tipoNormalizado != 'RECONHECIMENTO' &&
           tipoNormalizado != 'FACIAL') {
         try {
-          // Atualizar coleção alunos
+          // Atualizar APENAS coleção alunos (embarques só tem: embarque, Facial, retorno)
           await _alunosCollection.doc(cpf).set({
             'cpf': cpf,
             'movimentacao': tipoNormalizado,
             'updated_at': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
-          // ✅ CORREÇÃO: Atualizar coleção embarques com a movimentação
-          await _embarquesCollection.doc(cpf).set({
-            'cpf': cpf,
-            'movimentacao': tipoNormalizado,
-            'updated_at': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-
-          print('✅ [FirebaseService] Movimentação atualizada no Firebase: $personName → $tipoNormalizado');
+          print('✅ [FirebaseService] Movimentação atualizada em alunos: $personName → $tipoNormalizado');
         } catch (e) {
           print('⚠️ [FirebaseService] Erro ao atualizar movimentação: $e');
         }
@@ -633,28 +626,21 @@ class FirebaseService {
 
       await batch.commit();
 
-      // ✅ CORREÇÃO: Atualizar movimentações nas coleções alunos + embarques
+      // ✅ CORREÇÃO: Atualizar movimentações APENAS na coleção alunos (NÃO embarques)
       for (final log in pendingLogs) {
         final tipo = (log['tipo'] as String).trim().toUpperCase();
         final cpf = log['cpf'] as String;
 
         if (tipo.isNotEmpty && tipo != 'RECONHECIMENTO' && tipo != 'FACIAL') {
           try {
-            // Atualizar coleção alunos
+            // Atualizar APENAS coleção alunos (embarques só tem: embarque, Facial, retorno)
             await _alunosCollection.doc(cpf).set({
               'cpf': cpf,
               'movimentacao': tipo,
               'updated_at': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
 
-            // Atualizar coleção embarques
-            await _embarquesCollection.doc(cpf).set({
-              'cpf': cpf,
-              'movimentacao': tipo,
-              'updated_at': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-
-            print('✅ [FirebaseService] Movimentação sincronizada: CPF $cpf → $tipo');
+            print('✅ [FirebaseService] Movimentação sincronizada em alunos: CPF $cpf → $tipo');
           } catch (e) {
             print('⚠️ [FirebaseService] Erro ao atualizar movimentação de $cpf: $e');
           }
