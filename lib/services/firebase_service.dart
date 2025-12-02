@@ -472,13 +472,16 @@ class FirebaseService {
     String? inicioViagem,
     String? fimViagem,
   }) async {
+    // ✅ CORREÇÃO: Trim no CPF para evitar espaços extras
+    final cpfLimpo = cpf.trim();
+
     // Buscar movimentação atual do aluno
     final db = await _db.database;
     final alunoExistente = await db.query(
       'alunos',
       columns: ['movimentacao'],
       where: 'cpf = ?',
-      whereArgs: [cpf],
+      whereArgs: [cpfLimpo],
       limit: 1,
     );
 
@@ -516,8 +519,8 @@ class FirebaseService {
     // Tentar enviar para Firebase
     try {
       // 1. Atualizar coleção alunos
-      await _alunosCollection.doc(cpf).set({
-        'cpf': cpf,
+      await _alunosCollection.doc(cpfLimpo).set({
+        'cpf': cpfLimpo,
         'nome': nome,
         'colegio': colegio ?? '',
         'turma': turma ?? '',
@@ -534,8 +537,8 @@ class FirebaseService {
       }, SetOptions(merge: true));
 
       // 2. ✅ CORREÇÃO: Atualizar coleção embarques com Facial: "CADASTRADA"
-      await _embarquesCollection.doc(cpf).set({
-        'cpf': cpf,
+      await _embarquesCollection.doc(cpfLimpo).set({
+        'cpf': cpfLimpo,
         'Facial': 'CADASTRADA',
         'facial_cadastrada': true,  // ✅ Marcar como cadastrada na planilha embarque
         'updated_at': FieldValue.serverTimestamp(),
@@ -547,7 +550,7 @@ class FirebaseService {
       print('⚠️ [FirebaseService] Erro ao enviar cadastro facial: $e');
       // Enfileirar para retry
       await _db.enqueueOutbox('face_register', {
-        'cpf': cpf,
+        'cpf': cpfLimpo,
         'nome': nome,
         'colegio': colegio ?? '',
         'turma': turma ?? '',
@@ -678,7 +681,7 @@ class FirebaseService {
           final tipo = row['tipo'] as String;
 
           if (tipo == 'face_register') {
-            final cpf = payload['cpf'];
+            final cpf = payload['cpf'].toString().trim();  // ✅ TRIM no CPF
 
             // Atualizar coleção alunos
             await _alunosCollection.doc(cpf).set({
@@ -850,9 +853,11 @@ class FirebaseService {
     String? retorno,
   }) async {
     try {
-      // ✅ CORREÇÃO: Usar apenas CPF como docId para atualizar documento existente
-      await _embarquesCollection.doc(cpf).set({
-        'cpf': cpf,
+      // ✅ CORREÇÃO: Usar apenas CPF como docId (com trim!)
+      final cpfLimpo = cpf.trim();
+
+      await _embarquesCollection.doc(cpfLimpo).set({
+        'cpf': cpfLimpo,
         'idPasseio': idPasseio,
         'onibus': onibus,
         if (embarque != null) 'embarque': embarque,
@@ -860,7 +865,7 @@ class FirebaseService {
         'updated_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      print('✅ [FirebaseService] Embarque atualizado: $cpf');
+      print('✅ [FirebaseService] Embarque atualizado: $cpfLimpo');
     } catch (e) {
       print('❌ [FirebaseService] Erro ao atualizar embarque: $e');
       Sentry.captureException(e);
