@@ -250,7 +250,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         'fim_viagem': aluno['fim_viagem'] ?? '',
       });
 
-      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial (preservando movimentação existente)');
+      print('✅ [CadastroFacial] Salvo na tabela alunos (preservando movimentação existente)');
 
       await Sentry.captureMessage(
         'Facial cadastrada com sucesso',
@@ -379,7 +379,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         'fim_viagem': aluno['fim_viagem'] ?? '',
       });
 
-      print('✅ [CadastroFacialAvançado] Salvo na tabela pessoas_facial (preservando movimentação existente)');
+      print('✅ [CadastroFacialAvançado] Salvo na tabela alunos (preservando movimentação existente)');
 
       await Sentry.captureMessage(
         'Facial avançada cadastrada com sucesso',

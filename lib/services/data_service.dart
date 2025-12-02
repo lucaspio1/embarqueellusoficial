@@ -123,10 +123,9 @@ class DataService {
       }
       print('💾 [DataService] ${lista.length} passageiros salvos (SharedPreferences + SQLite)');
 
-      // 🔧 CORREÇÃO: Removida sincronização de passageiros para tabela alunos
-      // A tabela 'alunos' deve conter APENAS dados da aba "Alunos" do Google Sheets
-      // A tabela 'passageiros' deve conter APENAS dados da lista de embarque
-      // Essas duas tabelas devem permanecer SEPARADAS
+      // 🔧 REFATORAÇÃO v10: Tabela unificada 'alunos'
+      // A tabela 'alunos' contém tanto dados de alunos quanto informações de embarque/retorno
+      // As antigas tabelas separadas (pessoas_facial, passageiros) foram unificadas
     } catch (e) {
       print('❌ [DataService] Erro ao salvar no SQLite: $e');
     }

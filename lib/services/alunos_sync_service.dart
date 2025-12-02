@@ -18,7 +18,7 @@ class AlunosSyncService {
     print('ℹ️ [AlunosSyncService] Sincronização automática de pessoas via Firebase listeners');
 
     final db = await _db.database;
-    final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM pessoas_facial');
+    final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM alunos WHERE facial_cadastrada = 1');
     final count = (countResult.first['count'] as int?) ?? 0;
 
     return SyncResult(

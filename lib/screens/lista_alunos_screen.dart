@@ -291,7 +291,7 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
         // NÃO setar 'movimentacao' - deixa preservar a que já existe
       });
 
-      print('✅ [CadastroFacial] Salvo na tabela pessoas_facial (preservando movimentação existente)');
+      print('✅ [CadastroFacial] Salvo na tabela alunos (preservando movimentação existente)');
 
       await OfflineSyncService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],

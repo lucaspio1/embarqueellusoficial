@@ -115,7 +115,7 @@ class OfflineSyncService {
     // Buscar movimentação atual da pessoa (preserva a existente, não força QUARTO)
     final db = await _db.database;
     final pessoaExistente = await db.query(
-      'pessoas_facial',
+      'alunos',
       columns: ['movimentacao'],
       where: 'cpf = ?',
       whereArgs: [cpf],
