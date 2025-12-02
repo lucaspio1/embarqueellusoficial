@@ -633,6 +633,34 @@ class FirebaseService {
 
       await batch.commit();
 
+      // ✅ CORREÇÃO: Atualizar movimentações nas coleções alunos + embarques
+      for (final log in pendingLogs) {
+        final tipo = (log['tipo'] as String).trim().toUpperCase();
+        final cpf = log['cpf'] as String;
+
+        if (tipo.isNotEmpty && tipo != 'RECONHECIMENTO' && tipo != 'FACIAL') {
+          try {
+            // Atualizar coleção alunos
+            await _alunosCollection.doc(cpf).set({
+              'cpf': cpf,
+              'movimentacao': tipo,
+              'updated_at': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+
+            // Atualizar coleção embarques
+            await _embarquesCollection.doc(cpf).set({
+              'cpf': cpf,
+              'movimentacao': tipo,
+              'updated_at': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+
+            print('✅ [FirebaseService] Movimentação sincronizada: CPF $cpf → $tipo');
+          } catch (e) {
+            print('⚠️ [FirebaseService] Erro ao atualizar movimentação de $cpf: $e');
+          }
+        }
+      }
+
       // Marcar como sincronizados
       for (final id in syncedIds) {
         await db.update(

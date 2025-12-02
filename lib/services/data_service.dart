@@ -247,9 +247,19 @@ class DataService {
 
       final prefs = await SharedPreferences.getInstance();
       final nomePasseio = prefs.getString('nome_passeio') ?? '';
+      final colegio = prefs.getString('nome_aba') ?? '';
 
-      // Atualizar no Firebase
-      final updateData = <String, dynamic>{};
+      // ✅ CORREÇÃO: Enviar TODOS os dados do passageiro para criar documento completo
+      final updateData = <String, dynamic>{
+        'cpf': cpf,
+        'nome': passageiro.nome,
+        'colegio': colegio,
+        'turma': passageiro.turma ?? '',
+        'idPasseio': nomePasseio,
+        'onibus': _numeroOnibus,
+      };
+
+      // Atualizar campo específico
       if (operacao == 'embarque') {
         updateData['embarque'] = valor;
       } else if (operacao == 'retorno') {
@@ -257,7 +267,7 @@ class DataService {
       }
       updateData['updated_at'] = FieldValue.serverTimestamp();
 
-      // ✅ CORREÇÃO: Usar apenas CPF como docId para atualizar documento existente
+      // ✅ Usar apenas CPF como docId
       final docId = cpf;
 
       print('📤 [DataService] Enviando para Firebase: $docId - $updateData');
