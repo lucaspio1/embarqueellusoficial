@@ -50,39 +50,38 @@ class DefaultFirebaseOptions {
   }
 
   // ============================================================================
-  // ⚠️ CONFIGURAÇÃO NECESSÁRIA - ANDROID
+  // CONFIGURAÇÃO ANDROID
   // ============================================================================
-  // Para obter essas informações:
+  // ⚠️ ATENÇÃO: App ID do Android ainda precisa ser configurado
+  // Os valores abaixo usam as configurações do projeto Firebase, mas o appId
+  // precisa ser obtido do Firebase Console para o app Android específico.
+  //
+  // Para obter o App ID do Android:
   // 1. Acesse: https://console.firebase.google.com/
-  // 2. Selecione seu projeto
-  // 3. Vá em Configurações do Projeto (ícone de engrenagem) > Geral
-  // 4. Role até "Seus apps" e selecione o app Android
-  // 5. Copie os valores abaixo do painel de configuração
+  // 2. Selecione o projeto "embarqueellus"
+  // 3. Vá em Configurações do Projeto > Geral > Seus apps > Android
+  // 4. Copie o "ID do app" (formato: 1:720926401522:android:xxxxx)
   // ============================================================================
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'YOUR_ANDROID_API_KEY_HERE',  // Ex: 'AIzaSyC...'
-    appId: 'YOUR_ANDROID_APP_ID_HERE',     // Ex: '1:123456789:android:abcdef...'
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID_HERE',  // Ex: '123456789'
-    projectId: 'YOUR_PROJECT_ID_HERE',     // Ex: 'embarque-ellus'
-    storageBucket: 'YOUR_STORAGE_BUCKET_HERE',  // Ex: 'embarque-ellus.appspot.com'
+    apiKey: 'AIzaSyCioVECOLEOrn5ZeRo1L2Mu5TBqYcSUxhs',
+    appId: '1:720926401522:android:CONFIGURE_APP_ID_HERE',  // ⚠️ Obtenha do Firebase Console
+    messagingSenderId: '720926401522',
+    projectId: 'embarqueellus',
+    storageBucket: 'embarqueellus.firebasestorage.app',
   );
 
   // ============================================================================
-  // ⚠️ CONFIGURAÇÃO NECESSÁRIA - iOS
+  // CONFIGURAÇÃO iOS - ✅ CONFIGURADO
   // ============================================================================
-  // Para obter essas informações:
-  // 1. Acesse: https://console.firebase.google.com/
-  // 2. Selecione seu projeto
-  // 3. Vá em Configurações do Projeto (ícone de engrenagem) > Geral
-  // 4. Role até "Seus apps" e selecione o app iOS (ou adicione um novo)
-  // 5. Copie os valores abaixo do painel de configuração
+  // Configurações obtidas do GoogleService-Info.plist
+  // Projeto Firebase: embarqueellus
   // ============================================================================
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'YOUR_IOS_API_KEY_HERE',      // Ex: 'AIzaSyD...'
-    appId: 'YOUR_IOS_APP_ID_HERE',         // Ex: '1:123456789:ios:abcdef...'
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID_HERE',  // Ex: '123456789'
-    projectId: 'YOUR_PROJECT_ID_HERE',     // Ex: 'embarque-ellus'
-    storageBucket: 'YOUR_STORAGE_BUCKET_HERE',  // Ex: 'embarque-ellus.appspot.com'
-    iosBundleId: 'br.com.embarqueellus',   // Bundle ID do app (provavelmente correto)
+    apiKey: 'AIzaSyCioVECOLEOrn5ZeRo1L2Mu5TBqYcSUxhs',
+    appId: '1:720926401522:ios:d8fd0975333ff612fb416b',
+    messagingSenderId: '720926401522',
+    projectId: 'embarqueellus',
+    storageBucket: 'embarqueellus.firebasestorage.app',
+    iosBundleId: 'com.example.embarqueellus',
   );
 }
