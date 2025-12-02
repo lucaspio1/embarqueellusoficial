@@ -219,9 +219,6 @@ class FirebaseService {
         // Converter tem_qr para TEXT ('SIM'/'NAO')
         final temQr = _getField(data, 'tem_qr', false) == true ? 'SIM' : 'NAO';
 
-        // facial_status do Firebase → facial no SQLite
-        final facialStatus = _getField(data, 'facial_status', 'NAO');
-
         // Extrair embedding (pode ser array ou string JSON)
         final embeddingData = _getField(data, 'embedding');
         List<double> embeddingList = [];
@@ -266,7 +263,7 @@ class FirebaseService {
             'email': _getField(data, 'email', ''),
             'telefone': _getField(data, 'telefone', ''),
             'turma': _getField(data, 'turma', ''),
-            'facial': facialStatus,  // ← Campo correto no SQLite
+            // ✅ CORREÇÃO: Remover 'facial' - tabela SQLite não tem essa coluna
             'tem_qr': temQr,  // ← TEXT 'SIM'/'NAO'
             'inicio_viagem': inicioViagem,
             'fim_viagem': fimViagem,
@@ -439,18 +436,26 @@ class FirebaseService {
       });
       print('✅ [FirebaseService] Log enviado para Firebase: $personName - $tipo');
 
-      // ✅ Atualizar movimentação do aluno no Firebase
+      // ✅ Atualizar movimentação do aluno no Firebase (alunos + embarques)
       final tipoNormalizado = tipo.trim().toUpperCase();
       if (tipoNormalizado.isNotEmpty &&
           tipoNormalizado != 'RECONHECIMENTO' &&
           tipoNormalizado != 'FACIAL') {
         try {
-          // Usar .set() com merge ao invés de .update() para garantir que funciona
+          // Atualizar coleção alunos
           await _alunosCollection.doc(cpf).set({
             'cpf': cpf,
             'movimentacao': tipoNormalizado,
             'updated_at': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
+
+          // ✅ CORREÇÃO: Atualizar coleção embarques com a movimentação
+          await _embarquesCollection.doc(cpf).set({
+            'cpf': cpf,
+            'movimentacao': tipoNormalizado,
+            'updated_at': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
           print('✅ [FirebaseService] Movimentação atualizada no Firebase: $personName → $tipoNormalizado');
         } catch (e) {
           print('⚠️ [FirebaseService] Erro ao atualizar movimentação: $e');
@@ -488,6 +493,33 @@ class FirebaseService {
         ? (alunoExistente.first['movimentacao']?.toString() ?? 'QUARTO')
         : 'QUARTO';
 
+    // Converter timestamps se necessário
+    dynamic inicioViagemTimestamp = inicioViagem;
+    dynamic fimViagemTimestamp = fimViagem;
+
+    // Se receber string com formato Timestamp, converter para Timestamp real
+    if (inicioViagem is String && inicioViagem.contains('Timestamp(')) {
+      // Extrair segundos do formato "Timestamp(seconds=1764558000, nanoseconds=0)"
+      final match = RegExp(r'seconds=(\d+)').firstMatch(inicioViagem);
+      if (match != null) {
+        final seconds = int.parse(match.group(1)!);
+        inicioViagemTimestamp = Timestamp.fromMillisecondsSinceEpoch(seconds * 1000);
+      }
+    } else if (inicioViagem is String && inicioViagem.isNotEmpty) {
+      // Se for string de data (dd/MM/yyyy), manter como está
+      inicioViagemTimestamp = inicioViagem;
+    }
+
+    if (fimViagem is String && fimViagem.contains('Timestamp(')) {
+      final match = RegExp(r'seconds=(\d+)').firstMatch(fimViagem);
+      if (match != null) {
+        final seconds = int.parse(match.group(1)!);
+        fimViagemTimestamp = Timestamp.fromMillisecondsSinceEpoch(seconds * 1000);
+      }
+    } else if (fimViagem is String && fimViagem.isNotEmpty) {
+      fimViagemTimestamp = fimViagem;
+    }
+
     // Tentar enviar para Firebase
     try {
       // 1. Atualizar coleção alunos
@@ -499,12 +531,12 @@ class FirebaseService {
         'email': email,
         'telefone': telefone,
         'embedding': embedding,
-        'facial_status': 'CADASTRADA',
+        // ✅ CORREÇÃO: Remover facial_status duplicado - só usar facial_cadastrada
         'facial_cadastrada': true,
         'data_cadastro_facial': FieldValue.serverTimestamp(),
         'movimentacao': movimentacaoAtual,
-        'inicio_viagem': inicioViagem ?? '',
-        'fim_viagem': fimViagem ?? '',
+        'inicio_viagem': inicioViagemTimestamp ?? '',
+        'fim_viagem': fimViagemTimestamp ?? '',
         'updated_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 

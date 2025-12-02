@@ -257,7 +257,8 @@ class DataService {
       }
       updateData['updated_at'] = FieldValue.serverTimestamp();
 
-      final docId = '${cpf}_${nomePasseio}_${_numeroOnibus}';
+      // ✅ CORREÇÃO: Usar apenas CPF como docId para atualizar documento existente
+      final docId = cpf;
 
       print('📤 [DataService] Enviando para Firebase: $docId - $updateData');
 
