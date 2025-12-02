@@ -479,10 +479,12 @@ class FirebaseService {
           tipoNormalizado != 'RECONHECIMENTO' &&
           tipoNormalizado != 'FACIAL') {
         try {
-          await _pessoasCollection.doc(cpf).update({
+          // Usar .set() com merge ao invés de .update() para garantir que funciona
+          await _pessoasCollection.doc(cpf).set({
+            'cpf': cpf,
             'movimentacao': tipoNormalizado,
             'updated_at': FieldValue.serverTimestamp(),
-          });
+          }, SetOptions(merge: true));
           print('✅ [FirebaseService] Movimentação atualizada no Firebase: $personName → $tipoNormalizado');
         } catch (e) {
           print('⚠️ [FirebaseService] Erro ao atualizar movimentação: $e');
