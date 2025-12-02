@@ -111,12 +111,12 @@ const COLLECTIONS = [
   },
   {
     name: 'embarques',
-    description: 'Listas de embarque/passeios',
+    description: 'Listas de embarque/passeios (múltiplos exemplos criados)',
     sampleDoc: {
-      nome: 'Pessoa de Exemplo',
-      cpf: '22222222222',
-      colegio: 'Colégio Exemplo',
-      turma: '3A',
+      nome: 'ALICE LOPES MARTINS',
+      cpf: '44533457800',
+      colegio: 'SARAPIQUA',
+      turma: '9° ANO',
       idPasseio: 'PRAIA_2025_12_01',
       onibus: '1',
       embarque: '',
@@ -247,6 +247,100 @@ function initializeFirebase(serviceAccountPath) {
 // ============================================================================
 
 /**
+ * Cria múltiplos embarques de exemplo correspondentes aos alunos e QR codes
+ */
+async function createMultipleEmbarqueSamples(db, collection) {
+  const hoje = new Date('2025-12-01T00:00:00');
+  const fimViagem = new Date('2025-12-10T00:00:00');
+
+  const embarqueSamples = [
+    // Ônibus 1
+    {
+      nome: 'ALICE LOPES MARTINS',
+      cpf: '44533457800',
+      colegio: 'SARAPIQUA',
+      turma: '9° ANO',
+      idPasseio: 'PRAIA_2025_12_01',
+      onibus: '1',
+      embarque: '',
+      retorno: '',
+      inicioViagem: admin.firestore.Timestamp.fromDate(hoje),
+      fimViagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    {
+      nome: 'BRUNO SANTOS SILVA',
+      cpf: '12345678901',
+      colegio: 'SARAPIQUA',
+      turma: '8° ANO',
+      idPasseio: 'PRAIA_2025_12_01',
+      onibus: '1',
+      embarque: '',
+      retorno: '',
+      inicioViagem: admin.firestore.Timestamp.fromDate(hoje),
+      fimViagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    // Ônibus 2
+    {
+      nome: 'CARLA OLIVEIRA COSTA',
+      cpf: '98765432100',
+      colegio: 'SARAPIQUA',
+      turma: '7° ANO',
+      idPasseio: 'PRAIA_2025_12_01',
+      onibus: '2',
+      embarque: '',
+      retorno: '',
+      inicioViagem: admin.firestore.Timestamp.fromDate(hoje),
+      fimViagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    {
+      nome: 'DANIEL PEREIRA SOUZA',
+      cpf: '55566677788',
+      colegio: 'SARAPIQUA',
+      turma: '9° ANO',
+      idPasseio: 'PRAIA_2025_12_01',
+      onibus: '2',
+      embarque: '',
+      retorno: '',
+      inicioViagem: admin.firestore.Timestamp.fromDate(hoje),
+      fimViagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    {
+      nome: 'EDUARDA LIMA FERREIRA',
+      cpf: '11122233344',
+      colegio: 'SARAPIQUA',
+      turma: '6° ANO',
+      idPasseio: 'PRAIA_2025_12_01',
+      onibus: '2',
+      embarque: '',
+      retorno: '',
+      inicioViagem: admin.firestore.Timestamp.fromDate(hoje),
+      fimViagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    }
+  ];
+
+  // Criar todos os documentos
+  const batch = db.batch();
+  embarqueSamples.forEach(embarque => {
+    const docRef = db.collection('embarques').doc();
+    batch.set(docRef, embarque);
+  });
+
+  await batch.commit();
+
+  return embarqueSamples.length;
+}
+
+/**
  * Cria múltiplos alunos de exemplo com diferentes configurações de QR code
  */
 async function createMultipleStudentSamples(db, collection) {
@@ -363,7 +457,14 @@ async function createCollections(db, options = {}) {
           await createMultipleStudentSamples(db, collection);
           spinner.succeed(chalk.green(`Coleção "${collection.name}" criada com múltiplos documentos de exemplo (incluindo QR codes)`));
           results.push({ collection: collection.name, status: 'created', doc: 'multiple' });
-        } else {
+        }
+        // Para embarques, criar múltiplos exemplos correspondentes aos alunos
+        else if (collection.name === 'embarques') {
+          await createMultipleEmbarqueSamples(db, collection);
+          spinner.succeed(chalk.green(`Coleção "${collection.name}" criada com múltiplos documentos de exemplo (passeio PRAIA_2025_12_01)`));
+          results.push({ collection: collection.name, status: 'created', doc: 'multiple' });
+        }
+        else {
           const docRef = await db.collection(collection.name).add(collection.sampleDoc);
           spinner.succeed(chalk.green(`Coleção "${collection.name}" criada com documento de exemplo`));
           results.push({ collection: collection.name, status: 'created', doc: docRef.id });
