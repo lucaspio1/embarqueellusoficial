@@ -630,7 +630,10 @@ class DatabaseHelper {
       try {
         final embeddingStr = map['embedding'];
         if (embeddingStr != null && embeddingStr.toString().isNotEmpty) {
-          embedding = jsonDecode(embeddingStr);
+          final str = embeddingStr.toString();
+          // Se não começa com '[', adiciona colchetes (formato CSV legado)
+          final jsonStr = str.startsWith('[') ? str : '[$str]';
+          embedding = jsonDecode(jsonStr);
         }
       } catch (e) {
         print('⚠️ [DB] Erro ao fazer parse de embedding: $e');
@@ -656,9 +659,24 @@ class DatabaseHelper {
     ''');
 
     return pessoasComFacial.map((pessoa) {
+      dynamic embedding;
+      try {
+        final embeddingStr = pessoa['embedding']?.toString() ?? '';
+        if (embeddingStr.isNotEmpty) {
+          // Se não começa com '[', adiciona colchetes (formato CSV legado)
+          final jsonStr = embeddingStr.startsWith('[')
+              ? embeddingStr
+              : '[$embeddingStr]';
+          embedding = jsonDecode(jsonStr);
+        }
+      } catch (e) {
+        print('⚠️ [DB] Erro ao fazer parse de embedding para ${pessoa['cpf']}: $e');
+        embedding = null;
+      }
+
       return {
         ...pessoa,
-        'embedding': jsonDecode(pessoa['embedding']),
+        'embedding': embedding,
       };
     }).toList();
   }
@@ -761,9 +779,24 @@ class DatabaseHelper {
     print('   📊 Total DISPONÍVEL no app: ${resultadoFiltro.length}');
 
     final resultado = resultadoFiltro.map((pessoa) {
+      dynamic embedding;
+      try {
+        final embeddingStr = pessoa['embedding']?.toString() ?? '';
+        if (embeddingStr.isNotEmpty) {
+          // Se não começa com '[', adiciona colchetes (formato CSV legado)
+          final jsonStr = embeddingStr.startsWith('[')
+              ? embeddingStr
+              : '[$embeddingStr]';
+          embedding = jsonDecode(jsonStr);
+        }
+      } catch (e) {
+        print('⚠️ [DB] Erro ao fazer parse de embedding para ${pessoa['cpf']}: $e');
+        embedding = null;
+      }
+
       return {
         ...pessoa,
-        'embedding': jsonDecode(pessoa['embedding']),
+        'embedding': embedding,
       };
     }).toList();
 
@@ -1209,10 +1242,20 @@ class DatabaseHelper {
     // Decodificar embeddings
     return pessoas.map((pessoa) {
       if (pessoa['embedding'] != null && pessoa['embedding'] != '') {
-        return {
-          ...pessoa,
-          'embedding': jsonDecode(pessoa['embedding']),
-        };
+        try {
+          final embeddingStr = pessoa['embedding'].toString();
+          // Se não começa com '[', adiciona colchetes (formato CSV legado)
+          final jsonStr = embeddingStr.startsWith('[')
+              ? embeddingStr
+              : '[$embeddingStr]';
+          return {
+            ...pessoa,
+            'embedding': jsonDecode(jsonStr),
+          };
+        } catch (e) {
+          print('⚠️ [DB] Erro ao fazer parse de embedding para ${pessoa['cpf']}: $e');
+          return pessoa;
+        }
       }
       return pessoa;
     }).toList();
@@ -1231,7 +1274,16 @@ class DatabaseHelper {
 
     final pessoa = maps.first;
     if (pessoa['embedding'] != null && pessoa['embedding'] != '') {
-      pessoa['embedding'] = jsonDecode(pessoa['embedding']);
+      try {
+        final embeddingStr = pessoa['embedding'].toString();
+        // Se não começa com '[', adiciona colchetes (formato CSV legado)
+        final jsonStr = embeddingStr.startsWith('[')
+            ? embeddingStr
+            : '[$embeddingStr]';
+        pessoa['embedding'] = jsonDecode(jsonStr);
+      } catch (e) {
+        print('⚠️ [DB] Erro ao fazer parse de embedding para ${pessoa['cpf']}: $e');
+      }
     }
     return pessoa;
   }

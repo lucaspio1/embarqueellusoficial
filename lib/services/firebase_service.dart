@@ -295,6 +295,11 @@ class FirebaseService {
         final inicioViagem = _convertTimestampToDate(_getField(data, 'inicio_viagem'));
         final fimViagem = _convertTimestampToDate(_getField(data, 'fim_viagem'));
 
+        // Salvar embedding como JSON válido (com colchetes)
+        final embeddingJson = embeddingList.isNotEmpty
+            ? '[${embeddingList.join(',')}]'
+            : '';
+
         batch.insert(
           'pessoas_facial',
           {
@@ -305,7 +310,7 @@ class FirebaseService {
             'email': _getField(data, 'email', ''),
             'telefone': _getField(data, 'telefone', ''),
             'turma': _getField(data, 'turma', ''),
-            'embedding': embeddingList.join(','),
+            'embedding': embeddingJson,
             'facial_status': _getField(data, 'facial_status', 'CADASTRADA'),
             'movimentacao': _getField(data, 'movimentacao', 'QUARTO'),
             'inicio_viagem': inicioViagem,
