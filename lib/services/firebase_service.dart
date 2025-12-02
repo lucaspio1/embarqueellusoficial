@@ -537,6 +537,7 @@ class FirebaseService {
       await _embarquesCollection.doc(cpf).set({
         'cpf': cpf,
         'Facial': 'CADASTRADA',
+        'facial_cadastrada': true,  // ✅ Marcar como cadastrada na planilha embarque
         'updated_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
