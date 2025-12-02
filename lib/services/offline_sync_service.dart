@@ -1,4 +1,18 @@
 // lib/services/offline_sync_service.dart — VERSÃO CONSOLIDADA (FASE 1)
+//
+// ⚠️ IMPORTANTE: MIGRAÇÃO PARA FIREBASE
+// =======================================================
+// **Firebase é agora a fonte principal de dados.**
+//
+// - LEITURA: Todos os dados vêm automaticamente via Firebase listeners
+//   em tempo real (ver firebase_service.dart)
+// - ESCRITA: Este serviço ainda usa Google Sheets apenas para enviar
+//   a fila de saída (outbox) - cadastros e logs pendentes
+//
+// A sincronização bidirecional completa via Firebase está em andamento.
+// Este arquivo mantém compatibilidade com outbox Google Sheets legado.
+// =======================================================
+//
 // Serviço principal de sincronização que unifica Users, Alunos, Logs e Outbox
 import 'dart:async';
 import 'dart:convert';
@@ -1172,7 +1186,9 @@ class OfflineSyncService {
   }
 
   // -----------------------------
-  // Sync Users (do Google Sheets)
+  // Sync Users (LEGACY - do Google Sheets)
+  // ⚠️ DEPRECATED: Use Firebase listeners (firebase_service.dart)
+  // Mantido apenas para fallback quando batch sync falhar
   // -----------------------------
   Future<SyncResult> _syncUsers() async {
     print('🔄 [UserSync] Iniciando sincronização de usuários...');
@@ -1242,7 +1258,9 @@ class OfflineSyncService {
   }
 
   // -----------------------------
-  // Sync Alunos (aba Alunos)
+  // Sync Alunos (LEGACY - aba Alunos no Google Sheets)
+  // ⚠️ DEPRECATED: Use Firebase listeners (firebase_service.dart)
+  // Mantido apenas para fallback quando batch sync falhar
   // -----------------------------
   Future<SyncResult> _syncAlunos() async {
     try {
@@ -1301,7 +1319,9 @@ class OfflineSyncService {
   }
 
   // -----------------------------
-  // Sync Pessoas (com embeddings)
+  // Sync Pessoas (LEGACY - com embeddings do Google Sheets)
+  // ⚠️ DEPRECATED: Use Firebase listeners (firebase_service.dart)
+  // Mantido apenas para fallback quando batch sync falhar
   // -----------------------------
   Future<SyncResult> _syncPessoas() async {
     try {
@@ -1360,7 +1380,9 @@ class OfflineSyncService {
   }
 
   // -----------------------------
-  // Sync Logs (aba LOGS)
+  // Sync Logs (LEGACY - aba LOGS no Google Sheets)
+  // ⚠️ DEPRECATED: Use Firebase listeners (firebase_service.dart)
+  // Mantido apenas para fallback quando batch sync falhar
   // -----------------------------
   Future<SyncResult> _syncLogs() async {
     try {
@@ -1409,7 +1431,9 @@ class OfflineSyncService {
   }
 
   // -----------------------------
-  // Sync Quartos (aba HOMELIST)
+  // Sync Quartos (LEGACY - aba HOMELIST no Google Sheets)
+  // ⚠️ DEPRECATED: Use Firebase listeners (firebase_service.dart)
+  // Mantido apenas para fallback quando batch sync falhar
   // -----------------------------
   Future<SyncResult> _syncQuartos() async {
     try {

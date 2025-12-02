@@ -665,13 +665,22 @@ class DatabaseHelper {
       WHERE facial_status = 'CADASTRADA' AND embedding IS NOT NULL
     ''');
 
+    // 🔍 DEBUG: Log inicial
+    print('🔍 [Filtro de Data] Total de pessoas com facial no banco: ${pessoasComFacial.length}');
+    print('🔍 [Filtro de Data] Data de hoje: ${hoje.day.toString().padLeft(2, '0')}/${hoje.month.toString().padLeft(2, '0')}/${hoje.year}');
+
     // Filtrar no Dart por data (mais flexível para diferentes formatos)
-    final pessoasAtivas = pessoasComFacial.where((pessoa) {
+    int pessoasSemData = 0;
+    int pessoasBloqueadas = 0;
+    int pessoasAtivas = 0;
+
+    final resultadoFiltro = pessoasComFacial.where((pessoa) {
       final inicioStr = pessoa['inicio_viagem']?.toString() ?? '';
       final fimStr = pessoa['fim_viagem']?.toString() ?? '';
 
       // Se não tem datas, considera ativo (para compatibilidade)
       if (inicioStr.isEmpty || fimStr.isEmpty) {
+        pessoasSemData++;
         return true;
       }
 
@@ -710,19 +719,37 @@ class DatabaseHelper {
           final inicioSemHora = DateTime(inicio.year, inicio.month, inicio.day);
           final fimSemHora = DateTime(fim.year, fim.month, fim.day);
 
-          return hojeSemHora.isAfter(inicioSemHora.subtract(Duration(days: 1))) &&
-                 hojeSemHora.isBefore(fimSemHora.add(Duration(days: 1)));
+          final estaAtivo = hojeSemHora.isAfter(inicioSemHora.subtract(Duration(days: 1))) &&
+                            hojeSemHora.isBefore(fimSemHora.add(Duration(days: 1)));
+
+          if (estaAtivo) {
+            pessoasAtivas++;
+          } else {
+            pessoasBloqueadas++;
+            print('⚠️ [Filtro de Data] BLOQUEADO: ${pessoa['nome']} (${pessoa['cpf']}) - Viagem: $inicioStr a $fimStr');
+          }
+
+          return estaAtivo;
         }
 
         // Se não conseguiu parsear, considera ativo
+        pessoasSemData++;
         return true;
       } catch (e) {
         print('⚠️ Erro ao parsear datas para ${pessoa['nome']}: $e');
+        pessoasSemData++;
         return true; // Em caso de erro, considera ativo
       }
     }).toList();
 
-    final resultado = pessoasAtivas.map((pessoa) {
+    // 🔍 DEBUG: Log final do filtro
+    print('🔍 [Filtro de Data] RESULTADO:');
+    print('   ✅ Pessoas ATIVAS (passaram no filtro): $pessoasAtivas');
+    print('   ⏭️ Pessoas SEM DATA (aceitas automaticamente): $pessoasSemData');
+    print('   ❌ Pessoas BLOQUEADAS por data: $pessoasBloqueadas');
+    print('   📊 Total DISPONÍVEL no app: ${resultadoFiltro.length}');
+
+    final resultado = resultadoFiltro.map((pessoa) {
       return {
         ...pessoa,
         'embedding': jsonDecode(pessoa['embedding']),

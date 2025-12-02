@@ -43,7 +43,7 @@ const COLLECTIONS = [
   },
   {
     name: 'alunos',
-    description: 'Cadastro geral de alunos',
+    description: 'Cadastro geral de alunos (múltiplos exemplos com QR codes)',
     sampleDoc: {
       cpf: '44533457800',
       nome: 'ALICE LOPES MARTINS',
@@ -52,7 +52,7 @@ const COLLECTIONS = [
       email: 'alice@exemplo.com',
       telefone: '48988168320',
       facial_status: 'NAO',
-      tem_qr: true,
+      tem_qr: 'SIM',  // ✅ Campo TEXT: 'SIM' ou 'NAO'
       inicio_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-01T00:00:00')), // Hoje
       fim_viagem: admin.firestore.Timestamp.fromDate(new Date('2025-12-10T00:00:00')), // +9 dias
       created_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -246,6 +246,98 @@ function initializeFirebase(serviceAccountPath) {
 // CRIAÇÃO DE COLEÇÕES
 // ============================================================================
 
+/**
+ * Cria múltiplos alunos de exemplo com diferentes configurações de QR code
+ */
+async function createMultipleStudentSamples(db, collection) {
+  const hoje = new Date('2025-12-01T00:00:00');
+  const fimViagem = new Date('2025-12-10T00:00:00');
+
+  const studentSamples = [
+    {
+      cpf: '44533457800',
+      nome: 'ALICE LOPES MARTINS',
+      colegio: 'SARAPIQUA',
+      turma: '9° ANO',
+      email: 'alice@exemplo.com',
+      telefone: '48988168320',
+      facial_status: 'NAO',
+      tem_qr: 'SIM',  // ✅ COM QR code
+      inicio_viagem: admin.firestore.Timestamp.fromDate(hoje),
+      fim_viagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    {
+      cpf: '12345678901',
+      nome: 'BRUNO SANTOS SILVA',
+      colegio: 'SARAPIQUA',
+      turma: '8° ANO',
+      email: 'bruno@exemplo.com',
+      telefone: '48999887766',
+      facial_status: 'NAO',
+      tem_qr: 'SIM',  // ✅ COM QR code
+      inicio_viagem: admin.firestore.Timestamp.fromDate(hoje),
+      fim_viagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    {
+      cpf: '98765432100',
+      nome: 'CARLA OLIVEIRA COSTA',
+      colegio: 'SARAPIQUA',
+      turma: '7° ANO',
+      email: 'carla@exemplo.com',
+      telefone: '48988776655',
+      facial_status: 'NAO',
+      tem_qr: 'SIM',  // ✅ COM QR code
+      inicio_viagem: admin.firestore.Timestamp.fromDate(hoje),
+      fim_viagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    {
+      cpf: '55566677788',
+      nome: 'DANIEL PEREIRA SOUZA',
+      colegio: 'SARAPIQUA',
+      turma: '9° ANO',
+      email: 'daniel@exemplo.com',
+      telefone: '48977665544',
+      facial_status: 'CADASTRADA',  // Este tem facial E QR code
+      tem_qr: 'SIM',  // ✅ COM QR code
+      inicio_viagem: admin.firestore.Timestamp.fromDate(hoje),
+      fim_viagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    },
+    {
+      cpf: '11122233344',
+      nome: 'EDUARDA LIMA FERREIRA',
+      colegio: 'SARAPIQUA',
+      turma: '6° ANO',
+      email: 'eduarda@exemplo.com',
+      telefone: '48966554433',
+      facial_status: 'NAO',
+      tem_qr: 'NAO',  // ❌ SEM QR code (para contraste)
+      inicio_viagem: admin.firestore.Timestamp.fromDate(hoje),
+      fim_viagem: admin.firestore.Timestamp.fromDate(fimViagem),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    }
+  ];
+
+  // Criar todos os documentos
+  const batch = db.batch();
+  studentSamples.forEach(student => {
+    const docRef = db.collection('alunos').doc();
+    batch.set(docRef, student);
+  });
+
+  await batch.commit();
+
+  return studentSamples.length;
+}
+
 async function createCollections(db, options = {}) {
   console.log(chalk.cyan('\n📂 Criando coleções no Firestore...\n'));
 
@@ -266,9 +358,16 @@ async function createCollections(db, options = {}) {
 
       // Criar documento de exemplo se solicitado
       if (options.createSamples) {
-        const docRef = await db.collection(collection.name).add(collection.sampleDoc);
-        spinner.succeed(chalk.green(`Coleção "${collection.name}" criada com documento de exemplo`));
-        results.push({ collection: collection.name, status: 'created', doc: docRef.id });
+        // Para alunos, criar múltiplos exemplos com QR codes
+        if (collection.name === 'alunos') {
+          await createMultipleStudentSamples(db, collection);
+          spinner.succeed(chalk.green(`Coleção "${collection.name}" criada com múltiplos documentos de exemplo (incluindo QR codes)`));
+          results.push({ collection: collection.name, status: 'created', doc: 'multiple' });
+        } else {
+          const docRef = await db.collection(collection.name).add(collection.sampleDoc);
+          spinner.succeed(chalk.green(`Coleção "${collection.name}" criada com documento de exemplo`));
+          results.push({ collection: collection.name, status: 'created', doc: docRef.id });
+        }
       } else {
         // Apenas garantir que a coleção existe (Firebase cria automaticamente ao adicionar documento)
         spinner.succeed(chalk.green(`Coleção "${collection.name}" configurada`));

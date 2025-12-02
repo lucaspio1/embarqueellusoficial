@@ -126,8 +126,14 @@ O script cria as seguintes coleções com dados de exemplo:
    - Exemplo: Admin com CPF `08943760981`, senha `12345`
 
 2. **alunos** - Cadastro geral de alunos
-   - Exemplo: ALICE LOPES MARTINS, SARAPIQUA, 9° ANO
+   - **5 exemplos criados automaticamente** para testes de QR code:
+     - ALICE LOPES MARTINS (QR: SIM)
+     - BRUNO SANTOS SILVA (QR: SIM)
+     - CARLA OLIVEIRA COSTA (QR: SIM)
+     - DANIEL PEREIRA SOUZA (QR: SIM + Facial cadastrada)
+     - EDUARDA LIMA FERREIRA (QR: NAO - para contraste)
    - Datas: 01/12/2025 a 10/12/2025 (hoje + 9 dias)
+   - Campo `tem_qr`: 'SIM' ou 'NAO' (TEXT)
 
 3. **pessoas** - Pessoas com reconhecimento facial
    - Exemplo: Pessoa com embedding facial
