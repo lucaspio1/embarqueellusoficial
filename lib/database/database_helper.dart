@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 9, // ✅ VERSÃO 9: Adicionar coluna sincronizado na tabela logs
+      version: 10, // ✅ VERSÃO 10: REFATORAÇÃO - Unificar alunos + pessoas_facial, remover embeddings e passageiros
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -228,26 +228,137 @@ class DatabaseHelper {
         print('⚠️ [DB] Erro ao criar idx_logs_sincronizado: $e');
       }
     }
+
+    if (oldVersion < 10) {
+      print('🔄 [DB] Iniciando migração v9 -> v10: REFATORAÇÃO COMPLETA');
+
+      // ============================================
+      // FASE 1: Adicionar novos campos em alunos
+      // ============================================
+      try {
+        await db.execute('ALTER TABLE alunos ADD COLUMN embedding TEXT');
+        await db.execute('ALTER TABLE alunos ADD COLUMN facial_cadastrada INTEGER DEFAULT 0');
+        await db.execute('ALTER TABLE alunos ADD COLUMN data_cadastro_facial TEXT');
+        await db.execute('ALTER TABLE alunos ADD COLUMN embarcado INTEGER DEFAULT 0');
+        await db.execute('ALTER TABLE alunos ADD COLUMN data_embarque TEXT');
+        await db.execute('ALTER TABLE alunos ADD COLUMN retornado INTEGER DEFAULT 0');
+        await db.execute('ALTER TABLE alunos ADD COLUMN data_retorno TEXT');
+        await db.execute('ALTER TABLE alunos ADD COLUMN movimentacao TEXT DEFAULT "QUARTO"');
+        await db.execute('ALTER TABLE alunos ADD COLUMN onibus TEXT');
+        await db.execute('ALTER TABLE alunos ADD COLUMN codigo_pulseira TEXT');
+        await db.execute('ALTER TABLE alunos ADD COLUMN id_passeio TEXT');
+        await db.execute('ALTER TABLE alunos ADD COLUMN updated_at TEXT');
+        print('✅ [DB] Novos campos adicionados à tabela alunos');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao adicionar campos em alunos: $e');
+      }
+
+      // ============================================
+      // FASE 2: Migrar dados de pessoas_facial → alunos (se existirem)
+      // ============================================
+      try {
+        // Verificar se pessoas_facial existe e tem dados
+        final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM pessoas_facial');
+        final count = Sqflite.firstIntValue(countResult) ?? 0;
+
+        if (count > 0) {
+          print('📦 [DB] Migrando $count registros de pessoas_facial → alunos');
+
+          // Atualizar alunos existentes com dados de pessoas_facial
+          await db.execute('''
+            UPDATE alunos
+            SET
+              embedding = (SELECT embedding FROM pessoas_facial WHERE pessoas_facial.cpf = alunos.cpf),
+              facial_cadastrada = 1,
+              movimentacao = (SELECT movimentacao FROM pessoas_facial WHERE pessoas_facial.cpf = alunos.cpf),
+              updated_at = (SELECT updated_at FROM pessoas_facial WHERE pessoas_facial.cpf = alunos.cpf)
+            WHERE cpf IN (SELECT cpf FROM pessoas_facial)
+          ''');
+
+          // Inserir pessoas_facial que não existem em alunos
+          await db.execute('''
+            INSERT OR IGNORE INTO alunos (cpf, nome, colegio, email, telefone, turma, embedding, facial_cadastrada, movimentacao, inicio_viagem, fim_viagem, created_at, updated_at)
+            SELECT cpf, nome, colegio, email, telefone, turma, embedding, 1, movimentacao, inicio_viagem, fim_viagem, created_at, updated_at
+            FROM pessoas_facial
+          ''');
+
+          print('✅ [DB] Dados migrados de pessoas_facial → alunos');
+        }
+      } catch (e) {
+        print('⚠️ [DB] Erro ao migrar pessoas_facial: $e');
+      }
+
+      // ============================================
+      // FASE 3: Migrar dados de passageiros → alunos (se existirem)
+      // ============================================
+      try {
+        final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM passageiros');
+        final count = Sqflite.firstIntValue(countResult) ?? 0;
+
+        if (count > 0) {
+          print('📦 [DB] Migrando $count registros de passageiros → alunos');
+
+          await db.execute('''
+            UPDATE alunos
+            SET
+              embarcado = CASE WHEN (SELECT embarque FROM passageiros WHERE passageiros.cpf = alunos.cpf) = 'SIM' THEN 1 ELSE 0 END,
+              retornado = CASE WHEN (SELECT retorno FROM passageiros WHERE passageiros.cpf = alunos.cpf) = 'SIM' THEN 1 ELSE 0 END,
+              onibus = (SELECT onibus FROM passageiros WHERE passageiros.cpf = alunos.cpf),
+              codigo_pulseira = (SELECT codigo_pulseira FROM passageiros WHERE passageiros.cpf = alunos.cpf),
+              id_passeio = (SELECT id_passeio FROM passageiros WHERE passageiros.cpf = alunos.cpf)
+            WHERE cpf IN (SELECT cpf FROM passageiros WHERE cpf IS NOT NULL)
+          ''');
+
+          print('✅ [DB] Dados migrados de passageiros → alunos');
+        }
+      } catch (e) {
+        print('⚠️ [DB] Erro ao migrar passageiros: $e');
+      }
+
+      // ============================================
+      // FASE 4: Dropar tabelas antigas
+      // ============================================
+      try {
+        await db.execute('DROP TABLE IF EXISTS pessoas_facial');
+        print('✅ [DB] Tabela pessoas_facial removida');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao remover pessoas_facial: $e');
+      }
+
+      try {
+        await db.execute('DROP TABLE IF EXISTS embeddings');
+        print('✅ [DB] Tabela embeddings removida');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao remover embeddings: $e');
+      }
+
+      try {
+        await db.execute('DROP TABLE IF EXISTS passageiros');
+        print('✅ [DB] Tabela passageiros removida');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao remover passageiros: $e');
+      }
+
+      // ============================================
+      // FASE 5: Criar índices otimizados
+      // ============================================
+      try {
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_alunos_facial_cadastrada ON alunos(facial_cadastrada)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_alunos_embarcado ON alunos(embarcado)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_alunos_movimentacao ON alunos(movimentacao)');
+        print('✅ [DB] Índices otimizados criados em alunos');
+      } catch (e) {
+        print('⚠️ [DB] Erro ao criar índices: $e');
+      }
+
+      print('✅ [DB] Migração v9 -> v10 concluída com sucesso!');
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE passageiros(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        cpf TEXT,
-        colegio TEXT,
-        id_passeio TEXT,
-        turma TEXT,
-        embarque TEXT DEFAULT 'NÃO',
-        retorno TEXT DEFAULT 'NÃO',
-        onibus TEXT,
-        codigo_pulseira TEXT,
-        inicio_viagem TEXT,
-        fim_viagem TEXT
-      )
-    ''');
-
+    // ============================================
+    // TABELA UNIFICADA: ALUNOS
+    // ============================================
     await db.execute('''
       CREATE TABLE alunos(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -257,40 +368,34 @@ class DatabaseHelper {
         email TEXT,
         telefone TEXT,
         turma TEXT,
-        facial TEXT,
+
+        -- Facial
+        embedding TEXT,
+        facial_cadastrada INTEGER DEFAULT 0,
+        data_cadastro_facial TEXT,
+
+        -- Embarque/Retorno
+        embarcado INTEGER DEFAULT 0,
+        data_embarque TEXT,
+        retornado INTEGER DEFAULT 0,
+        data_retorno TEXT,
+        onibus TEXT,
+        codigo_pulseira TEXT,
+        id_passeio TEXT,
+
+        -- Movimentação
+        movimentacao TEXT DEFAULT 'QUARTO',
+
+        -- QR Code (legado)
         tem_qr TEXT DEFAULT 'NAO',
-        created_at TEXT,
-        inicio_viagem TEXT,
-        fim_viagem TEXT
-      )
-    ''');
 
-    await db.execute('''
-      CREATE TABLE embeddings(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cpf TEXT UNIQUE,
-        nome TEXT,
-        embedding TEXT,
-        created_at TEXT
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE pessoas_facial(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cpf TEXT UNIQUE,
-        nome TEXT,
-        colegio TEXT,
-        email TEXT,
-        telefone TEXT,
-        turma TEXT,
-        embedding TEXT,
-        facial_status TEXT DEFAULT 'CADASTRADA',
-        movimentacao TEXT,
-        created_at TEXT,
-        updated_at TEXT,
+        -- Viagem
         inicio_viagem TEXT,
-        fim_viagem TEXT
+        fim_viagem TEXT,
+
+        -- Metadados
+        created_at TEXT,
+        updated_at TEXT
       )
     ''');
 
@@ -349,33 +454,19 @@ class DatabaseHelper {
     ''');
 
     // ✅ Criar índices para otimização de performance
-    await db.execute('CREATE INDEX idx_pessoas_cpf ON pessoas_facial(cpf)');
-    await db.execute('CREATE INDEX idx_logs_cpf_timestamp ON logs(cpf, timestamp)');
-    await db.execute('CREATE INDEX idx_pessoas_movimentacao ON pessoas_facial(movimentacao)');
-    await db.execute('CREATE INDEX idx_logs_tipo ON logs(tipo)');
-    await db.execute('CREATE INDEX idx_pessoas_facial_status ON pessoas_facial(facial_status)');
-    await db.execute('CREATE INDEX idx_quartos_cpf ON quartos(cpf)');
     await db.execute('CREATE INDEX idx_alunos_cpf ON alunos(cpf)');
+    await db.execute('CREATE INDEX idx_alunos_facial_cadastrada ON alunos(facial_cadastrada)');
+    await db.execute('CREATE INDEX idx_alunos_embarcado ON alunos(embarcado)');
+    await db.execute('CREATE INDEX idx_alunos_movimentacao ON alunos(movimentacao)');
+    await db.execute('CREATE INDEX idx_logs_cpf_timestamp ON logs(cpf, timestamp)');
+    await db.execute('CREATE INDEX idx_logs_tipo ON logs(tipo)');
     await db.execute('CREATE INDEX idx_logs_sincronizado ON logs(sincronizado)');
+    await db.execute('CREATE INDEX idx_quartos_cpf ON quartos(cpf)');
     print('✅ [DB] Índices de performance criados');
   }
 
   Future<void> ensureFacialSchema() async {
     final db = await database;
-
-    try {
-      await db.rawQuery('SELECT facial FROM alunos LIMIT 1');
-    } catch (e) {
-      await db.execute('ALTER TABLE alunos ADD COLUMN facial TEXT');
-    }
-
-    // Garantir que tem_qr existe
-    try {
-      await db.rawQuery('SELECT tem_qr FROM alunos LIMIT 1');
-    } catch (e) {
-      await db.execute('ALTER TABLE alunos ADD COLUMN tem_qr TEXT DEFAULT "NAO"');
-      print('✅ Campo tem_qr adicionado à tabela alunos');
-    }
 
     // Garantir que tabela usuarios existe
     try {
@@ -397,29 +488,6 @@ class DatabaseHelper {
         )
       ''');
       print('✅ Tabela usuarios criada');
-    }
-
-    // Garantir que tabela pessoas_facial existe
-    try {
-      await db.rawQuery('SELECT * FROM pessoas_facial LIMIT 1');
-      print('✅ Tabela pessoas_facial já existe');
-    } catch (e) {
-      print('📝 Criando tabela pessoas_facial...');
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS pessoas_facial(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          cpf TEXT UNIQUE,
-          nome TEXT,
-          email TEXT,
-          telefone TEXT,
-          turma TEXT,
-          embedding TEXT,
-          facial_status TEXT DEFAULT 'CADASTRADA',
-          created_at TEXT,
-          updated_at TEXT
-        )
-      ''');
-      print('✅ Tabela pessoas_facial criada');
     }
 
     // 🔒 MIGRATION: Adicionar UNIQUE constraint na tabela logs
