@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/screens/main_menu_screen.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
@@ -70,7 +71,9 @@ Future<void> main() async {
       try {
         // ✅ IMPORTANTE: Inicializar Firebase ANTES de tudo
         print('🔥 Inicializando Firebase...');
-        await Firebase.initializeApp();
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
         print('✅ Firebase inicializado com sucesso');
 
         AppConfig.instance.printConfig();
