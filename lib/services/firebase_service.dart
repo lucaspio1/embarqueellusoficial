@@ -472,6 +472,22 @@ class FirebaseService {
         'created_at': FieldValue.serverTimestamp(),
       });
       print('✅ [FirebaseService] Log enviado para Firebase: $personName - $tipo');
+
+      // ✅ Atualizar movimentação da pessoa no Firebase
+      final tipoNormalizado = tipo.trim().toUpperCase();
+      if (tipoNormalizado.isNotEmpty &&
+          tipoNormalizado != 'RECONHECIMENTO' &&
+          tipoNormalizado != 'FACIAL') {
+        try {
+          await _pessoasCollection.doc(cpf).update({
+            'movimentacao': tipoNormalizado,
+            'updated_at': FieldValue.serverTimestamp(),
+          });
+          print('✅ [FirebaseService] Movimentação atualizada no Firebase: $personName → $tipoNormalizado');
+        } catch (e) {
+          print('⚠️ [FirebaseService] Erro ao atualizar movimentação: $e');
+        }
+      }
     } catch (e) {
       print('⚠️ [FirebaseService] Erro ao enviar log, ficará pendente: $e');
       // O log ficará marcado como não sincronizado e será enviado depois
