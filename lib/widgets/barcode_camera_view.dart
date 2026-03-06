@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io'; // Importante para verificar a plataforma
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -31,7 +32,7 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
     try {
       final cameras = await availableCameras();
       final backCamera = cameras.firstWhere(
-            (c) => c.lensDirection == CameraLensDirection.back,
+        (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
 
@@ -39,26 +40,16 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
         backCamera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.bgra8888,
+        // 🚀 CORREÇÃO 1: Usar o formato nativo correto para Android e iOS
+        imageFormatGroup: Platform.isAndroid 
+            ? ImageFormatGroup.yuv420 
+            : ImageFormatGroup.bgra8888,
       );
 
       await _cameraController.initialize();
 
-      // Inclui todos os formatos usados por QR e pulseiras
-      _barcodeScanner = BarcodeScanner(
-        formats: [
-          BarcodeFormat.qrCode,
-          BarcodeFormat.code128,
-          BarcodeFormat.code39,
-          BarcodeFormat.code93,
-          BarcodeFormat.ean13,
-          BarcodeFormat.ean8,
-          BarcodeFormat.upca,
-          BarcodeFormat.upce,
-          BarcodeFormat.itf,
-          BarcodeFormat.codabar,
-        ],
-      );
+      // Deixamos 'all' para garantir que não ignora nada
+      _barcodeScanner = BarcodeScanner(formats: [BarcodeFormat.all]);
 
       await _cameraController.startImageStream(_processCameraImage);
 
@@ -73,41 +64,40 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
     _isBusy = true;
 
     try {
-      if (kDebugMode) {
-        print('📸 Formato capturado: ${image.format.raw}');
-      }
-
       final WriteBuffer allBytes = WriteBuffer();
       for (final Plane plane in image.planes) {
         allBytes.putUint8List(plane.bytes);
       }
-
       final bytes = allBytes.done().buffer.asUint8List();
-      final Size imageSize =
-      Size(image.width.toDouble(), image.height.toDouble());
 
+      final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
       final camera = _cameraController.description;
-      final imageRotation =
-          InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
-              InputImageRotation.rotation0deg;
+      
+      final imageRotation = InputImageRotationValue.fromRawValue(camera.sensorOrientation) ?? InputImageRotation.rotation0deg;
 
-      final inputImageFormat = _resolveImageFormat(image.format.raw);
+      // 🚀 CORREÇÃO 2: Dizer exatamente ao ML Kit qual é o formato que estamos a enviar
+      InputImageFormat? inputImageFormat;
+      if (Platform.isIOS) {
+        inputImageFormat = InputImageFormat.bgra8888;
+      } else if (Platform.isAndroid) {
+        inputImageFormat = InputImageFormat.nv21; // ML Kit trata o YUV420 do Android como nv21
+      }
+
       if (inputImageFormat == null) {
-        if (kDebugMode) {
-          print('⚠️ Formato não suportado: ${image.format.raw}');
-        }
         _isBusy = false;
         return;
       }
 
+      final inputImageData = InputImageMetadata(
+        size: imageSize,
+        rotation: imageRotation,
+        format: inputImageFormat,
+        bytesPerRow: image.planes.first.bytesPerRow,
+      );
+
       final inputImage = InputImage.fromBytes(
         bytes: bytes,
-        metadata: InputImageMetadata(
-          size: imageSize,
-          rotation: imageRotation,
-          format: inputImageFormat,
-          bytesPerRow: image.planes.first.bytesPerRow,
-        ),
+        metadata: inputImageData,
       );
 
       final barcodes = await _barcodeScanner.processImage(inputImage);
@@ -123,22 +113,9 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
       if (kDebugMode) print('Erro MLKit: $e');
     }
 
+    // 🚀 CORREÇÃO 3: Pausa de 50ms para permitir que a câmara faça o Auto-Focus
+    await Future.delayed(const Duration(milliseconds: 50));
     _isBusy = false;
-  }
-
-  InputImageFormat? _resolveImageFormat(int rawFormat) {
-    switch (rawFormat) {
-      case 35:
-      case 17:
-        return InputImageFormat.nv21;
-      case 1111970369:
-        return InputImageFormat.bgra8888;
-      case 256:
-      case 34:
-        return InputImageFormat.nv21;
-      default:
-        return null;
-    }
   }
 
   @override
