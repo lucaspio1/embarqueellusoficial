@@ -1,86 +1,47 @@
-#!/bin/bash
+#!/bin/sh
+
+# Fail this script if any subcommand fails.
 set -e
-# Desativa o SPM para evitar o erro de resolução de dependências no CI
+
+# The default execution directory of this script is the ci_scripts directory.
+cd $CI_PRIMARY_REPOSITORY_PATH 
+
+echo "🔧 Instalando e Configurando Flutter..."
+
+# Configuração crítica: desativa o SPM antes de qualquer build
 flutter config --no-enable-swift-package-manager
-# ==============================
-#  Flutter iOS Build + Upload
-# ==============================
 
-# CONFIGURAES DO APP
-APPLE_ID="lucaspio1@icloud.com"
-APP_PASSWORD="xqps-oooq-rmom-uioq"   # senha especfica de app
-TEAM_ID="UHKV55F459"
-PROJECT_DIR="$HOME/Documents/embarqueellusoficial"
-IPA_NAME="Runner.ipa"
+# Install Flutter using git.
+git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
+export PATH="$PATH:$HOME/flutter/bin"
 
-echo "======================================"
-echo "  Iniciando build iOS para TestFlight"
-echo "======================================"
-cd "$PROJECT_DIR"
+# Install Flutter artifacts
+flutter precache --ios
 
-# LIMPA O PROJETO
-echo " Limpando build anterior..."
-flutter clean
+# Install Flutter dependencies.
+echo "📦 Installing Flutter dependencies..."
 flutter pub get
 
-# GERA O BUILD IOS
-echo "  Gerando build iOS (modo release)..."
-flutter build ios --release
+# Generate necessary files
+echo "🔨 Generating Flutter files..."
+flutter build ios --config-only --no-codesign
 
-# CRIA EXPORTOPTIONS PLIST (caso no exista)
-EXPORT_PLIST="ios/exportOptions.plist"
-if [ ! -f "$EXPORT_PLIST" ]; then
-    echo " Criando exportOptions.plist..."
-    cat <<EOF > "$EXPORT_PLIST"
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key>
-  <string>app-store</string>
-  <key>teamID</key>
-  <string>$TEAM_ID</string>
-  <key>uploadBitcode</key>
-  <false/>
-  <key>compileBitcode</key>
-  <true/>
-  <key>destination</key>
-  <string>export</string>
-  <key>signingStyle</key>
-  <string>automatic</string>
-  <key>stripSwiftSymbols</key>
-  <true/>
-  <key>thinning</key>
-  <string>&lt;none&gt;</string>
-</dict>
-</plist>
-EOF
-fi
+# Install CocoaPods
+echo "🍺 Installing CocoaPods..."
+# Removido o HOMEBREW_NO_AUTO_UPDATE=1 para garantir que o pod seja instalado corretamente
+brew install cocoapods
 
-# EXPORTA O IPA
-echo " Exportando .ipa..."
-xcodebuild -exportArchive \
-  -archivePath build/ios/archive/Runner.xcarchive \
-  -exportPath build/ios/ipa \
-  -exportOptionsPlist "$EXPORT_PLIST"
+# Install CocoaPods dependencies.
+echo "📦 Installing CocoaPods dependencies..."
+cd ios
 
-# VERIFICA SE O IPA EXISTE
-if [ ! -f "build/ios/ipa/$IPA_NAME" ]; then
-  echo " Erro: Arquivo $IPA_NAME no encontrado!"
-  exit 1
-fi
+# GARANTE QUE O PODFILE NÃO TENHA REFERÊNCIAS AO SPM
+# Se o seu Podfile usa a regra de "use_frameworks!", mantenha, 
+# mas garanta que o comando de desativação do SPM (acima) já resolveu.
+rm -rf Pods
+rm -f Podfile.lock
+pod install --repo-update
 
-# UPLOAD PARA TESTFLIGHT
-echo "  Enviando $IPA_NAME para o TestFlight..."
-xcrun altool --upload-app \
-  -f "build/ios/ipa/$IPA_NAME" \
-  -t ios \
-  -u "$APPLE_ID" \
-  -p "$APP_PASSWORD"
+echo "✅ CI setup complete!"
 
-# RESULTADO FINAL
-if [ $? -eq 0 ]; then
-  echo " Upload concludo com sucesso! Verifique o TestFlight no App Store Connect."
-else
-  echo " Falha no upload. Verifique suas credenciais ou a conexo."
-fi
+exit 0
