@@ -98,7 +98,7 @@ Future<void> main() async {
           );
         }
 
-        // ✅ Inicializar FirebaseService (substitui OfflineSyncService)
+        // ✅ Inicializar FirebaseService (substitui OfflineSyncServices)
         print('🔥 Inicializando FirebaseService...');
         FirebaseService.instance.init();
         print('✅ FirebaseService inicializado com sucesso');
