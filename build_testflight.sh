@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
-
+# Desativa o SPM para evitar o erro de resolução de dependências no CI
+flutter config --no-enable-swift-package-manager
 # ==============================
 #  Flutter iOS Build + Upload
 # ==============================

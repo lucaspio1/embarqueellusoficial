@@ -72,14 +72,26 @@ class _LoginScreenState extends State<LoginScreen> {
       final deveExibirFeedback = !automatico || !tinhaUsuariosLocais;
 
       if (deveExibirFeedback) {
-        if (sucesso && temUsuariosAtualizados) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Usuários sincronizados com sucesso!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+        // Nova lógica separando o sucesso da operação do preenchimento do banco local
+        if (sucesso) {
+          if (temUsuariosAtualizados) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ Usuários sincronizados com sucesso!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          } else {
+            // Em vez de acusar erro, informa que os dados estão sendo baixados em segundo plano
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('⏳ Sincronizando usuários em segundo plano. Aguarde...'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
         } else {
+          // Apenas exibe o erro se o método syncUsuarios retornar falso de fato
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('❌ Erro ao sincronizar usuários. Verifique sua conexão com a internet.'),
@@ -107,7 +119,6 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     }
   }
-
   Future<void> _realizarLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
