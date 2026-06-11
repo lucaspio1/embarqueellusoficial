@@ -157,7 +157,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
         // ✅ OTIMIZAÇÃO: Remover animações de página para performance
-        pageTransitionsTheme: const PageTransitionsTheme(
+        pageTransitionsTheme: PageTransitionsTheme(
           builders: {
             TargetPlatform.android: OpenUpwardsPageTransitionsBuilder(),
             TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
