@@ -47,7 +47,7 @@ dependencies:
   connectivity_plus: ^6.0.3
 
   # Monitoramento e Logs
-  sentry_flutter: ^9.8.0
+  sentry_flutter: ^9.22.0
 
   # UI
   cupertino_icons: ^1.0.8

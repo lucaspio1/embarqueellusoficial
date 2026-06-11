@@ -12,6 +12,8 @@ echo "🔧 Installing Flutter..."
 git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
 export PATH="$PATH:$HOME/flutter/bin"
 
+flutter config --no-enable-swift-package-manager
+
 # Install Flutter artifacts for iOS (--ios), or macOS (--macos) platforms.
 flutter precache --ios
 
@@ -20,8 +22,7 @@ echo "📦 Installing Flutter dependencies..."
 flutter pub get
 
 # Generate necessary files
-echo "🔨 Generating Flutter files..."
-flutter build ios --config-only --no-codesign
+
 
 # Install CocoaPods using Homebrew.
 echo "🍺 Installing CocoaPods..."
@@ -32,6 +33,9 @@ brew install cocoapods
 echo "📦 Installing CocoaPods dependencies..."
 cd ios
 pod install
+
+echo "🔨 Generating Flutter files..."
+flutter build ios --config-only --no-codesign
 
 echo "✅ CI setup complete!"
 
