@@ -14,6 +14,7 @@ import 'package:embarqueellus/screens/login_screen.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/firebase_service.dart';
+import 'package:embarqueellus/services/api_service.dart';
 import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/config/app_config.dart';
 
@@ -70,20 +71,14 @@ Future<void> main() async {
       }
 
       try {
-        // ✅ IMPORTANTE: Inicializar Firebase ANTES de tudo
-        print('🔥 Inicializando Firebase...');
+        // ✅ IMPORTANTE: Inicializar Firebase Core (mantido para período de transição)
+        print('🔥 Inicializando Firebase Core...');
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
-        print('✅ Firebase inicializado com sucesso');
+        print('✅ Firebase Core inicializado');
 
         AppConfig.instance.printConfig();
-        if (!AppConfig.instance.isValid) {
-          await Sentry.captureMessage(
-            'Configurações inválidas no AppConfig',
-            level: SentryLevel.error,
-          );
-        }
 
         final db = DatabaseHelper.instance;
         await db.database;
@@ -98,8 +93,12 @@ Future<void> main() async {
           );
         }
 
-        // ✅ Inicializar FirebaseService (substitui OfflineSyncServices)
-        print('🔥 Inicializando FirebaseService...');
+        // ✅ Inicializar ApiService (carregar JWT salvo)
+        await ApiService.instance.init();
+        print('✅ ApiService inicializado');
+
+        // ✅ Inicializar FirebaseService (agora usa REST API em vez de Firestore direto)
+        print('🔄 Inicializando FirebaseService (REST API)...');
         FirebaseService.instance.init();
         print('✅ FirebaseService inicializado com sucesso');
 

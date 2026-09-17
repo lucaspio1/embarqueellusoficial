@@ -1,6 +1,9 @@
+// lib/services/auth_service.dart
+// Serviço de autenticação — agora usa JWT via API REST do backend Node.js
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:embarqueellus/database/database_helper.dart';
+import 'package:embarqueellus/services/api_service.dart';
 import 'package:embarqueellus/services/user_sync_service.dart';
 
 class AuthService {
@@ -9,35 +12,71 @@ class AuthService {
 
   final _db = DatabaseHelper.instance;
   final _userSync = UserSyncService.instance;
+  final _api = ApiService.instance;
 
   // Usuário logado em cache
   Map<String, dynamic>? _usuarioLogado;
 
-  /// Login offline usando banco de dados local
+  /// Login — tenta via API REST primeiro, depois fallback SQLite (offline)
   Future<Map<String, dynamic>?> login(String cpf, String senha) async {
     try {
-      print('🔐 [Auth] Tentando login offline: CPF=$cpf');
+      print('🔐 [Auth] Tentando login: CPF=$cpf');
 
       // Garantir que a tabela de usuários existe
       await _db.ensureFacialSchema();
 
-      // Buscar usuário no banco local
+      // PASSO 1: Tentar login online via API REST
+      try {
+        final response = await _api.login(cpf, senha);
+        if (response['success'] == true && response['user'] != null) {
+          final user = {
+            'id': response['user']['cpf']?.toString() ?? cpf,
+            'nome': response['user']['nome'],
+            'cpf': response['user']['cpf']?.toString() ?? cpf,
+            'perfil': response['user']['perfil'] ?? 'USER',
+          };
+
+          print('✅ [Auth] Login online bem-sucedido: ${user['nome']} (${user['perfil']})');
+
+          // Salvar usuário no cache e no banco local (para login offline futuro)
+          _usuarioLogado = user;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('usuario_logado', jsonEncode(user));
+
+          // Salvar usuário no SQLite para fallback offline
+          try {
+            await _db.upsertUsuario({
+              'cpf': user['cpf'],
+              'nome': user['nome'],
+              'senha_hash': senha, // O backend já faz bcrypt; aqui é para fallback
+              'perfil': user['perfil'],
+              'ativo': 1,
+            });
+          } catch (_) {}
+
+          return user;
+        }
+      } catch (e) {
+        print('⚠️ [Auth] Login online falhou ($e), tentando offline...');
+      }
+
+      // PASSO 2: Fallback offline — buscar no banco local
       final usuario = await _db.getUsuarioByCpf(cpf);
 
       if (usuario == null) {
-        print('❌ [Auth] Usuário não encontrado no banco local');
+        print('❌ [Auth] Usuário não encontrado (online e offline)');
         return null;
       }
 
-      // Verificar senha
+      // Verificar senha localmente
       final senhaValida = _userSync.verificarSenha(senha, usuario['senha_hash']);
 
       if (!senhaValida) {
-        print('❌ [Auth] Senha inválida');
+        print('❌ [Auth] Senha inválida (offline)');
         return null;
       }
 
-      // Preparar dados do usuário
+      // Login offline bem-sucedido
       final user = {
         'id': usuario['user_id']?.toString() ?? usuario['id'].toString(),
         'nome': usuario['nome'],
@@ -45,12 +84,9 @@ class AuthService {
         'perfil': usuario['perfil'] ?? 'USUARIO',
       };
 
-      print('✅ [Auth] Login bem-sucedido: ${user['nome']} (${user['perfil']})');
+      print('✅ [Auth] Login OFFLINE bem-sucedido: ${user['nome']} (${user['perfil']})');
 
-      // Salvar usuário no cache
       _usuarioLogado = user;
-
-      // Salvar no SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('usuario_logado', jsonEncode(user));
 
@@ -61,13 +97,11 @@ class AuthService {
     }
   }
 
-  /// Sincronizar usuários da planilha para o banco local
+  /// Sincronizar usuários (mantido para compatibilidade)
   Future<bool> syncUsuarios() async {
     try {
       print('🔄 [Auth] Sincronizando usuários...');
-
       final result = await _userSync.syncUsuariosFromSheets();
-
       if (result.success) {
         print('✅ [Auth] Sincronização concluída: ${result.message}');
         return true;
@@ -105,7 +139,6 @@ class AuthService {
         return _usuarioLogado;
       } catch (e) {
         print('⚠️ [Auth] Erro ao fazer parse do usuário: $e');
-        // Remove dado corrompido
         await prefs.remove('usuario_logado');
         return null;
       }
@@ -120,6 +153,7 @@ class AuthService {
 
   Future<void> logout() async {
     _usuarioLogado = null;
+    await _api.logout(); // Limpa JWT
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('usuario_logado');
     print('👋 [Auth] Logout realizado');

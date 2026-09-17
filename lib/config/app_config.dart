@@ -80,6 +80,11 @@ class AppConfig {
     ) ?? 30;
   }
 
+  /// URL base da API REST do backend Node.js (Cloud Run)
+  String get apiBaseUrl {
+    return dotenv.get('API_BASE_URL', fallback: 'http://localhost:3000');
+  }
+
   /// Valida se todas as configurações obrigatórias foram fornecidas
   bool get isValid {
     if (googleAppsScriptUrl.isEmpty) {
@@ -100,6 +105,7 @@ class AppConfig {
   /// Imprime as configurações atuais (sem expor valores sensíveis)
   void printConfig() {
     print('📋 [Config] Configurações carregadas:');
+    print('   - API Base URL: $apiBaseUrl');
     print('   - Google Apps Script URL (Dados): ${googleAppsScriptUrl.isNotEmpty ? "✓ Configurada" : "✗ Não configurada"}');
     print('   - Embarque Script URL (Passeios): ${embarqueScriptUrl.isNotEmpty ? "✓ Configurada" : "✗ Não configurada"}');
     print('   - Spreadsheet ID: ${spreadsheetId.isNotEmpty ? "✓ Configurada" : "✗ Não configurada"}');

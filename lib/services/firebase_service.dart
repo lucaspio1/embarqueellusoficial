@@ -1,21 +1,21 @@
 // lib/services/firebase_service.dart
-// Serviço principal de sincronização usando Firebase Firestore
+// Serviço principal de sincronização — agora usa REST API do backend Node.js
+// Em vez de 120+ apps acessando Firestore diretamente, todos passam pelo backend.
 import 'dart:async';
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/database/database_helper.dart';
-import 'package:embarqueellus/models/evento.dart';
+import 'package:embarqueellus/services/api_service.dart';
 
 class FirebaseService {
   FirebaseService._();
   static final FirebaseService instance = FirebaseService._();
 
   final DatabaseHelper _db = DatabaseHelper.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ApiService _api = ApiService.instance;
 
   Timer? _syncTimer;
   bool _isSyncing = false;
@@ -23,36 +23,20 @@ class FirebaseService {
   // ValueNotifier para que widgets possam observar o estado de sincronização
   final ValueNotifier<bool> isSyncingNotifier = ValueNotifier<bool>(false);
 
-  // Referências das coleções
-  CollectionReference get _usuariosCollection => _firestore.collection('usuarios');
-  CollectionReference get _alunosCollection => _firestore.collection('alunos');
-  CollectionReference get _logsCollection => _firestore.collection('logs');
-  CollectionReference get _quartosCollection => _firestore.collection('quartos');
-  CollectionReference get _embarquesCollection => _firestore.collection('embarques');
-  CollectionReference get _eventosCollection => _firestore.collection('eventos');
-
   void init() {
     _syncTimer?.cancel();
 
-    // ✅ HABILITAR PERSISTÊNCIA OFFLINE DO FIRESTORE
-    // Cache automático de dados para funcionar offline
-    _firestore.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-    );
+    // Inicializar o ApiService (carregar token salvo)
+    _api.init();
 
-    // Sincronização automática a cada 1 minuto (para sincronizar dados locais pendentes)
-    _syncTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+    // Sincronização automática a cada 30 segundos via REST delta
+    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       print('⏰ [FirebaseService] Timer de sincronização disparado');
       await trySyncInBackground();
     });
 
-    print('✅ [FirebaseService] Sincronização automática iniciada');
-    print('✅ [FirebaseService] Cache offline habilitado (UNLIMITED)');
+    print('✅ [FirebaseService] Sincronização via REST API iniciada (intervalo: 30s)');
     trySyncInBackground();
-
-    // Iniciar listeners em tempo real
-    _initRealtimeListeners();
   }
 
   void dispose() {
@@ -63,18 +47,15 @@ class FirebaseService {
   // HELPER: Campo case-insensitive
   // =============================
 
-  /// Helper para ler campo do Firestore aceitando maiúsculo ou minúsculo
+  /// Helper para ler campo de Map aceitando maiúsculo ou minúsculo
   dynamic _getField(Map<String, dynamic> data, String fieldName, [dynamic defaultValue]) {
-    // Tenta minúsculo primeiro (padrão)
     if (data.containsKey(fieldName)) {
       return data[fieldName] ?? defaultValue;
     }
-    // Tenta MAIÚSCULO
     final upperFieldName = fieldName.toUpperCase();
     if (data.containsKey(upperFieldName)) {
       return data[upperFieldName] ?? defaultValue;
     }
-    // Tenta primeira letra maiúscula (ex: Nome, Cpf)
     final capitalizedFieldName = fieldName[0].toUpperCase() + fieldName.substring(1);
     if (data.containsKey(capitalizedFieldName)) {
       return data[capitalizedFieldName] ?? defaultValue;
@@ -82,309 +63,291 @@ class FirebaseService {
     return defaultValue;
   }
 
-  /// Converte Timestamp do Firebase ou String para formato dd/MM/yyyy
+  /// Converte datas em vários formatos para string dd/MM/yyyy
   String _convertTimestampToDate(dynamic value) {
     if (value == null) return '';
-
-    // Se já é uma string, retorna direto
     if (value is String) return value;
-
-    // Se é Timestamp do Firestore
-    if (value is Timestamp) {
-      final date = value.toDate();
-      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-    }
-
     return '';
   }
 
   // =============================
-  // LISTENERS EM TEMPO REAL
+  // SINCRONIZAÇÃO DELTA VIA REST
   // =============================
 
-  void _initRealtimeListeners() {
-    // Listener para usuários
-    _usuariosCollection.snapshots().listen((snapshot) {
-      print('🔥 [Listener] Recebido snapshot de USUÁRIOS: ${snapshot.docs.length} documento(s)');
-      if (snapshot.docs.isEmpty) {
-        print('⚠️ [Listener] ATENÇÃO: Nenhum usuário encontrado no Firebase!');
-      }
-      _syncUsuariosFromSnapshot(snapshot);
-    }, onError: (error) {
-      print('❌ [FirebaseService] Erro no listener de usuários: $error');
-      Sentry.captureException(error);
-    });
-
-    // Listener para alunos
-    _alunosCollection.snapshots().listen((snapshot) {
-      print('🔥 [Listener] Recebido snapshot de ALUNOS: ${snapshot.docs.length} documento(s)');
-      if (snapshot.docs.isEmpty) {
-        print('⚠️ [Listener] ATENÇÃO: Nenhum aluno encontrado no Firebase!');
-      }
-      _syncAlunosFromSnapshot(snapshot);
-    }, onError: (error) {
-      print('❌ [FirebaseService] Erro no listener de alunos: $error');
-      Sentry.captureException(error);
-    });
-
-    // Listener para logs
-    _logsCollection
-        .orderBy('timestamp', descending: true)
-        .limit(1000)
-        .snapshots()
-        .listen((snapshot) {
-      print('🔥 [Listener] Recebido snapshot de LOGS: ${snapshot.docs.length} documento(s)');
-      _syncLogsFromSnapshot(snapshot);
-    }, onError: (error) {
-      print('❌ [FirebaseService] Erro no listener de logs: $error');
-      Sentry.captureException(error);
-    });
-
-    // Listener para quartos
-    _quartosCollection.snapshots().listen((snapshot) {
-      print('🔥 [Listener] Recebido snapshot de QUARTOS: ${snapshot.docs.length} documento(s)');
-      _syncQuartosFromSnapshot(snapshot);
-    }, onError: (error) {
-      print('❌ [FirebaseService] Erro no listener de quartos: $error');
-      Sentry.captureException(error);
-    });
-
-    // Listener para eventos
-    _eventosCollection
-        .where('processado', isEqualTo: false)
-        .snapshots()
-        .listen((snapshot) {
-      print('🔥 [Listener] Recebido snapshot de EVENTOS: ${snapshot.docs.length} documento(s)');
-      _processEventos(snapshot);
-    }, onError: (error) {
-      print('❌ [FirebaseService] Erro no listener de eventos: $error');
-      Sentry.captureException(error);
-    });
-
-    print('✅ [FirebaseService] Listeners em tempo real iniciados');
-  }
-
-  // =============================
-  // SINCRONIZAÇÃO DOS SNAPSHOTS
-  // =============================
-
-  Future<void> _syncUsuariosFromSnapshot(QuerySnapshot snapshot) async {
+  /// Sincronização delta: baixa apenas o que mudou desde a última sync
+  Future<void> _syncDelta() async {
     try {
-      final db = await _db.database;
-      final batch = db.batch();
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-
-        // Aceita tanto 'senha_hash' (hash) quanto 'senha' (texto plano)
-        final senhaArmazenada = _getField(data, 'senha_hash') ?? _getField(data, 'senha') ?? '';
-
-        batch.insert(
-          'usuarios',
-          {
-            'user_id': doc.id,
-            'nome': _getField(data, 'nome', ''),
-            'cpf': _getField(data, 'cpf', ''),
-            'senha_hash': senhaArmazenada,
-            'perfil': _getField(data, 'perfil', 'USUARIO'),
-            'ativo': _getField(data, 'ativo', false) == true ? 1 : 0,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+      if (!_api.isAuthenticated) {
+        print('⚠️ [FirebaseService] API não autenticada, pulando sync delta');
+        return;
       }
 
-      await batch.commit(noResult: true);
-      print('✅ [FirebaseService] ${snapshot.docs.length} usuários sincronizados');
+      // Obter timestamp da última sincronização
+      final db = await _db.database;
+      final metaRows = await db.query(
+        'sync_metadata',
+        where: 'chave = ?',
+        whereArgs: ['last_delta_sync'],
+        limit: 1,
+      );
+      
+      String? lastSync;
+      if (metaRows.isNotEmpty) {
+        lastSync = metaRows.first['valor'] as String?;
+      }
+
+      final response = await _api.syncDelta(lastSync);
+
+      if (response['success'] == true) {
+        final delta = response['delta'] as Map<String, dynamic>? ?? {};
+        final serverTime = response['serverTime'] as String?;
+
+        // Aplicar delta no SQLite
+        await _applyDelta(delta);
+
+        // Salvar timestamp da sync
+        if (serverTime != null) {
+          await db.insert(
+            'sync_metadata',
+            {'chave': 'last_delta_sync', 'valor': serverTime, 'updated_at': serverTime},
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+
+        final totalDocs = delta.values.fold<int>(0, (sum, list) => sum + (list as List).length);
+        if (totalDocs > 0) {
+          print('✅ [FirebaseService] Delta sync: $totalDocs docs recebidos');
+        }
+      }
     } catch (e) {
-      print('❌ [FirebaseService] Erro ao sincronizar usuários: $e');
-      Sentry.captureException(e);
+      print('⚠️ [FirebaseService] Erro no sync delta: $e');
     }
   }
 
-  Future<void> _syncAlunosFromSnapshot(QuerySnapshot snapshot) async {
-    try {
-      final db = await _db.database;
+  /// Aplica os dados delta recebidos no SQLite local
+  Future<void> _applyDelta(Map<String, dynamic> delta) async {
+    final db = await _db.database;
+
+    // Aplicar alunos
+    if (delta.containsKey('alunos')) {
+      final alunos = delta['alunos'] as List;
       final batch = db.batch();
+      for (var aluno in alunos) {
+        final data = aluno as Map<String, dynamic>;
+        final cpf = _getField(data, 'cpf', '');
+        if (cpf.isEmpty) continue;
 
-      for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-
-        // Converter timestamps do Firebase para strings dd/MM/yyyy
-        final inicioViagem = _convertTimestampToDate(_getField(data, 'inicio_viagem'));
-        final fimViagem = _convertTimestampToDate(_getField(data, 'fim_viagem'));
-        final dataCadastroFacial = _convertTimestampToDate(_getField(data, 'data_cadastro_facial'));
-        final dataEmbarque = _convertTimestampToDate(_getField(data, 'data_embarque'));
-        final dataRetorno = _convertTimestampToDate(_getField(data, 'data_retorno'));
-
-        // Converter tem_qr para TEXT ('SIM'/'NAO')
-        final temQr = _getField(data, 'tem_qr', false) == true ? 'SIM' : 'NAO';
-
-        // Extrair embedding (pode ser array ou string JSON)
         final embeddingData = _getField(data, 'embedding');
-        List<double> embeddingList = [];
-
+        String embeddingJson = '';
         if (embeddingData != null) {
           if (embeddingData is List) {
-            // Embedding como array
-            embeddingList = embeddingData
-                .map((e) => (e as num).toDouble())
-                .toList();
+            embeddingJson = '[${embeddingData.map((e) => (e as num).toDouble()).join(',')}]';
           } else if (embeddingData is String && embeddingData.isNotEmpty) {
-            // Embedding como string JSON
-            try {
-              final parsed = jsonDecode(embeddingData);
-              if (parsed is List) {
-                embeddingList = parsed
-                    .map((e) => (e as num).toDouble())
-                    .toList();
-              }
-            } catch (e) {
-              print('⚠️ [FirebaseService] Erro ao fazer parse de embedding para ${_getField(data, 'cpf')}: $e');
-            }
+            embeddingJson = embeddingData;
           }
         }
 
-        // Salvar embedding como JSON válido (com colchetes)
-        final embeddingJson = embeddingList.isNotEmpty
-            ? '[${embeddingList.join(',')}]'
-            : '';
-
-        // Converter booleans para INTEGER (0/1)
         final facialCadastrada = _getField(data, 'facial_cadastrada', false) == true ? 1 : 0;
-        final embarcado = _getField(data, 'embarcado', false) == true ? 1 : 0;
-        final retornado = _getField(data, 'retornado', false) == true ? 1 : 0;
 
         batch.insert(
           'alunos',
           {
-            'cpf': _getField(data, 'cpf', ''),
+            'cpf': cpf,
             'nome': _getField(data, 'nome', ''),
             'colegio': _getField(data, 'colegio', ''),
             'email': _getField(data, 'email', ''),
             'telefone': _getField(data, 'telefone', ''),
             'turma': _getField(data, 'turma', ''),
-            // ✅ CORREÇÃO: Remover 'facial' - tabela SQLite não tem essa coluna
-            'tem_qr': temQr,  // ← TEXT 'SIM'/'NAO'
-            'inicio_viagem': inicioViagem,
-            'fim_viagem': fimViagem,
-            // Campos de facial
+            'tem_qr': _getField(data, 'tem_qr', false) == true ? 'SIM' : 'NAO',
+            'inicio_viagem': _convertTimestampToDate(_getField(data, 'inicio_viagem')),
+            'fim_viagem': _convertTimestampToDate(_getField(data, 'fim_viagem')),
             'embedding': embeddingJson,
             'facial_cadastrada': facialCadastrada,
-            'data_cadastro_facial': dataCadastroFacial,
-            // Campos de embarque
-            'embarcado': embarcado,
-            'data_embarque': dataEmbarque,
-            'retornado': retornado,
-            'data_retorno': dataRetorno,
-            // Movimentação
+            'data_cadastro_facial': _convertTimestampToDate(_getField(data, 'data_cadastro_facial')),
+            'embarcado': _getField(data, 'embarcado', false) == true ? 1 : 0,
+            'data_embarque': _convertTimestampToDate(_getField(data, 'data_embarque')),
+            'retornado': _getField(data, 'retornado', false) == true ? 1 : 0,
+            'data_retorno': _convertTimestampToDate(_getField(data, 'data_retorno')),
             'movimentacao': _getField(data, 'movimentacao', 'QUARTO'),
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-
       await batch.commit(noResult: true);
-      print('✅ [FirebaseService] ${snapshot.docs.length} alunos sincronizados');
-    } catch (e) {
-      print('❌ [FirebaseService] Erro ao sincronizar alunos: $e');
-      Sentry.captureException(e);
     }
-  }
 
-
-  Future<void> _syncLogsFromSnapshot(QuerySnapshot snapshot) async {
-    try {
-      final db = await _db.database;
+    // Aplicar quartos
+    if (delta.containsKey('quartos')) {
+      final quartos = delta['quartos'] as List;
       final batch = db.batch();
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-
-        final timestampData = _getField(data, 'timestamp');
-        final timestamp = (timestampData as Timestamp?)?.toDate() ?? DateTime.now();
-
-        // Converter timestamps de viagem
-        final inicioViagem = _convertTimestampToDate(_getField(data, 'inicio_viagem'));
-        final fimViagem = _convertTimestampToDate(_getField(data, 'fim_viagem'));
-
-        batch.insert(
-          'logs',
-          {
-            'cpf': _getField(data, 'cpf', ''),
-            'person_name': _getField(data, 'person_name', ''),
-            'timestamp': timestamp.toIso8601String(),
-            'confidence': (_getField(data, 'confidence') as num?)?.toDouble() ?? 0.0,
-            'tipo': _getField(data, 'tipo', 'RECONHECIMENTO'),
-            'operador_nome': _getField(data, 'operador_nome', ''),
-            'colegio': _getField(data, 'colegio', ''),
-            'turma': _getField(data, 'turma', ''),
-            'inicio_viagem': inicioViagem,
-            'fim_viagem': fimViagem,
-            'sincronizado': 1, // Vem do Firebase, já está sincronizado
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      await batch.commit(noResult: true);
-      print('✅ [FirebaseService] ${snapshot.docs.length} logs sincronizados');
-    } catch (e) {
-      print('❌ [FirebaseService] Erro ao sincronizar logs: $e');
-      Sentry.captureException(e);
-    }
-  }
-
-  Future<void> _syncQuartosFromSnapshot(QuerySnapshot snapshot) async {
-    try {
-      final db = await _db.database;
-      final batch = db.batch();
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-
-        // Converter timestamps
-        final inicioViagem = _convertTimestampToDate(_getField(data, 'inicio_viagem'));
-        final fimViagem = _convertTimestampToDate(_getField(data, 'fim_viagem'));
-
+      for (var quarto in quartos) {
+        final data = quarto as Map<String, dynamic>;
         batch.insert(
           'quartos',
           {
             'numero_quarto': _getField(data, 'numero_quarto', ''),
-            'escola': _getField(data, 'escola', ''),
+            'escola': _getField(data, 'colegio', '') ?? _getField(data, 'escola', ''),
             'nome_hospede': _getField(data, 'nome_hospede', ''),
             'cpf': _getField(data, 'cpf', ''),
-            'inicio_viagem': inicioViagem,
-            'fim_viagem': fimViagem,
+            'inicio_viagem': _convertTimestampToDate(_getField(data, 'inicio_viagem')),
+            'fim_viagem': _convertTimestampToDate(_getField(data, 'fim_viagem')),
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-
       await batch.commit(noResult: true);
-      print('✅ [FirebaseService] ${snapshot.docs.length} quartos sincronizados');
-    } catch (e) {
-      print('❌ [FirebaseService] Erro ao sincronizar quartos: $e');
-      Sentry.captureException(e);
+    }
+
+    // Aplicar embarques
+    if (delta.containsKey('embarques')) {
+      final embarques = delta['embarques'] as List;
+      final batch = db.batch();
+      for (var embarque in embarques) {
+        final data = embarque as Map<String, dynamic>;
+        final cpf = _getField(data, 'cpf', '');
+        if (cpf.isEmpty) continue;
+
+        batch.insert(
+          'embarques',
+          {
+            'cpf': cpf,
+            'nome': _getField(data, 'nome', ''),
+            'colegio': _getField(data, 'colegio', ''),
+            'turma': _getField(data, 'turma', ''),
+            'id_passeio': _getField(data, 'idPasseio', ''),
+            'onibus': _getField(data, 'onibus', ''),
+            'inicio_viagem': _convertTimestampToDate(_getField(data, 'inicioViagem')),
+            'fim_viagem': _convertTimestampToDate(_getField(data, 'fimViagem')),
+            'embarque': _getField(data, 'embarque', ''),
+            'retorno': _getField(data, 'retorno', ''),
+            'facial_cadastrada': _getField(data, 'facial_cadastrada', false) == true ? 1 : 0,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
+    }
+
+    // Aplicar eventos
+    if (delta.containsKey('eventos')) {
+      final eventos = delta['eventos'] as List;
+      for (var evento in eventos) {
+        final data = evento as Map<String, dynamic>;
+        final tipoEvento = data['tipo_evento'] as String?;
+        if (tipoEvento == 'viagem_encerrada') {
+          print('🔔 [FirebaseService] Evento delta: Viagem encerrada detectada');
+        }
+      }
     }
   }
 
-  Future<void> _processEventos(QuerySnapshot snapshot) async {
-    for (var doc in snapshot.docs) {
-      try {
-        final data = doc.data() as Map<String, dynamic>;
-        final tipoEvento = data['tipo_evento'] as String?;
+  // =============================
+  // UPLOAD DE PENDÊNCIAS VIA REST
+  // =============================
 
-        if (tipoEvento == 'viagem_encerrada') {
-          print('🔔 [FirebaseService] Evento: Viagem encerrada detectada');
-          // Processar encerramento de viagem localmente se necessário
+  /// Envia operações pendentes (logs, movimentações, embeddings) para o backend
+  Future<void> _uploadPending() async {
+    try {
+      if (!_api.isAuthenticated) return;
+
+      final db = await _db.database;
+      final operations = <Map<String, dynamic>>[];
+
+      // 1. Logs pendentes
+      final pendingLogs = await db.query(
+        'logs',
+        where: 'sincronizado = ?',
+        whereArgs: [0],
+        limit: 50,
+      );
+
+      for (final log in pendingLogs) {
+        operations.add({
+          'id': 'log_${log['id']}',
+          'type': 'log',
+          'data': {
+            'cpf': log['cpf'],
+            'person_name': log['person_name'],
+            'timestamp': log['timestamp'],
+            'confidence': log['confidence'],
+            'tipo': log['tipo'],
+            'operador_nome': log['operador_nome'] ?? '',
+            'colegio': log['colegio'] ?? '',
+            'turma': log['turma'] ?? '',
+            'inicio_viagem': log['inicio_viagem'] ?? '',
+            'fim_viagem': log['fim_viagem'] ?? '',
+          }
+        });
+      }
+
+      // 2. Movimentações pendentes (logs com tipo não-RECONHECIMENTO)
+      for (final log in pendingLogs) {
+        final tipo = (log['tipo'] as String).trim().toUpperCase();
+        final cpf = log['cpf'] as String;
+
+        if (tipo.isNotEmpty && tipo != 'RECONHECIMENTO' && tipo != 'FACIAL') {
+          operations.add({
+            'id': 'mov_${log['id']}',
+            'type': 'movimentacao',
+            'data': {
+              'cpf': cpf,
+              'nome': log['person_name'] ?? '',
+              'movimentacao': tipo,
+              'operador': log['operador_nome'] ?? '',
+            }
+          });
+        }
+      }
+
+      // 3. Outbox pendente (cadastros faciais, etc.)
+      final outbox = await _db.getOutboxBatch(limit: 50);
+      for (final row in outbox) {
+        try {
+          final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
+          final tipo = row['tipo'] as String;
+
+          if (tipo == 'face_register') {
+            operations.add({
+              'id': 'outbox_${row['id']}',
+              'type': 'embedding',
+              'data': {
+                'cpf': payload['cpf'].toString().trim(),
+                'embedding': payload['embedding'],
+              }
+            });
+          }
+        } catch (e) {
+          print('⚠️ [FirebaseService] Erro ao processar outbox ${row['id']}: $e');
+        }
+      }
+
+      if (operations.isEmpty) return;
+
+      print('📤 [FirebaseService] Enviando ${operations.length} operações pendentes...');
+
+      final response = await _api.uploadBatch(operations);
+
+      if (response['success'] == true) {
+        // Marcar logs como sincronizados
+        for (final log in pendingLogs) {
+          await db.update(
+            'logs',
+            {'sincronizado': 1},
+            where: 'id = ?',
+            whereArgs: [log['id']],
+          );
         }
 
-        // Marcar como processado
-        await doc.reference.update({'processado': true});
-      } catch (e) {
-        print('❌ [FirebaseService] Erro ao processar evento ${doc.id}: $e');
-        Sentry.captureException(e);
+        // Remover outbox sincronizados
+        for (final row in outbox) {
+          await db.delete('sync_queue', where: 'id = ?', whereArgs: [row['id']]);
+        }
+
+        print('✅ [FirebaseService] ${operations.length} operações sincronizadas com sucesso');
       }
+    } catch (e) {
+      print('❌ [FirebaseService] Erro ao enviar pendências: $e');
+      Sentry.captureException(e);
     }
   }
 
@@ -405,7 +368,7 @@ class FirebaseService {
     String? inicioViagem,
     String? fimViagem,
   }) async {
-    // Salvar localmente primeiro
+    // Salvar localmente primeiro (offline-first)
     await _db.insertLog(
       cpf: cpf,
       personName: personName,
@@ -419,44 +382,61 @@ class FirebaseService {
       fimViagem: fimViagem,
     );
 
-    // Tentar enviar para Firebase
+    // Atualizar movimentação local
+    final tipoNormalizado = tipo.trim().toUpperCase();
+    if (tipoNormalizado.isNotEmpty &&
+        tipoNormalizado != 'RECONHECIMENTO' &&
+        tipoNormalizado != 'FACIAL') {
+      try {
+        final db = await _db.database;
+        await db.update(
+          'alunos',
+          {'movimentacao': tipoNormalizado},
+          where: 'cpf = ?',
+          whereArgs: [cpf],
+        );
+      } catch (_) {}
+    }
+
+    // Tentar enviar via API REST imediatamente
     try {
-      await _logsCollection.add({
-        'cpf': cpf,
-        'person_name': personName,
-        'timestamp': Timestamp.fromDate(timestamp),
-        'confidence': confidence,
-        'tipo': tipo,
-        'operador_nome': operadorNome ?? '',
-        'colegio': colegio ?? '',
-        'turma': turma ?? '',
-        'inicio_viagem': inicioViagem ?? '',
-        'fim_viagem': fimViagem ?? '',
-        'created_at': FieldValue.serverTimestamp(),
-      });
-      print('✅ [FirebaseService] Log enviado para Firebase: $personName - $tipo');
-
-      // ✅ Atualizar movimentação do aluno no Firebase (APENAS alunos, NÃO embarques)
-      final tipoNormalizado = tipo.trim().toUpperCase();
-      if (tipoNormalizado.isNotEmpty &&
-          tipoNormalizado != 'RECONHECIMENTO' &&
-          tipoNormalizado != 'FACIAL') {
-        try {
-          // Atualizar APENAS coleção alunos (embarques só tem: embarque, Facial, retorno)
-          await _alunosCollection.doc(cpf).set({
-            'cpf': cpf,
-            'movimentacao': tipoNormalizado,
-            'updated_at': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-
-          print('✅ [FirebaseService] Movimentação atualizada em alunos: $personName → $tipoNormalizado');
-        } catch (e) {
-          print('⚠️ [FirebaseService] Erro ao atualizar movimentação: $e');
-        }
+      if (_api.isAuthenticated && await _hasInternet()) {
+        await _api.uploadBatch([
+          {
+            'id': 'log_immediate_${DateTime.now().millisecondsSinceEpoch}',
+            'type': 'log',
+            'data': {
+              'cpf': cpf,
+              'person_name': personName,
+              'timestamp': timestamp.toIso8601String(),
+              'confidence': confidence,
+              'tipo': tipo,
+              'operador_nome': operadorNome ?? '',
+              'colegio': colegio ?? '',
+              'turma': turma ?? '',
+              'inicio_viagem': inicioViagem ?? '',
+              'fim_viagem': fimViagem ?? '',
+            }
+          },
+          if (tipoNormalizado.isNotEmpty &&
+              tipoNormalizado != 'RECONHECIMENTO' &&
+              tipoNormalizado != 'FACIAL')
+            {
+              'id': 'mov_immediate_${DateTime.now().millisecondsSinceEpoch}',
+              'type': 'movimentacao',
+              'data': {
+                'cpf': cpf,
+                'nome': personName,
+                'movimentacao': tipoNormalizado,
+                'operador': operadorNome ?? '',
+              }
+            },
+        ]);
+        print('✅ [FirebaseService] Log enviado via API: $personName - $tipo');
       }
     } catch (e) {
-      print('⚠️ [FirebaseService] Erro ao enviar log, ficará pendente: $e');
-      // O log ficará marcado como não sincronizado e será enviado depois
+      print('⚠️ [FirebaseService] Erro ao enviar log via API, ficará pendente: $e');
+      // O log ficará marcado como não sincronizado e será enviado no próximo ciclo
     }
   }
 
@@ -472,7 +452,6 @@ class FirebaseService {
     String? inicioViagem,
     String? fimViagem,
   }) async {
-    // ✅ CORREÇÃO: Trim no CPF para evitar espaços extras
     final cpfLimpo = cpf.trim();
 
     // Buscar movimentação atual do aluno
@@ -489,65 +468,45 @@ class FirebaseService {
         ? (alunoExistente.first['movimentacao']?.toString() ?? 'QUARTO')
         : 'QUARTO';
 
-    // Converter timestamps se necessário
-    dynamic inicioViagemTimestamp = inicioViagem;
-    dynamic fimViagemTimestamp = fimViagem;
-
-    // Se receber string com formato Timestamp, converter para Timestamp real
-    if (inicioViagem is String && inicioViagem.contains('Timestamp(')) {
-      // Extrair segundos do formato "Timestamp(seconds=1764558000, nanoseconds=0)"
-      final match = RegExp(r'seconds=(\d+)').firstMatch(inicioViagem);
-      if (match != null) {
-        final seconds = int.parse(match.group(1)!);
-        inicioViagemTimestamp = Timestamp.fromMillisecondsSinceEpoch(seconds * 1000);
-      }
-    } else if (inicioViagem is String && inicioViagem.isNotEmpty) {
-      // Se for string de data (dd/MM/yyyy), manter como está
-      inicioViagemTimestamp = inicioViagem;
-    }
-
-    if (fimViagem is String && fimViagem.contains('Timestamp(')) {
-      final match = RegExp(r'seconds=(\d+)').firstMatch(fimViagem);
-      if (match != null) {
-        final seconds = int.parse(match.group(1)!);
-        fimViagemTimestamp = Timestamp.fromMillisecondsSinceEpoch(seconds * 1000);
-      }
-    } else if (fimViagem is String && fimViagem.isNotEmpty) {
-      fimViagemTimestamp = fimViagem;
-    }
-
-    // Tentar enviar para Firebase
-    try {
-      // 1. Atualizar coleção alunos
-      await _alunosCollection.doc(cpfLimpo).set({
+    // Atualizar localmente primeiro
+    await db.insert(
+      'alunos',
+      {
         'cpf': cpfLimpo,
         'nome': nome,
         'colegio': colegio ?? '',
         'turma': turma ?? '',
         'email': email,
         'telefone': telefone,
-        'embedding': embedding,
-        // ✅ CORREÇÃO: Remover facial_status duplicado - só usar facial_cadastrada
-        'facial_cadastrada': true,
-        'data_cadastro_facial': FieldValue.serverTimestamp(),
+        'embedding': '[${embedding.join(',')}]',
+        'facial_cadastrada': 1,
+        'data_cadastro_facial': DateTime.now().toIso8601String(),
         'movimentacao': movimentacaoAtual,
-        'inicio_viagem': inicioViagemTimestamp ?? '',
-        'fim_viagem': fimViagemTimestamp ?? '',
-        'updated_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+        'inicio_viagem': inicioViagem ?? '',
+        'fim_viagem': fimViagem ?? '',
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
 
-      // 2. ✅ CORREÇÃO: Atualizar coleção embarques com Facial: "CADASTRADA"
-      await _embarquesCollection.doc(cpfLimpo).set({
-        'cpf': cpfLimpo,
-        'Facial': 'CADASTRADA',
-        'facial_cadastrada': true,  // ✅ Marcar como cadastrada na planilha embarque
-        'updated_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      print('✅ [FirebaseService] Cadastro facial enviado para Firebase: $nome');
-      print('✅ [FirebaseService] Embarque atualizado com Facial: CADASTRADA');
+    // Tentar enviar via API REST
+    try {
+      if (_api.isAuthenticated && await _hasInternet()) {
+        await _api.uploadBatch([
+          {
+            'id': 'face_${cpfLimpo}_${DateTime.now().millisecondsSinceEpoch}',
+            'type': 'embedding',
+            'data': {
+              'cpf': cpfLimpo,
+              'embedding': embedding,
+            }
+          }
+        ]);
+        print('✅ [FirebaseService] Cadastro facial enviado via API: $nome');
+      } else {
+        throw Exception('API não disponível');
+      }
     } catch (e) {
-      print('⚠️ [FirebaseService] Erro ao enviar cadastro facial: $e');
+      print('⚠️ [FirebaseService] Erro ao enviar cadastro facial via API: $e');
       // Enfileirar para retry
       await _db.enqueueOutbox('face_register', {
         'cpf': cpfLimpo,
@@ -566,7 +525,7 @@ class FirebaseService {
   }
 
   // =============================
-  // SINCRONIZAÇÃO DE PENDÊNCIAS
+  // SINCRONIZAÇÃO EM BACKGROUND
   // =============================
 
   Future<void> trySyncInBackground() async {
@@ -579,8 +538,13 @@ class FirebaseService {
     isSyncingNotifier.value = true;
 
     try {
-      await _syncPendingLogs();
-      await _syncPendingOutbox();
+      if (await _hasInternet()) {
+        // PASSO 1: Enviar pendências locais
+        await _uploadPending();
+        
+        // PASSO 2: Baixar delta do servidor
+        await _syncDelta();
+      }
     } catch (e) {
       print('❌ [FirebaseService] Erro na sincronização em background: $e');
       Sentry.captureException(e);
@@ -590,200 +554,26 @@ class FirebaseService {
     }
   }
 
-  Future<void> _syncPendingLogs() async {
-    try {
-      final db = await _db.database;
-      final pendingLogs = await db.query(
-        'logs',
-        where: 'sincronizado = ?',
-        whereArgs: [0],
-        limit: 50,
-      );
-
-      if (pendingLogs.isEmpty) return;
-
-      print('📤 [FirebaseService] Sincronizando ${pendingLogs.length} logs pendentes...');
-
-      final batch = _firestore.batch();
-      final syncedIds = <int>[];
-
-      for (final log in pendingLogs) {
-        final timestamp = DateTime.parse(log['timestamp'] as String);
-        final docRef = _logsCollection.doc();
-
-        batch.set(docRef, {
-          'cpf': log['cpf'],
-          'person_name': log['person_name'],
-          'timestamp': Timestamp.fromDate(timestamp),
-          'confidence': log['confidence'],
-          'tipo': log['tipo'],
-          'operador_nome': log['operador_nome'] ?? '',
-          'colegio': log['colegio'] ?? '',
-          'turma': log['turma'] ?? '',
-          'inicio_viagem': log['inicio_viagem'] ?? '',
-          'fim_viagem': log['fim_viagem'] ?? '',
-          'created_at': FieldValue.serverTimestamp(),
-        });
-
-        syncedIds.add(log['id'] as int);
-      }
-
-      await batch.commit();
-
-      // ✅ CORREÇÃO: Atualizar movimentações APENAS na coleção alunos (NÃO embarques)
-      for (final log in pendingLogs) {
-        final tipo = (log['tipo'] as String).trim().toUpperCase();
-        final cpf = log['cpf'] as String;
-
-        if (tipo.isNotEmpty && tipo != 'RECONHECIMENTO' && tipo != 'FACIAL') {
-          try {
-            // Atualizar APENAS coleção alunos (embarques só tem: embarque, Facial, retorno)
-            await _alunosCollection.doc(cpf).set({
-              'cpf': cpf,
-              'movimentacao': tipo,
-              'updated_at': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-
-            print('✅ [FirebaseService] Movimentação sincronizada em alunos: CPF $cpf → $tipo');
-          } catch (e) {
-            print('⚠️ [FirebaseService] Erro ao atualizar movimentação de $cpf: $e');
-          }
-        }
-      }
-
-      // Marcar como sincronizados
-      for (final id in syncedIds) {
-        await db.update(
-          'logs',
-          {'sincronizado': 1},
-          where: 'id = ?',
-          whereArgs: [id],
-        );
-      }
-
-      print('✅ [FirebaseService] ${syncedIds.length} logs sincronizados com sucesso');
-    } catch (e) {
-      print('❌ [FirebaseService] Erro ao sincronizar logs pendentes: $e');
-      Sentry.captureException(e);
-    }
-  }
-
-  Future<void> _syncPendingOutbox() async {
-    try {
-      final batch = await _db.getOutboxBatch(limit: 50);
-      if (batch.isEmpty) return;
-
-      print('📤 [FirebaseService] Sincronizando ${batch.length} itens da outbox...');
-
-      for (final row in batch) {
-        try {
-          final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
-          final tipo = row['tipo'] as String;
-
-          if (tipo == 'face_register') {
-            final cpf = payload['cpf'].toString().trim();  // ✅ TRIM no CPF
-
-            // Atualizar coleção alunos
-            await _alunosCollection.doc(cpf).set({
-              'cpf': cpf,
-              'nome': payload['nome'],
-              'colegio': payload['colegio'] ?? '',
-              'turma': payload['turma'] ?? '',
-              'email': payload['email'],
-              'telefone': payload['telefone'],
-              'embedding': payload['embedding'],
-              // ✅ CORREÇÃO: Remover facial_status duplicado - só usar facial_cadastrada
-              'facial_cadastrada': true,
-              'data_cadastro_facial': FieldValue.serverTimestamp(),
-              'movimentacao': payload['movimentacao'] ?? 'QUARTO',
-              'inicio_viagem': payload['inicio_viagem'] ?? '',
-              'fim_viagem': payload['fim_viagem'] ?? '',
-              'updated_at': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-
-            // Atualizar coleção embarques
-            await _embarquesCollection.doc(cpf).set({
-              'cpf': cpf,
-              'Facial': 'CADASTRADA',
-              'facial_cadastrada': true,
-              'updated_at': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-
-            print('✅ [FirebaseService] Cadastro facial (retry) enviado: ${payload['nome']}');
-          }
-
-          // Remover da outbox (deletar da sync_queue)
-          final db = await _db.database;
-          await db.delete('sync_queue', where: 'id = ?', whereArgs: [row['id']]);
-          print('✅ [FirebaseService] Item ${row['id']} sincronizado e removido da outbox');
-        } catch (e) {
-          print('❌ [FirebaseService] Erro ao sincronizar item ${row['id']}: $e');
-        }
-      }
-    } catch (e) {
-      print('❌ [FirebaseService] Erro ao sincronizar outbox: $e');
-      Sentry.captureException(e);
-    }
-  }
-
   // =============================
   // OPERAÇÕES ADMINISTRATIVAS
   // =============================
 
   Future<void> encerrarViagem({String? inicioViagem, String? fimViagem}) async {
     try {
-      final batch = _firestore.batch();
-
+      print('🔚 [FirebaseService] Encerramento de viagem solicitado');
+      // O encerramento agora é feito via API REST (o backend cuida do Firestore)
+      // Aqui apenas limpamos os dados locais
+      final db = await _db.database;
+      
       if (inicioViagem != null && fimViagem != null) {
-        // Encerrar viagem específica
-        print('🔚 [FirebaseService] Encerrando viagem: $inicioViagem a $fimViagem');
-
-        // Deletar alunos da viagem
-        final alunosSnapshot = await _alunosCollection
-            .where('inicio_viagem', isEqualTo: inicioViagem)
-            .where('fim_viagem', isEqualTo: fimViagem)
-            .get();
-        for (var doc in alunosSnapshot.docs) {
-          batch.delete(doc.reference);
-        }
-
-        // Deletar logs da viagem
-        final logsSnapshot = await _logsCollection
-            .where('inicio_viagem', isEqualTo: inicioViagem)
-            .where('fim_viagem', isEqualTo: fimViagem)
-            .get();
-        for (var doc in logsSnapshot.docs) {
-          batch.delete(doc.reference);
-        }
+        await db.delete('alunos', where: 'inicio_viagem = ? AND fim_viagem = ?', whereArgs: [inicioViagem, fimViagem]);
+        await db.delete('logs', where: 'inicio_viagem = ? AND fim_viagem = ?', whereArgs: [inicioViagem, fimViagem]);
+        print('✅ [FirebaseService] Dados locais da viagem $inicioViagem-$fimViagem limpos');
       } else {
-        // Encerrar TODAS as viagens
-        print('🔚 [FirebaseService] Encerrando TODAS as viagens');
-
-        // Deletar todos os alunos
-        final alunosSnapshot = await _alunosCollection.get();
-        for (var doc in alunosSnapshot.docs) {
-          batch.delete(doc.reference);
-        }
-
-        // Deletar todos os logs
-        final logsSnapshot = await _logsCollection.get();
-        for (var doc in logsSnapshot.docs) {
-          batch.delete(doc.reference);
-        }
+        await db.delete('alunos');
+        await db.delete('logs');
+        print('✅ [FirebaseService] Todos os dados locais de viagens limpos');
       }
-
-      await batch.commit();
-
-      // Criar evento
-      await _eventosCollection.add({
-        'tipo_evento': 'viagem_encerrada',
-        'inicio_viagem': inicioViagem ?? '',
-        'fim_viagem': fimViagem ?? '',
-        'timestamp': FieldValue.serverTimestamp(),
-        'processado': false,
-      });
-
-      print('✅ [FirebaseService] Viagem encerrada com sucesso');
     } catch (e) {
       print('❌ [FirebaseService] Erro ao encerrar viagem: $e');
       Sentry.captureException(e);
@@ -793,18 +583,12 @@ class FirebaseService {
 
   Future<void> enviarTodosParaQuarto() async {
     try {
-      final alunosSnapshot = await _alunosCollection.get();
-      final batch = _firestore.batch();
-
-      for (var doc in alunosSnapshot.docs) {
-        batch.update(doc.reference, {
-          'movimentacao': 'QUARTO',
-          'updated_at': FieldValue.serverTimestamp(),
-        });
-      }
-
-      await batch.commit();
-      print('✅ [FirebaseService] Todos os alunos enviados para QUARTO');
+      final db = await _db.database;
+      await db.update('alunos', {'movimentacao': 'QUARTO'});
+      
+      // Enfileirar para o backend processar
+      // O sync delta cuidará de atualizar o Firestore via backend
+      print('✅ [FirebaseService] Todos os alunos locais marcados como QUARTO');
     } catch (e) {
       print('❌ [FirebaseService] Erro ao enviar todos para quarto: $e');
       Sentry.captureException(e);
@@ -814,14 +598,13 @@ class FirebaseService {
 
   Future<List<Map<String, String>>> listarViagens() async {
     try {
-      final alunosSnapshot = await _alunosCollection.get();
+      final db = await _db.database;
+      final alunos = await db.query('alunos');
       final viagensSet = <String>{};
 
-      for (var doc in alunosSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final inicio = data['inicio_viagem'] as String? ?? '';
-        final fim = data['fim_viagem'] as String? ?? '';
-
+      for (var aluno in alunos) {
+        final inicio = aluno['inicio_viagem'] as String? ?? '';
+        final fim = aluno['fim_viagem'] as String? ?? '';
         if (inicio.isNotEmpty && fim.isNotEmpty) {
           viagensSet.add('$inicio|$fim');
         }
@@ -853,17 +636,39 @@ class FirebaseService {
     String? retorno,
   }) async {
     try {
-      // ✅ CORREÇÃO: Usar apenas CPF como docId (com trim!)
       final cpfLimpo = cpf.trim();
 
-      await _embarquesCollection.doc(cpfLimpo).set({
+      // Atualizar localmente
+      final db = await _db.database;
+      final updateData = <String, dynamic>{
         'cpf': cpfLimpo,
-        'idPasseio': idPasseio,
-        'onibus': onibus,
-        if (embarque != null) 'embarque': embarque,
-        if (retorno != null) 'retorno': retorno,
-        'updated_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      };
+      if (embarque != null) updateData['embarque'] = embarque;
+      if (retorno != null) updateData['retorno'] = retorno;
+      
+      await db.update(
+        'embarques',
+        updateData,
+        where: 'cpf = ?',
+        whereArgs: [cpfLimpo],
+      );
+
+      // Enviar via API REST
+      if (_api.isAuthenticated && await _hasInternet()) {
+        await _api.uploadBatch([
+          {
+            'id': 'emb_${cpfLimpo}_${DateTime.now().millisecondsSinceEpoch}',
+            'type': 'embarque',
+            'data': {
+              'cpf': cpfLimpo,
+              'idPasseio': idPasseio,
+              'onibus': onibus,
+              if (embarque != null) 'embarque': embarque,
+              if (retorno != null) 'retorno': retorno,
+            }
+          }
+        ]);
+      }
 
       print('✅ [FirebaseService] Embarque atualizado: $cpfLimpo');
     } catch (e) {
@@ -878,20 +683,28 @@ class FirebaseService {
     String? onibus,
   }) async {
     try {
-      Query query = _embarquesCollection.where('idPasseio', isEqualTo: idPasseio);
-
-      if (onibus != null) {
-        query = query.where('onibus', isEqualTo: onibus);
+      // Buscar via API REST
+      if (_api.isAuthenticated && await _hasInternet()) {
+        final response = await _api.getEmbarquesPorViagem(
+          idPasseio: idPasseio,
+          onibus: onibus,
+        );
+        if (response['success'] == true) {
+          return List<Map<String, dynamic>>.from(response['data'] ?? []);
+        }
       }
 
-      final snapshot = await query.get();
-      return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return {
-          'id': doc.id,
-          ...data,
-        };
-      }).toList();
+      // Fallback: buscar do SQLite local
+      final db = await _db.database;
+      String where = 'id_passeio = ?';
+      List<dynamic> whereArgs = [idPasseio];
+      
+      if (onibus != null) {
+        where += ' AND onibus = ?';
+        whereArgs.add(onibus);
+      }
+
+      return await db.query('embarques', where: where, whereArgs: whereArgs);
     } catch (e) {
       print('❌ [FirebaseService] Erro ao buscar embarques: $e');
       Sentry.captureException(e);

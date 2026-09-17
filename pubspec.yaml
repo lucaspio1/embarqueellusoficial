@@ -23,11 +23,12 @@ dependencies:
   http: ^1.1.0
   flutter_dotenv: ^5.1.0
 
-  # Firebase
+  # Firebase — MIGRAÇÃO: Apenas firebase_core mantido para inicialização
+  # Dados agora vêm via REST API do backend Node.js
   firebase_core: ^3.8.1
-  cloud_firestore: ^5.6.0
-  firebase_auth: ^5.3.3
-  firebase_storage: ^12.3.7
+  # cloud_firestore: ^5.6.0        # MIGRADO → API Gateway REST — remover após validação
+  # firebase_auth: ^5.3.3          # MIGRADO → JWT via API — remover após validação
+  # firebase_storage: ^12.3.7      # NÃO UTILIZADO — remover após validação
 
   # Códigos de Barras
   google_mlkit_barcode_scanning: 0.14.1
