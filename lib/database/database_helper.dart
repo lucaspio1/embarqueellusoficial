@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 10, // ✅ VERSÃO 10: REFATORAÇÃO - Unificar alunos + pessoas_facial, remover embeddings e passageiros
+      version: 11, // ✅ VERSÃO 11: Adiciona tabelas embarques e sync_metadata
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -353,6 +353,39 @@ class DatabaseHelper {
 
       print('✅ [DB] Migração v9 -> v10 concluída com sucesso!');
     }
+    
+    if (oldVersion < 11) {
+      print('🔄 [DB] Iniciando migração v10 -> v11: Adicionando tabelas embarques e sync_metadata');
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS sync_metadata(
+            chave TEXT PRIMARY KEY,
+            valor TEXT,
+            updated_at TEXT
+          )
+        ''');
+        
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS embarques(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cpf TEXT UNIQUE,
+            nome TEXT,
+            colegio TEXT,
+            turma TEXT,
+            id_passeio TEXT,
+            onibus TEXT,
+            inicio_viagem TEXT,
+            fim_viagem TEXT,
+            embarque TEXT,
+            retorno TEXT,
+            facial_cadastrada INTEGER DEFAULT 0
+          )
+        ''');
+        print('✅ [DB] Tabelas embarques e sync_metadata criadas');
+      } catch (e) {
+        print('⚠️ [DB] Erro na migração v10 -> v11: $e');
+      }
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -450,6 +483,31 @@ class DatabaseHelper {
         cpf TEXT NOT NULL,
         inicio_viagem TEXT,
         fim_viagem TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE sync_metadata(
+        chave TEXT PRIMARY KEY,
+        valor TEXT,
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE embarques(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cpf TEXT UNIQUE,
+        nome TEXT,
+        colegio TEXT,
+        turma TEXT,
+        id_passeio TEXT,
+        onibus TEXT,
+        inicio_viagem TEXT,
+        fim_viagem TEXT,
+        embarque TEXT,
+        retorno TEXT,
+        facial_cadastrada INTEGER DEFAULT 0
       )
     ''');
 

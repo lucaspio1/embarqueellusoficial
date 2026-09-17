@@ -35,7 +35,7 @@ class FaceRecognitionService {
   static const Duration CACHE_VALIDITY_DURATION = Duration(minutes: 5);
 
   // Configurações
-  static const double DISTANCE_THRESHOLD = 1.1; // ajuste conforme calibração
+  static const double DISTANCE_THRESHOLD = 0.95; // Limite equilibrado sugerido para 1200 alunos
   static const int INPUT_SIZE = 112;              // ArcFace usa 112x112
   static const int EMBEDDING_SIZE = 512;          // ArcFace retorna 512 dims
 

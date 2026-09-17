@@ -1,0 +1,1 @@
+ /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/flutter_build/93c4b1770fbda3c619d1fdf32b20e798/link_hooks_result.json: 

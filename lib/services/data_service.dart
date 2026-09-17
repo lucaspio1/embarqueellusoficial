@@ -127,8 +127,8 @@ class DataService {
 
       // Delega a atualização e sincronização em lote para o FirebaseService
       _firebaseService.atualizarEmbarque(
-        cpf: atualizado.cpf,
-        idPasseio: atualizado.idPasseio,
+        cpf: atualizado.cpf ?? '',
+        idPasseio: atualizado.idPasseio ?? '',
         onibus: _numeroOnibus.isNotEmpty ? _numeroOnibus : atualizado.onibus,
         embarque: novoEmbarque,
         retorno: novoRetorno,

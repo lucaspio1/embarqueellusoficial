@@ -1,0 +1,54 @@
+Running `(cd /Users/lucaspio/.pub-cache/hosted/pub.dev/objective_c-9.4.1/; TMPDIR=/var/folders/xy/flwjkj1x62x3qtss1jkt7lww0000gn/T/ PATH=/Applications/Xcode.app/Contents/SharedFrameworks/SwiftBuild.framework/Versions/A/PlugIns/SWBBuildService.bundle/Contents/PlugIns/SWBUniversalPlatformPlugin.bundle/Contents/Frameworks/SWBUniversalPlatform.framework/Resources:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/local/bin:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/libexec:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/usr/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/usr/local/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/local/bin:/Applications/Xcode.app/Contents/Developer/usr/bin:/Applications/Xcode.app/Contents/Developer/usr/local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin HOME=/Users/lucaspio /Users/lucaspio/development/flutter/bin/cache/dart-sdk/bin/dart --packages=/Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/package_config.json /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/objective_c/ffe60f8ce8/hook.dill --config=/Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/objective_c/ffe60f8ce8/input.json )`.
+INFO: 2026-09-17 14:41:12.963854: Using compiler /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang from BuildInput.cCompiler.cc.
+
+INFO: 2026-09-17 14:41:12.972592: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk -target arm64-apple-ios -mios-version-min=15 -c /Users/lucaspio/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/include/dart_api_dl.c -fpic -gline-tables-only -I src -o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/include/dart_api_dl.c.o
+
+INFO: 2026-09-17 14:41:12.974689: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk -target arm64-apple-ios -mios-version-min=15 -c /Users/lucaspio/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/objective_c.c -fpic -gline-tables-only -I src -o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/objective_c.c.o
+
+INFO: 2026-09-17 14:41:12.975274: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk -target arm64-apple-ios -mios-version-min=15 -x objective-c -fobjc-arc -c /Users/lucaspio/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/objective_c.m -fpic -gline-tables-only -I src -o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/objective_c.m.o
+
+ream_adapter.m.o
+
+INFO: 2026-09-17 14:41:12.975504: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk -target arm64-apple-ios -mios-version-min=15 -x objective-c -fobjc-arc -c /Users/lucaspio/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/observer.m -fpic -gline-tables-only -I src -o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/observer.m.o
+
+INFO: 2026-09-17 14:41:12.975821: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk -target arm64-apple-ios -mios-version-min=15 -x objective-c -fobjc-arc -c /Users/lucaspio/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/ns_number.m -fpic -gline-tables-only -I src -o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/ns_number.m.o
+
+INFO: 2026-09-17 14:41:12.976359: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk -target arm64-apple-ios -mios-version-min=15 -x objective-c -fobjc-arc -c /Users/lucaspio/.pub-cache/hosted/pub.dev/objective_c-9.4.1/src/objective_c_bindings_generated.m -fpic -gline-tables-only -I src -o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/objective_c_bindings_generated.m.o
+
+INFO: 2026-09-17 14:41:13.042143: 
+INFO: 2026-09-17 14:41:13.042337: 
+INFO: 2026-09-17 14:41:13.042415: Generated /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/include/dart_api_dl.c.o
+
+INFO: 2026-09-17 14:41:13.048138: 
+INFO: 2026-09-17 14:41:13.048193: 
+INFO: 2026-09-17 14:41:13.048218: Generated /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/objective_c.c.o
+
+INFO: 2026-09-17 14:41:13.076841: 
+INFO: 2026-09-17 14:41:13.076897: 
+INFO: 2026-09-17 14:41:13.076918: Generated /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/observer.m.o
+
+INFO: 2026-09-17 14:41:13.082028: 
+INFO: 2026-09-17 14:41:13.082076: 
+INFO: 2026-09-17 14:41:13.082095: Generated /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/protocol.m.o
+
+INFO: 2026-09-17 14:41:13.242651: 
+INFO: 2026-09-17 14:41:13.242672: Generated /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/objective_c.m.o
+
+fe60f8ce8/obj/src/ns_number.m.o
+INFO: 2026-09-17 14:41:13.242628: 
+
+INFO: 2026-09-17 14:41:13.252350: 
+INFO: 2026-09-17 14:41:13.252393: 
+INFO: 2026-09-17 14:41:13.252409: Generated /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/input_stream_adapter.m.o
+
+INFO: 2026-09-17 14:41:13.302180: 
+INFO: 2026-09-17 14:41:13.302222: 
+INFO: 2026-09-17 14:41:13.302242: Generated /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/objective_c_bindings_generated.m.o
+
+INFO: 2026-09-17 14:41:13.302806: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -shared -Wl,-encryptable -undefined dynamic_lookup -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk -target arm64-apple-ios -mios-version-min=15 /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/include/dart_api_dl.c.o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/objective_c.c.o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/input_stream_adapter.m.o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/objective_c.m.o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/observer.m.o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/ns_number.m.o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/protocol.m.o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/obj/src/objective_c_bindings_generated.m.o -o /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/objective_c.dylib
+
+INFO: 2026-09-17 14:41:13.352790: 
+INFO: 2026-09-17 14:41:13.352907: ld: warning: -undefined dynamic_lookup is deprecated on iOS
+
+INFO: 2026-09-17 14:41:13.352927: Generated /Users/lucaspio/Documents/Ellus/embarqueellusoficial/.dart_tool/hooks_runner/shared/objective_c/build/ffe60f8ce8/objective_c.dylib
+
