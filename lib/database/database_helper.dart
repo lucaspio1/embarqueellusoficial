@@ -922,11 +922,13 @@ class DatabaseHelper {
     final db = await database;
     final hoje = DateTime.now();
 
-    // Buscar todos os alunos com facial da tabela alunos
-    final List<Map<String, dynamic>> pessoasComFacial = await db.query(
-      'alunos',
-      where: 'facial_cadastrada = 1 AND embedding IS NOT NULL',
-    );
+    // Buscar todos os alunos com facial da tabela alunos e a numeração do quarto
+    final List<Map<String, dynamic>> pessoasComFacial = await db.rawQuery('''
+      SELECT a.*, q.numero_quarto 
+      FROM alunos a
+      LEFT JOIN quartos q ON a.cpf = q.cpf
+      WHERE a.facial_cadastrada = 1 AND a.embedding IS NOT NULL
+    ''');
 
     // 🔍 DEBUG: Log inicial
     print('🔍 [Filtro de Data] Total de pessoas com facial no banco: ${pessoasComFacial.length}');

@@ -29,13 +29,13 @@ class FirebaseService {
     // Inicializar o ApiService (carregar token salvo)
     _api.init();
 
-    // Sincronização automática a cada 30 segundos via REST delta
-    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    // Sincronização automática a cada 60 segundos via REST delta
+    _syncTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
       print('⏰ [FirebaseService] Timer de sincronização disparado');
       await trySyncInBackground();
     });
 
-    print('✅ [FirebaseService] Sincronização via REST API iniciada (intervalo: 30s)');
+    print('✅ [FirebaseService] Sincronização via REST API iniciada (intervalo: 60s)');
     trySyncInBackground();
   }
 

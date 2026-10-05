@@ -784,7 +784,14 @@ class _BuscaManualDialogState extends State<_BuscaManualDialog> {
                         aluno['nome'] ?? 'Sem nome',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      subtitle: Text('CPF: ${aluno['cpf'] ?? '--'}'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('CPF: ${aluno['cpf'] ?? '--'}'),
+                          if (aluno['numero_quarto'] != null && aluno['numero_quarto'].toString().isNotEmpty)
+                            Text('Quarto: ${aluno['numero_quarto']}'),
+                        ],
+                      ),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: () => Navigator.pop(context, aluno),
                     ),
@@ -855,6 +862,16 @@ class _SelecionarTipoAcessoDialog extends StatelessWidget {
                 style: TextStyle(
                   color: Colors.grey.shade600,
                   fontSize: 14,
+                ),
+              ),
+            const SizedBox(height: 4),
+            if (aluno['numero_quarto'] != null && aluno['numero_quarto'].toString().isNotEmpty)
+              Text(
+                'Quarto: ${aluno['numero_quarto']}',
+                style: TextStyle(
+                  color: Colors.grey.shade800,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             const SizedBox(height: 24),
