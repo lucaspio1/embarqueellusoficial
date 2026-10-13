@@ -9,6 +9,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/api_service.dart';
+import 'package:embarqueellus/services/face_recognition_service.dart';
 
 class FirebaseService {
   FirebaseService._();
@@ -97,31 +98,91 @@ class FirebaseService {
       }
 
       final response = await _api.syncDelta(lastSync);
+      final faltaAlguem = await _processarRespostaDelta(db, response);
 
-      if (response['success'] == true) {
-        final delta = response['delta'] as Map<String, dynamic>? ?? {};
-        final serverTime = response['serverTime'] as String?;
-
-        // Aplicar delta no SQLite
-        await _applyDelta(delta);
-
-        // Salvar timestamp da sync
-        if (serverTime != null) {
-          await db.insert(
-            'sync_metadata',
-            {'chave': 'last_delta_sync', 'valor': serverTime, 'updated_at': serverTime},
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
-        }
-
-        final totalDocs = delta.values.fold<int>(0, (sum, list) => sum + (list as List).length);
-        if (totalDocs > 0) {
-          print('✅ [FirebaseService] Delta sync: $totalDocs docs recebidos');
-        }
+      // Uma viagem entrou na janela (ex.: começa daqui a 3 dias) mas os
+      // alunos dela não mudaram desde a última sync: busca tudo de novo.
+      // Limitado a 1 vez a cada 10 min para não repetir sem parar.
+      if (faltaAlguem && lastSync != null && await _podeFazerSyncCompleto(db)) {
+        print('🔄 [FirebaseService] Viagem nova no escopo: sync completo');
+        final completo = await _api.syncDelta(null);
+        await _processarRespostaDelta(db, completo);
       }
     } catch (e) {
       print('⚠️ [FirebaseService] Erro no sync delta: $e');
     }
+  }
+
+  /// Aplica uma resposta do delta. Retorna true se o escopo tem alunos que
+  /// ainda não estão no aparelho.
+  Future<bool> _processarRespostaDelta(Database db, Map<String, dynamic> response) async {
+    if (response['success'] != true) return false;
+    final delta = response['delta'] as Map<String, dynamic>? ?? {};
+    final serverTime = response['serverTime'] as String?;
+
+    await _applyDelta(delta);
+
+    var faltaAlguem = false;
+    final escopo = response['escopo'];
+    if (escopo is Map && escopo['cpfs'] is List) {
+      faltaAlguem = await _aplicarEscopo(db, (escopo['cpfs'] as List).map((c) => c.toString()).toSet());
+    }
+
+    if (serverTime != null) {
+      await db.insert(
+        'sync_metadata',
+        {'chave': 'last_delta_sync', 'valor': serverTime, 'updated_at': serverTime},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
+    final totalDocs = delta.values.fold<int>(0, (sum, list) => sum + (list as List).length);
+    if (totalDocs > 0) {
+      print('✅ [FirebaseService] Delta sync: $totalDocs docs recebidos');
+    }
+    return faltaAlguem;
+  }
+
+  /// Remove do aparelho alunos, quartos e embarques de viagens que saíram do
+  /// escopo (encerradas ou de outras datas). Dados pessoais e faciais que o
+  /// monitor não precisa não ficam no celular. Retorna true se falta trazer
+  /// algum CPF do escopo.
+  Future<bool> _aplicarEscopo(Database db, Set<String> ativos) async {
+    var removidos = 0;
+    final presentes = <String>{};
+    for (final tabela in const ['alunos', 'quartos', 'embarques']) {
+      final rows = await db.query(tabela, columns: ['cpf']);
+      final locais = rows.map((r) => (r['cpf'] ?? '').toString()).toSet();
+      presentes.addAll(locais.where(ativos.contains));
+      final fora = locais.difference(ativos).toList();
+      for (var i = 0; i < fora.length; i += 500) {
+        final fim = i + 500 < fora.length ? i + 500 : fora.length;
+        final parte = fora.sublist(i, fim);
+        removidos += await db.delete(
+          tabela,
+          where: 'cpf IN (${List.filled(parte.length, '?').join(',')})',
+          whereArgs: parte,
+        );
+      }
+    }
+    if (removidos > 0) {
+      print('🧹 [FirebaseService] $removidos registro(s) de viagens fora do escopo removidos do aparelho');
+      FaceRecognitionService.instance.invalidateCache();
+    }
+    return ativos.difference(presentes).isNotEmpty;
+  }
+
+  Future<bool> _podeFazerSyncCompleto(Database db) async {
+    final rows = await db.query('sync_metadata', where: 'chave = ?', whereArgs: ['ultimo_sync_completo'], limit: 1);
+    final ultimo = rows.isNotEmpty ? DateTime.tryParse((rows.first['valor'] ?? '').toString()) : null;
+    if (ultimo != null && DateTime.now().difference(ultimo).inMinutes < 10) return false;
+    final agora = DateTime.now().toIso8601String();
+    await db.insert(
+      'sync_metadata',
+      {'chave': 'ultimo_sync_completo', 'valor': agora, 'updated_at': agora},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    return true;
   }
 
   /// Aplica os dados delta recebidos no SQLite local
