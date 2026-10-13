@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/screens/controle_embarque_screen.dart';
 import 'package:embarqueellus/screens/reconhecimento_facial_completo.dart';
-import 'package:embarqueellus/screens/painel_admin_screen.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
 import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/widgets/sync_status_icon.dart';
@@ -248,26 +247,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         },
                       ),
 
-                      // Botão Painel (apenas para ADMIN)
-                      if (_usuario?['perfil']?.toString().toUpperCase() == 'ADMIN') ...[
-                        const SizedBox(height: 16),
-                        _buildMenuButton(
-                          context: context,
-                          label: 'PAINEL',
-                          subtitle: 'Área Administrativa',
-                          icon: Icons.admin_panel_settings,
-                          color: Colors.deepPurple,
-                          onPressed: () {
-                            print('📍 [MainMenu] Navegando para Painel Admin');
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const PainelAdminScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
+                      // A área administrativa saiu do app: a gestão é feita
+                      // pelo painel web.
 
                       const SizedBox(height: 32),
 
