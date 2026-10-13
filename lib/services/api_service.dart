@@ -231,7 +231,9 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> syncDelta(String? lastSyncTime) async {
-    final queryParams = <String, String>{};
+    // Só as viagens relevantes (em andamento / próximos dias). O servidor
+    // devolve também `escopo.cpfs`: quem não estiver lá sai do aparelho.
+    final queryParams = <String, String>{'escopo': 'viagens_ativas'};
     if (lastSyncTime != null) {
       queryParams['since'] = lastSyncTime;
     }
