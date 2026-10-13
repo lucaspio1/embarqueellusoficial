@@ -131,6 +131,7 @@ class FirebaseService {
     // Aplicar alunos
     if (delta.containsKey('alunos')) {
       final alunos = delta['alunos'] as List;
+      final movPendentes = await _movimentacoesPendentes(db);
       final batch = db.batch();
       for (var aluno in alunos) {
         final data = aluno as Map<String, dynamic>;
@@ -168,7 +169,7 @@ class FirebaseService {
             'data_embarque': _convertTimestampToDate(_getField(data, 'data_embarque')),
             'retornado': _getField(data, 'retornado', false) == true ? 1 : 0,
             'data_retorno': _convertTimestampToDate(_getField(data, 'data_retorno')),
-            'movimentacao': _getField(data, 'movimentacao', 'QUARTO'),
+            'movimentacao': movPendentes[cpf] ?? _getField(data, 'movimentacao', 'QUARTO'),
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -285,10 +286,14 @@ class FirebaseService {
       );
 
       for (final log in pendingLogs) {
+        // Horário real do evento, em UTC: o servidor usa para o ID do log
+        // (reenvio não duplica) e para não aplicar movimentação antiga.
+        final eventAt = _paraIsoUtc(log['timestamp']);
         operations.add({
           'id': 'log_${log['id']}',
           'type': 'log',
           'data': {
+            if (eventAt != null) 'event_at': eventAt,
             'cpf': log['cpf'],
             'person_name': log['person_name'],
             'timestamp': log['timestamp'],
@@ -312,6 +317,7 @@ class FirebaseService {
               'nome': log['person_name'] ?? '',
               'movimentacao': tipo,
               'operador': log['operador_nome'] ?? '',
+              if (eventAt != null) 'event_at': eventAt,
             }
           });
         }
@@ -747,6 +753,40 @@ class FirebaseService {
         DateTime.now().millisecondsSinceEpoch,
         isUtc: true,
       ).toIso8601String();
+
+  /// Converte o timestamp gravado no log (hora local, sem fuso) para UTC.
+  String? _paraIsoUtc(Object? valor) {
+    final dt = DateTime.tryParse((valor ?? '').toString());
+    if (dt == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(dt.millisecondsSinceEpoch, isUtc: true)
+        .toIso8601String();
+  }
+
+  /// Movimentação local dos alunos que têm leituras ainda não enviadas.
+  /// O delta do servidor não pode sobrescrever esse estado mais recente.
+  Future<Map<String, String>> _movimentacoesPendentes(Database db) async {
+    // Instalações muito antigas podem ter `logs` sem a coluna sincronizado:
+    // nesse caso segue sem a proteção, mas sem derrubar o delta inteiro.
+    final List<Map<String, Object?>> rows;
+    try {
+      rows = await db.rawQuery('''
+      SELECT cpf, movimentacao FROM alunos
+      WHERE cpf IN (
+        SELECT DISTINCT cpf FROM logs
+        WHERE sincronizado = 0
+          AND UPPER(TRIM(tipo)) NOT IN ('RECONHECIMENTO', 'FACIAL')
+      )
+    ''');
+    } catch (e) {
+      print('⚠️ [FirebaseService] Não foi possível ler movimentações pendentes: $e');
+      return {};
+    }
+    return {
+      for (final r in rows)
+        if (r['cpf'] != null && r['movimentacao'] != null)
+          r['cpf'].toString(): r['movimentacao'].toString(),
+    };
+  }
 
   /// Marcações de embarque/retorno ainda não confirmadas pelo servidor,
   /// por CPF (a mais recente de cada campo). Usado para que dados vindos do
