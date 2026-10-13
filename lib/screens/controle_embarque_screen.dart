@@ -118,8 +118,8 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
       );
       dialogAberto = true;
 
+      await DataService.limparDadosDoPasseio();
       final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
 
       await prefs.setString('nome_aba', nomeAba);
       await prefs.setString('nome_passeio', nomePasseio);
@@ -251,8 +251,7 @@ class _ControleEmbarqueScreenState extends State<ControleEmbarqueScreen> {
   }
 
   Future<void> _encerrarPasseio(BuildContext dialogContext) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    await DataService.limparDadosDoPasseio();
 
     if (!mounted) return;
 

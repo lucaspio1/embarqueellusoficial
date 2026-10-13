@@ -201,11 +201,14 @@ class FirebaseService {
     // Aplicar embarques
     if (delta.containsKey('embarques')) {
       final embarques = delta['embarques'] as List;
+      // Marcações feitas offline e ainda não confirmadas prevalecem sobre o servidor
+      final pendentes = await getEmbarquesPendentes();
       final batch = db.batch();
       for (var embarque in embarques) {
         final data = embarque as Map<String, dynamic>;
         final cpf = _getField(data, 'cpf', '');
         if (cpf.isEmpty) continue;
+        final pendente = pendentes[cpf] ?? const <String, String>{};
 
         batch.insert(
           'embarques',
@@ -218,8 +221,8 @@ class FirebaseService {
             'onibus': _getField(data, 'onibus', ''),
             'inicio_viagem': _convertTimestampToDate(_getField(data, 'inicioViagem')),
             'fim_viagem': _convertTimestampToDate(_getField(data, 'fimViagem')),
-            'embarque': _getField(data, 'embarque', ''),
-            'retorno': _getField(data, 'retorno', ''),
+            'embarque': pendente['embarque'] ?? _getField(data, 'embarque', ''),
+            'retorno': pendente['retorno'] ?? _getField(data, 'retorno', ''),
             'facial_cadastrada': _getField(data, 'facial_cadastrada', false) == true ? 1 : 0,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
@@ -245,20 +248,36 @@ class FirebaseService {
   // UPLOAD DE PENDÊNCIAS VIA REST
   // =============================
 
-  /// Envia operações pendentes (logs, movimentações, embeddings) para o backend
+  /// Envia operações pendentes (logs, movimentações, embeddings, embarques).
+  ///
+  /// Ao reconectar, esvazia a fila em rodadas (o sinal pode durar pouco).
   Future<void> _uploadPending() async {
-    try {
-      if (!_api.isAuthenticated) return;
+    if (!_api.isAuthenticated) {
+      print('⚠️ [FirebaseService] Sem token: pendências ficam na fila local');
+      return;
+    }
+    for (var rodada = 0; rodada < _maxRodadasUpload; rodada++) {
+      final continuar = await _uploadPendingRodada();
+      if (!continuar) break;
+    }
+  }
 
+  static const int _maxRodadasUpload = 20;
+  static const int _tamanhoLote = 50;
+
+  /// Envia um lote. Retorna true se ainda pode haver mais itens na fila.
+  Future<bool> _uploadPendingRodada() async {
+    try {
       final db = await _db.database;
       final operations = <Map<String, dynamic>>[];
 
-      // 1. Logs pendentes
+      // 1. Logs pendentes (+ movimentação derivada de cada log)
       final pendingLogs = await db.query(
         'logs',
         where: 'sincronizado = ?',
         whereArgs: [0],
-        limit: 50,
+        orderBy: 'id ASC',
+        limit: _tamanhoLote,
       );
 
       for (final log in pendingLogs) {
@@ -278,19 +297,14 @@ class FirebaseService {
             'fim_viagem': log['fim_viagem'] ?? '',
           }
         });
-      }
 
-      // 2. Movimentações pendentes (logs com tipo não-RECONHECIMENTO)
-      for (final log in pendingLogs) {
-        final tipo = (log['tipo'] as String).trim().toUpperCase();
-        final cpf = log['cpf'] as String;
-
+        final tipo = (log['tipo'] ?? '').toString().trim().toUpperCase();
         if (tipo.isNotEmpty && tipo != 'RECONHECIMENTO' && tipo != 'FACIAL') {
           operations.add({
             'id': 'mov_${log['id']}',
             'type': 'movimentacao',
             'data': {
-              'cpf': cpf,
+              'cpf': (log['cpf'] ?? '').toString(),
               'nome': log['person_name'] ?? '',
               'movimentacao': tipo,
               'operador': log['operador_nome'] ?? '',
@@ -299,55 +313,90 @@ class FirebaseService {
         }
       }
 
-      // 3. Outbox pendente (cadastros faciais, etc.)
-      final outbox = await _db.getOutboxBatch(limit: 50);
+      // 2. Fila durável (cadastros faciais, embarques/retornos)
+      final outbox = await _db.getOutboxBatch(limit: _tamanhoLote);
+      final outboxDescartar = <int>[];
       for (final row in outbox) {
+        final rowId = row['id'] as int;
         try {
           final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
           final tipo = row['tipo'] as String;
 
           if (tipo == 'face_register') {
             operations.add({
-              'id': 'outbox_${row['id']}',
+              'id': 'outbox_$rowId',
               'type': 'embedding',
               'data': {
                 'cpf': payload['cpf'].toString().trim(),
                 'embedding': payload['embedding'],
               }
             });
+          } else if (tipo == _tipoEmbarque) {
+            operations.add({
+              'id': 'outbox_$rowId',
+              'type': 'embarque',
+              'data': payload,
+            });
+          } else {
+            print('⚠️ [FirebaseService] Item de fila com tipo desconhecido "$tipo" descartado (id $rowId)');
+            outboxDescartar.add(rowId);
           }
         } catch (e) {
-          print('⚠️ [FirebaseService] Erro ao processar outbox ${row['id']}: $e');
+          print('⚠️ [FirebaseService] Item de fila ilegível descartado (id $rowId): $e');
+          outboxDescartar.add(rowId);
         }
       }
+      if (outboxDescartar.isNotEmpty) await _db.deleteOutboxIds(outboxDescartar);
 
-      if (operations.isEmpty) return;
+      if (operations.isEmpty) return false;
 
       print('📤 [FirebaseService] Enviando ${operations.length} operações pendentes...');
-
       final response = await _api.uploadBatch(operations);
+      if (response['success'] != true) return false;
 
-      if (response['success'] == true) {
-        // Marcar logs como sincronizados
-        for (final log in pendingLogs) {
-          await db.update(
-            'logs',
-            {'sincronizado': 1},
-            where: 'id = ?',
-            whereArgs: [log['id']],
-          );
+      // Status por operação. Servidor antigo (sem `results`) = tudo ok.
+      final status = <String, String>{};
+      final results = response['results'];
+      if (results is List) {
+        for (final r in results) {
+          if (r is Map && r['id'] != null) {
+            status[r['id'].toString()] = (r['status'] ?? 'error').toString();
+          }
         }
-
-        // Remover outbox sincronizados
-        for (final row in outbox) {
-          await db.delete('sync_queue', where: 'id = ?', whereArgs: [row['id']]);
-        }
-
-        print('✅ [FirebaseService] ${operations.length} operações sincronizadas com sucesso');
       }
+      bool confirmado(String opId) {
+        if (results is! List) return true;
+        final s = status[opId];
+        return s == 'ok' || s == 'skipped';
+      }
+
+      final logsConfirmados = <int>[];
+      for (final log in pendingLogs) {
+        final id = log['id'] as int;
+        final movOk = !operations.any((o) => o['id'] == 'mov_$id') || confirmado('mov_$id');
+        if (confirmado('log_$id') && movOk) logsConfirmados.add(id);
+      }
+      await _db.marcarLogsSincronizados(logsConfirmados);
+
+      final outboxConfirmados = outbox
+          .map((row) => row['id'] as int)
+          .where((id) => !outboxDescartar.contains(id) && confirmado('outbox_$id'))
+          .toList();
+      await _db.deleteOutboxIds(outboxConfirmados);
+
+      final falhas = (pendingLogs.length - logsConfirmados.length) +
+          (outbox.length - outboxDescartar.length - outboxConfirmados.length);
+      print('✅ [FirebaseService] Confirmados: ${logsConfirmados.length} logs, '
+          '${outboxConfirmados.length} itens da fila${falhas > 0 ? ' — $falhas aguardando nova tentativa' : ''}');
+
+      // Continua se havia lote cheio e algo avançou nesta rodada
+      final avancou = logsConfirmados.isNotEmpty || outboxConfirmados.isNotEmpty;
+      final loteCheio = pendingLogs.length == _tamanhoLote || outbox.length == _tamanhoLote;
+      return avancou && loteCheio;
     } catch (e) {
       print('❌ [FirebaseService] Erro ao enviar pendências: $e');
       Sentry.captureException(e);
+      return false;
     }
   }
 
@@ -628,6 +677,12 @@ class FirebaseService {
   // OPERAÇÕES DE EMBARQUE
   // =============================
 
+  /// Registra embarque/retorno.
+  ///
+  /// OFFLINE-FIRST: a marcação é gravada na tabela local `embarques` e numa fila
+  /// durável (`sync_queue`, tipo 'embarque') na MESMA transação. O envio ao
+  /// servidor acontece em `_uploadPending`, sempre que houver internet e token.
+  /// Antes, sem internet a marcação nunca era enviada e se perdia.
   Future<void> atualizarEmbarque({
     required String cpf,
     required String idPasseio,
@@ -637,79 +692,153 @@ class FirebaseService {
   }) async {
     try {
       final cpfLimpo = cpf.trim();
+      if (cpfLimpo.isEmpty) return;
 
-      // Atualizar localmente
+      final eventAt = _nowIsoUtc();
       final db = await _db.database;
-      final updateData = <String, dynamic>{
-        'cpf': cpfLimpo,
-      };
-      if (embarque != null) updateData['embarque'] = embarque;
-      if (retorno != null) updateData['retorno'] = retorno;
-      
-      await db.update(
-        'embarques',
-        updateData,
-        where: 'cpf = ?',
-        whereArgs: [cpfLimpo],
-      );
 
-      // Enviar via API REST
-      if (_api.isAuthenticated && await _hasInternet()) {
-        await _api.uploadBatch([
-          {
-            'id': 'emb_${cpfLimpo}_${DateTime.now().millisecondsSinceEpoch}',
-            'type': 'embarque',
-            'data': {
+      await db.transaction((txn) async {
+        final updateData = <String, dynamic>{};
+        if (embarque != null) updateData['embarque'] = embarque;
+        if (retorno != null) updateData['retorno'] = retorno;
+        if (updateData.isNotEmpty) {
+          await txn.update('embarques', updateData, where: 'cpf = ?', whereArgs: [cpfLimpo]);
+        }
+
+        final campos = <String, String>{
+          if (embarque != null) 'embarque': embarque,
+          if (retorno != null) 'retorno': retorno,
+        };
+        for (final entry in campos.entries) {
+          await txn.insert('sync_queue', {
+            'tipo': _tipoEmbarque,
+            'payload': jsonEncode({
               'cpf': cpfLimpo,
-              'idPasseio': idPasseio,
-              'onibus': onibus,
-              if (embarque != null) 'embarque': embarque,
-              if (retorno != null) 'retorno': retorno,
-            }
-          }
-        ]);
-      }
+              'campo': entry.key,
+              'valor': entry.value,
+              'event_at': eventAt,
+              if (onibus.trim().isNotEmpty) 'onibus': onibus.trim(),
+              if (idPasseio.trim().isNotEmpty) 'idPasseio': idPasseio.trim(),
+            }),
+            'created_at': eventAt,
+          });
+        }
+      });
 
-      print('✅ [FirebaseService] Embarque atualizado: $cpfLimpo');
+      print('💾 [FirebaseService] Embarque registrado na fila local: $cpfLimpo');
+
+      // Tenta enviar já, sem bloquear a tela. Se estiver offline, fica na fila.
+      unawaited(trySyncInBackground());
     } catch (e) {
-      print('❌ [FirebaseService] Erro ao atualizar embarque: $e');
+      print('❌ [FirebaseService] Erro ao registrar embarque: $e');
       Sentry.captureException(e);
       rethrow;
     }
+  }
+
+  static const String _tipoEmbarque = 'embarque';
+
+  /// ISO-8601 em UTC com precisão de milissegundos (comparável no servidor).
+  String _nowIsoUtc() => DateTime.fromMillisecondsSinceEpoch(
+        DateTime.now().millisecondsSinceEpoch,
+        isUtc: true,
+      ).toIso8601String();
+
+  /// Marcações de embarque/retorno ainda não confirmadas pelo servidor,
+  /// por CPF (a mais recente de cada campo). Usado para que dados vindos do
+  /// servidor não apaguem marcações feitas offline.
+  Future<Map<String, Map<String, String>>> getEmbarquesPendentes() async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'sync_queue',
+      where: 'tipo = ?',
+      whereArgs: [_tipoEmbarque],
+      orderBy: 'id ASC',
+    );
+    final pendentes = <String, Map<String, String>>{};
+    for (final row in rows) {
+      try {
+        final p = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
+        final cpf = (p['cpf'] ?? '').toString();
+        final campo = (p['campo'] ?? '').toString();
+        if (cpf.isEmpty || campo.isEmpty) continue;
+        pendentes.putIfAbsent(cpf, () => {})[campo] = (p['valor'] ?? '').toString();
+      } catch (_) {}
+    }
+    return pendentes;
   }
 
   Future<List<Map<String, dynamic>>> buscarEmbarques({
     required String idPasseio,
     String? onibus,
   }) async {
+    // 1. Tentar a API. Falha de rede (Wi-Fi sem internet, timeout) NÃO pode
+    //    devolver lista vazia — antes isso apagava a lista salva no celular.
+    List<Map<String, dynamic>>? lista;
     try {
-      // Buscar via API REST
       if (_api.isAuthenticated && await _hasInternet()) {
         final response = await _api.getEmbarquesPorViagem(
           idPasseio: idPasseio,
           onibus: onibus,
         );
         if (response['success'] == true) {
-          return List<Map<String, dynamic>>.from(response['data'] ?? []);
+          lista = List<Map<String, dynamic>>.from(response['data'] ?? [])
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
         }
       }
+    } catch (e) {
+      print('⚠️ [FirebaseService] API de embarques indisponível, usando dados locais: $e');
+    }
 
-      // Fallback: buscar do SQLite local
-      final db = await _db.database;
-      String where = 'id_passeio = ?';
-      List<dynamic> whereArgs = [idPasseio];
-      
-      if (onibus != null) {
-        where += ' AND onibus = ?';
-        whereArgs.add(onibus);
+    try {
+      // 2. Fallback: SQLite local (colunas snake_case → formato da API)
+      final List<Map<String, dynamic>> resultado =
+          lista ?? await _buscarEmbarquesLocais(idPasseio: idPasseio, onibus: onibus);
+
+      // 3. Marcações offline ainda não enviadas prevalecem sobre o servidor
+      final pendentes = await getEmbarquesPendentes();
+      if (pendentes.isNotEmpty) {
+        for (final item in resultado) {
+          final pendente = pendentes[(item['cpf'] ?? '').toString()];
+          if (pendente != null) item.addAll(pendente);
+        }
       }
-
-      return await db.query('embarques', where: where, whereArgs: whereArgs);
+      return resultado;
     } catch (e) {
       print('❌ [FirebaseService] Erro ao buscar embarques: $e');
       Sentry.captureException(e);
-      return [];
+      rethrow; // DataService mantém a lista salva localmente
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _buscarEmbarquesLocais({
+    required String idPasseio,
+    String? onibus,
+  }) async {
+    final db = await _db.database;
+    String where = 'id_passeio = ?';
+    final whereArgs = <dynamic>[idPasseio];
+    if (onibus != null) {
+      where += ' AND onibus = ?';
+      whereArgs.add(onibus);
+    }
+    final rows = await db.query('embarques', where: where, whereArgs: whereArgs);
+    return rows
+            .map((r) => <String, dynamic>{
+                  'cpf': r['cpf'],
+                  'nome': r['nome'],
+                  'colegio': r['colegio'],
+                  'turma': r['turma'],
+                  'idPasseio': r['id_passeio'],
+                  'onibus': r['onibus'],
+                  'inicioViagem': r['inicio_viagem'],
+                  'fimViagem': r['fim_viagem'],
+                  'embarque': r['embarque'],
+                  'retorno': r['retorno'],
+                  'facial_cadastrada': r['facial_cadastrada'] == 1,
+                })
+            .toList();
   }
 
   // =============================
