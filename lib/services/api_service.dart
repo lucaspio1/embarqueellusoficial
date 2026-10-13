@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
@@ -8,26 +9,59 @@ class ApiService {
   ApiService._privateConstructor();
   static final ApiService instance = ApiService._privateConstructor();
 
+  static const String _prefToken = 'jwt_token';
+  static const String _prefRefresh = 'device_refresh_token';
+
+  /// JWT de acesso (vence em 12h).
   String? _token;
+
+  /// Token de dispositivo (vence após 30 dias SEM uso; cada renovação estende).
+  /// Permite renovar o JWT sem senha depois de horas/dias offline.
+  String? _refreshToken;
+
+  /// Credenciais de um login OFFLINE, mantidas só em memória, para obter o
+  /// token assim que a internet voltar (celular que nunca logou online).
+  String? _cpfPendente;
+  String? _senhaPendente;
+
+  Future<bool>? _renovacaoEmAndamento;
+
+  /// true quando o servidor recusou o token de dispositivo (revogado/vencido).
+  /// A interface deve pedir um novo login COM internet.
+  final ValueNotifier<bool> precisaNovoLogin = ValueNotifier<bool>(false);
 
   String get baseUrl {
     return dotenv.env['API_BASE_URL'] ?? 'http://localhost:3000';
   }
 
-  bool get isAuthenticated => _token != null;
+  /// true se o app tem algum meio de falar com a API: JWT válido, token de
+  /// dispositivo ou credenciais de login offline aguardando internet.
+  bool get isAuthenticated =>
+      _token != null || _refreshToken != null || _senhaPendente != null;
   String? get token => _token;
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('jwt_token');
+    _token = prefs.getString(_prefToken);
+    _refreshToken = prefs.getString(_prefRefresh);
   }
+
+  bool _ehRotaDeAutenticacao(String path) => path.startsWith('/api/mobile/auth');
 
   Future<http.Response> _request(
     String method,
     String path, {
     Map<String, dynamic>? body,
     Map<String, String>? queryParams,
+    bool tentouRenovar = false,
   }) async {
+    // Sem JWT mas com como obtê-lo: renova antes de chamar
+    var jaRenovou = tentouRenovar;
+    if (!_ehRotaDeAutenticacao(path) && _token == null && !jaRenovou) {
+      await renovarToken();
+      jaRenovou = true;
+    }
+
     var url = Uri.parse('$baseUrl$path');
 
     if (queryParams != null && queryParams.isNotEmpty) {
@@ -63,8 +97,14 @@ class ApiService {
         throw Exception('Método HTTP não suportado: $method');
       }
 
-      if (response.statusCode == 401) {
-        await logout();
+      if (response.statusCode == 401 && !_ehRotaDeAutenticacao(path)) {
+        // JWT vencido: descarta só o JWT e tenta renovar uma vez.
+        // NÃO desloga o usuário nem apaga a fila local.
+        await _salvarToken(null);
+        if (!jaRenovou && await renovarToken()) {
+          return _request(method, path,
+              body: body, queryParams: queryParams, tentouRenovar: true);
+        }
         throw Exception('Sessão expirada');
       }
 
@@ -73,6 +113,83 @@ class ApiService {
       print('❌ [API Error] $e');
       rethrow;
     }
+  }
+
+  /// Obtém um novo JWT usando o token de dispositivo ou, na falta dele, as
+  /// credenciais de um login offline. Retorna true se conseguiu.
+  /// Falha de rede mantém tudo como está (tenta de novo no próximo ciclo).
+  Future<bool> renovarToken() {
+    return _renovacaoEmAndamento ??= _renovar().whenComplete(() {
+      _renovacaoEmAndamento = null;
+    });
+  }
+
+  Future<bool> _renovar() async {
+    try {
+      if (_refreshToken != null) {
+        final response = await http
+            .post(
+              Uri.parse('$baseUrl/api/mobile/auth/refresh'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'refresh_token': _refreshToken}),
+            )
+            .timeout(const Duration(seconds: 30));
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          final data = jsonDecode(response.body);
+          if (data['token'] != null) {
+            await _salvarToken(data['token'] as String);
+            precisaNovoLogin.value = false;
+            print('🔑 [API] JWT renovado com token de dispositivo');
+            return true;
+          }
+        }
+        if (response.statusCode == 401) {
+          // Revogado, vencido ou usuário desativado: só um login online resolve
+          print('🔒 [API] Token de dispositivo recusado: ${response.body}');
+          await _salvarRefreshToken(null);
+          if (_senhaPendente == null) precisaNovoLogin.value = true;
+        } else {
+          return false; // erro de servidor/rede: tenta no próximo ciclo
+        }
+      }
+
+      if (_cpfPendente != null && _senhaPendente != null) {
+        final data = await login(_cpfPendente!, _senhaPendente!);
+        return data['token'] != null;
+      }
+      return false;
+    } catch (e) {
+      print('⚠️ [API] Não foi possível renovar o token agora: $e');
+      return false;
+    }
+  }
+
+  Future<void> _salvarToken(String? token) async {
+    _token = token;
+    final prefs = await SharedPreferences.getInstance();
+    if (token == null) {
+      await prefs.remove(_prefToken);
+    } else {
+      await prefs.setString(_prefToken, token);
+    }
+  }
+
+  Future<void> _salvarRefreshToken(String? refresh) async {
+    _refreshToken = refresh;
+    final prefs = await SharedPreferences.getInstance();
+    if (refresh == null) {
+      await prefs.remove(_prefRefresh);
+    } else {
+      await prefs.setString(_prefRefresh, refresh);
+    }
+  }
+
+  /// Login OFFLINE bem-sucedido: guarda as credenciais só em memória para
+  /// obter o token quando a internet voltar.
+  void definirCredenciaisPendentes(String cpf, String senha) {
+    _cpfPendente = cpf;
+    _senhaPendente = senha;
   }
 
   Future<Map<String, dynamic>> login(String cpf, String senha) async {
@@ -84,21 +201,33 @@ class ApiService {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final data = jsonDecode(response.body);
       if (data['token'] != null) {
-        _token = data['token'];
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('jwt_token', _token!);
+        await _salvarToken(data['token'] as String);
+        if (data['refresh_token'] != null) {
+          await _salvarRefreshToken(data['refresh_token'] as String);
+        }
+        _cpfPendente = null;
+        _senhaPendente = null;
+        precisaNovoLogin.value = false;
       }
       return data;
     } else {
+      if (response.statusCode == 401) {
+        // Senha mudou ou usuário removido: não insistir com essas credenciais
+        _cpfPendente = null;
+        _senhaPendente = null;
+      }
       throw Exception(
           'Erro ao fazer login: ${response.statusCode} - ${response.body}');
     }
   }
 
+  /// Logout do monitor. Mantém o token de dispositivo para que a fila local
+  /// (embarques, logs, faciais) continue subindo mesmo após o logout; o
+  /// próximo login online o substitui.
   Future<void> logout() async {
-    _token = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('jwt_token');
+    _cpfPendente = null;
+    _senhaPendente = null;
+    await _salvarToken(null);
   }
 
   Future<Map<String, dynamic>> syncDelta(String? lastSyncTime) async {

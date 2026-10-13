@@ -2,7 +2,8 @@
 // Widget de feedback visual do estado de sincronização
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:embarqueellus/services/offline_sync_service.dart';
+import 'package:embarqueellus/services/firebase_service.dart';
+import 'package:embarqueellus/services/api_service.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 
 /// Estados possíveis da sincronização
@@ -18,6 +19,10 @@ enum SyncState {
 
   /// Sem conexão com internet
   offline,
+
+  /// O servidor recusou o acesso deste aparelho: só um login COM internet
+  /// libera o envio da fila
+  loginNecessario,
 }
 
 /// Widget que exibe o status de sincronização com ícone e cor apropriados
@@ -59,7 +64,8 @@ class SyncStatusIcon extends StatefulWidget {
 }
 
 class _SyncStatusIconState extends State<SyncStatusIcon> {
-  final OfflineSyncService _syncService = OfflineSyncService.instance;
+  final FirebaseService _syncService = FirebaseService.instance;
+  final ApiService _api = ApiService.instance;
   final DatabaseHelper _db = DatabaseHelper.instance;
 
   SyncState _currentState = SyncState.idle;
@@ -74,6 +80,7 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
 
     // Observar mudanças no estado de sincronização
     _syncService.isSyncingNotifier.addListener(_onSyncStateChanged);
+    _api.precisaNovoLogin.addListener(_onSyncStateChanged);
 
     // Timer periódico para atualizar o status
     _updateTimer = Timer.periodic(
@@ -86,6 +93,7 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
   void dispose() {
     _updateTimer?.cancel();
     _syncService.isSyncingNotifier.removeListener(_onSyncStateChanged);
+    _api.precisaNovoLogin.removeListener(_onSyncStateChanged);
     super.dispose();
   }
 
@@ -109,6 +117,8 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
       SyncState newState;
       if (isSyncing) {
         newState = SyncState.syncing; // Sincronizando agora
+      } else if (_api.precisaNovoLogin.value) {
+        newState = SyncState.loginNecessario; // Acesso do aparelho recusado
       } else if (totalPendentes > 0) {
         newState = SyncState.error; // Há pendências
       } else {
@@ -143,6 +153,8 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
         return Colors.orange; // Laranja = Pendências
       case SyncState.offline:
         return Colors.red; // Vermelho = Sem conexão
+      case SyncState.loginNecessario:
+        return Colors.red;
     }
   }
 
@@ -157,6 +169,8 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
         return Icons.cloud_upload; // Nuvem com upload
       case SyncState.offline:
         return Icons.cloud_off; // Nuvem desconectada
+      case SyncState.loginNecessario:
+        return Icons.lock; // Precisa login com internet
     }
   }
 
@@ -171,6 +185,8 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
         return 'Itens pendentes: $_pendingCount\nClique para sincronizar agora';
       case SyncState.offline:
         return 'Sem conexão\nVerifique sua internet';
+      case SyncState.loginNecessario:
+        return 'Envio pausado: $_pendingCount itens no aparelho\nSaia e entre de novo COM internet';
     }
   }
 
@@ -182,6 +198,16 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
       return;
     }
 
+    if (_currentState == SyncState.loginNecessario) {
+      _showSnackBar(
+        'O acesso deste aparelho expirou.\n'
+        '$_pendingCount itens estão salvos no celular e NÃO foram perdidos.\n'
+        'Saia e entre de novo com internet para enviá-los.',
+        Colors.red,
+      );
+      return;
+    }
+
     // Tentar sincronizar agora
     setState(() {
       _currentState = SyncState.syncing;
@@ -190,20 +216,14 @@ class _SyncStatusIconState extends State<SyncStatusIcon> {
     _showSnackBar('Iniciando sincronização...', Colors.blue);
 
     try {
-      // Sincronizar outbox
-      await _syncService.trySyncNow();
-
-      // Sincronizar logs pendentes
-      final totalSincronizados = await _syncService.sincronizarLogsPendentes();
+      // Envia a fila local (logs, faciais, embarques) e baixa atualizações
+      await _syncService.trySyncInBackground();
 
       // Atualizar status
       await _updateStatus();
 
       if (_currentState == SyncState.idle) {
-        _showSnackBar(
-          'Sincronização concluída! ✓\n$totalSincronizados logs enviados',
-          Colors.green,
-        );
+        _showSnackBar('Sincronização concluída! ✓', Colors.green);
       } else {
         _showSnackBar(
           'Sincronização parcial\nAinda há $_pendingCount itens pendentes',
