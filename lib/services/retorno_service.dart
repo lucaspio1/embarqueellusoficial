@@ -9,7 +9,19 @@ class RetornoService {
 
   factory RetornoService() => _instance;
 
-  RetornoService._internal();
+  RetornoService._internal() {
+    // Mantém a lista de retorno igual à de embarque (quem embarcou), inclusive
+    // quando o painel ou outro monitor marca embarque/retorno
+    DataService().passageirosEmbarque.addListener(_sincronizarComEmbarque);
+  }
+
+  void _sincronizarComEmbarque() {
+    passageirosRetorno.value = DataService()
+        .passageirosEmbarque
+        .value
+        .where((p) => p.embarque == 'SIM')
+        .toList();
+  }
 
   final ValueNotifier<List<Passageiro>> passageirosRetorno = ValueNotifier([]);
 

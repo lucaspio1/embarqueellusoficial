@@ -24,6 +24,12 @@ class FirebaseService {
   // ValueNotifier para que widgets possam observar o estado de sincronização
   final ValueNotifier<bool> isSyncingNotifier = ValueNotifier<bool>(false);
 
+  /// Embarque/retorno que chegaram do servidor no último delta, por CPF
+  /// (ex.: marcados pelo painel web ou por outro monitor). As telas de
+  /// embarque e retorno escutam para atualizar sem precisar ler o QR de novo.
+  final ValueNotifier<Map<String, Map<String, String>>> embarquesDoServidor =
+      ValueNotifier<Map<String, Map<String, String>>>({});
+
   void init() {
     _syncTimer?.cancel();
 
@@ -269,12 +275,17 @@ class FirebaseService {
       final embarques = delta['embarques'] as List;
       // Marcações feitas offline e ainda não confirmadas prevalecem sobre o servidor
       final pendentes = await getEmbarquesPendentes();
+      final recebidos = <String, Map<String, String>>{};
       final batch = db.batch();
       for (var embarque in embarques) {
         final data = embarque as Map<String, dynamic>;
         final cpf = _getField(data, 'cpf', '');
         if (cpf.isEmpty) continue;
         final pendente = pendentes[cpf] ?? const <String, String>{};
+        recebidos[cpf.toString()] = {
+          'embarque': (pendente['embarque'] ?? _getField(data, 'embarque', '') ?? '').toString(),
+          'retorno': (pendente['retorno'] ?? _getField(data, 'retorno', '') ?? '').toString(),
+        };
 
         batch.insert(
           'embarques',
@@ -295,6 +306,7 @@ class FirebaseService {
         );
       }
       await batch.commit(noResult: true);
+      if (recebidos.isNotEmpty) embarquesDoServidor.value = recebidos;
     }
 
     // Aplicar eventos

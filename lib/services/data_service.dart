@@ -12,7 +12,69 @@ class DataService {
   factory DataService() => _instance;
 
   DataService._internal() {
-    // Sincronização centralizada agora ocorre via FirebaseService
+    // Marcações vindas do servidor (painel web, outros monitores) aparecem
+    // na tela de embarque/retorno sem precisar ler o QR Code de novo
+    _firebaseService.embarquesDoServidor.addListener(_aplicarDoServidor);
+  }
+
+  void _aplicarDoServidor() {
+    final mudancas = _firebaseService.embarquesDoServidor.value;
+    final atual = passageirosEmbarque.value;
+    if (mudancas.isEmpty || atual.isEmpty) return;
+    var mudou = false;
+    final lista = atual.map((p) {
+      final m = mudancas[p.cpf ?? ''];
+      if (m == null) return p;
+      final emb = m['embarque'] ?? p.embarque;
+      final ret = m['retorno'] ?? p.retorno;
+      if (emb == p.embarque && ret == p.retorno) return p;
+      mudou = true;
+      return p.copyWith(embarque: emb, retorno: ret);
+    }).toList();
+    if (!mudou) return;
+    passageirosEmbarque.value = lista;
+    _salvarListaNoAparelho(lista);
+    print('🔄 [DataService] Lista de embarque atualizada com dados do servidor');
+  }
+
+  Future<void> _salvarListaNoAparelho(List<Passageiro> lista) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('passageiros_json', json.encode(lista.map((p) => p.toJson()).toList()));
+  }
+
+  /// Valores atuais de embarque/retorno na tabela local (mantida pela
+  /// sincronização) para os CPFs da lista.
+  Future<List<Passageiro>> _comValoresAtuais(List<Passageiro> lista) async {
+    final cpfs = lista.map((p) => p.cpf ?? '').where((c) => c.isNotEmpty).toList();
+    if (cpfs.isEmpty) return lista;
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final atuais = <String, Map<String, Object?>>{};
+      for (var i = 0; i < cpfs.length; i += 500) {
+        final fim = i + 500 < cpfs.length ? i + 500 : cpfs.length;
+        final parte = cpfs.sublist(i, fim);
+        final rows = await db.query(
+          'embarques',
+          columns: ['cpf', 'embarque', 'retorno'],
+          where: 'cpf IN (${List.filled(parte.length, '?').join(',')})',
+          whereArgs: parte,
+        );
+        for (final r in rows) {
+          atuais[(r['cpf'] ?? '').toString()] = r;
+        }
+      }
+      return lista.map((p) {
+        final r = atuais[p.cpf ?? ''];
+        if (r == null) return p;
+        return p.copyWith(
+          embarque: (r['embarque'] ?? p.embarque).toString(),
+          retorno: (r['retorno'] ?? p.retorno).toString(),
+        );
+      }).toList();
+    } catch (e) {
+      print('⚠️ [DataService] Não foi possível conferir embarques locais: $e');
+      return lista;
+    }
   }
 
   final FirebaseService _firebaseService = FirebaseService.instance;
@@ -90,7 +152,9 @@ class DataService {
         final List<Passageiro> loadedList = List<Passageiro>.from(
           jsonData.map((json) => Passageiro.fromJson(json)),
         );
-        passageirosEmbarque.value = loadedList;
+        // A lista salva pode estar desatualizada (marcações feitas pelo
+        // painel ou por outro monitor desde a leitura do QR Code)
+        passageirosEmbarque.value = await _comValoresAtuais(loadedList);
         print('✅ [DataService] Dados carregados do local');
       } catch (e) {
         passageirosEmbarque.value = [];
