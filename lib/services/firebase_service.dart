@@ -182,13 +182,17 @@ class FirebaseService {
       final batch = db.batch();
       for (var quarto in quartos) {
         final data = quarto as Map<String, dynamic>;
+        final cpfQuarto = (_getField(data, 'cpf', '') ?? '').toString().trim();
+        if (cpfQuarto.isEmpty) continue;
+        // CPF é único em `quartos` desde a v12 do banco: REPLACE substitui
+        // a linha do aluno em vez de inserir outra (antes duplicava faciais)
         batch.insert(
           'quartos',
           {
             'numero_quarto': _getField(data, 'numero_quarto', ''),
             'escola': _getField(data, 'colegio', '') ?? _getField(data, 'escola', ''),
             'nome_hospede': _getField(data, 'nome_hospede', ''),
-            'cpf': _getField(data, 'cpf', ''),
+            'cpf': cpfQuarto,
             'inicio_viagem': _convertTimestampToDate(_getField(data, 'inicio_viagem')),
             'fim_viagem': _convertTimestampToDate(_getField(data, 'fim_viagem')),
           },
