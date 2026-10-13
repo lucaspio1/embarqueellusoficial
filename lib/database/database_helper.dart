@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'embarque.db');
     return await openDatabase(
       path,
-      version: 11, // ✅ VERSÃO 11: Adiciona tabelas embarques e sync_metadata
+      version: 12, // ✅ VERSÃO 12: CPF único em quartos (faciais duplicadas) e alunos
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -386,6 +386,51 @@ class DatabaseHelper {
         print('⚠️ [DB] Erro na migração v10 -> v11: $e');
       }
     }
+
+    if (oldVersion < 12) {
+      await _garantirCpfUnico(db);
+    }
+  }
+
+  /// v12: a tabela `quartos` não tinha chave única. Cada delta sync que trazia
+  /// um quarto INSERIA uma linha nova, e o LEFT JOIN com `alunos` fazia o mesmo
+  /// aluno aparecer N vezes na lista de faciais. Remove as duplicatas e cria
+  /// índices únicos por CPF (em `alunos` também, para instalações antigas cuja
+  /// tabela foi criada sem UNIQUE).
+  Future<void> _garantirCpfUnico(Database db) async {
+    print('🔄 [DB] Migração v12: CPF único em quartos e alunos');
+    try {
+      final antes = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM quartos')) ?? 0;
+      await db.execute('''
+        DELETE FROM quartos
+        WHERE id NOT IN (SELECT MAX(id) FROM quartos GROUP BY cpf)
+      ''');
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_quartos_cpf_unico ON quartos(cpf)');
+      final depois = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM quartos')) ?? 0;
+      print('✅ [DB] quartos: ${antes - depois} duplicata(s) removida(s)');
+    } catch (e) {
+      print('⚠️ [DB] Erro ao deduplicar quartos: $e');
+    }
+
+    try {
+      // Mantém a linha com facial cadastrada; empate → a mais recente.
+      // (Sem window functions: Android antigo tem SQLite < 3.25.)
+      await db.execute('''
+        DELETE FROM alunos
+        WHERE EXISTS (
+          SELECT 1 FROM alunos b
+          WHERE b.cpf = alunos.cpf
+            AND (
+              COALESCE(b.facial_cadastrada, 0) > COALESCE(alunos.facial_cadastrada, 0)
+              OR (COALESCE(b.facial_cadastrada, 0) = COALESCE(alunos.facial_cadastrada, 0) AND b.id > alunos.id)
+            )
+        )
+      ''');
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_alunos_cpf_unico ON alunos(cpf)');
+      print('✅ [DB] alunos: CPF único garantido');
+    } catch (e) {
+      print('⚠️ [DB] Erro ao deduplicar alunos: $e');
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -520,6 +565,7 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_logs_tipo ON logs(tipo)');
     await db.execute('CREATE INDEX idx_logs_sincronizado ON logs(sincronizado)');
     await db.execute('CREATE INDEX idx_quartos_cpf ON quartos(cpf)');
+    await db.execute('CREATE UNIQUE INDEX idx_quartos_cpf_unico ON quartos(cpf)');
     print('✅ [DB] Índices de performance criados');
   }
 
@@ -923,10 +969,13 @@ class DatabaseHelper {
     final hoje = DateTime.now();
 
     // Buscar todos os alunos com facial da tabela alunos e a numeração do quarto
+    // Subconsulta (e não LEFT JOIN): mesmo que existam linhas repetidas em
+    // `quartos`, cada aluno aparece UMA vez.
     final List<Map<String, dynamic>> pessoasComFacial = await db.rawQuery('''
-      SELECT a.*, q.numero_quarto 
+      SELECT a.*,
+        (SELECT q.numero_quarto FROM quartos q
+          WHERE q.cpf = a.cpf ORDER BY q.id DESC LIMIT 1) AS numero_quarto
       FROM alunos a
-      LEFT JOIN quartos q ON a.cpf = q.cpf
       WHERE a.facial_cadastrada = 1 AND a.embedding IS NOT NULL
     ''');
 

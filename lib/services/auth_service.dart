@@ -1,6 +1,7 @@
 // lib/services/auth_service.dart
 // Serviço de autenticação — agora usa JWT via API REST do backend Node.js
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/api_service.dart';
@@ -48,7 +49,8 @@ class AuthService {
             await _db.upsertUsuario({
               'cpf': user['cpf'],
               'nome': user['nome'],
-              'senha_hash': senha, // O backend já faz bcrypt; aqui é para fallback
+              // Só o hash SHA-256 (aceito por UserSyncService.verificarSenha)
+              'senha_hash': sha256.convert(utf8.encode(senha)).toString(),
               'perfil': user['perfil'],
               'ativo': 1,
             });
@@ -85,6 +87,10 @@ class AuthService {
       };
 
       print('✅ [Auth] Login OFFLINE bem-sucedido: ${user['nome']} (${user['perfil']})');
+
+      // Sem internet agora: guarda as credenciais em memória para obter o
+      // token assim que houver conexão (a fila local sobe sozinha).
+      _api.definirCredenciaisPendentes(cpf, senha);
 
       _usuarioLogado = user;
       final prefs = await SharedPreferences.getInstance();
