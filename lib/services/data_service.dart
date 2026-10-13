@@ -145,11 +145,30 @@ class DataService {
   // Retorna 0 pois o FirebaseService agora gerencia a fila principal
   int getPendingCount() => 0;
 
-  Future<void> limparTodosDados() async {
+  /// Chaves do SharedPreferences que pertencem ao passeio/ônibus atual.
+  /// NUNCA usar prefs.clear(): isso apagava também o token de acesso
+  /// (jwt_token) e o usuário logado, e o celular parava de sincronizar.
+  static const List<String> chavesDoPasseio = [
+    'nome_aba',
+    'nome_passeio',
+    'numero_onibus',
+    'pulseira',
+    'passageiros_json',
+  ];
+
+  /// Limpa apenas os dados do passeio atual (mantém login, token e a fila
+  /// de envio, que fica no SQLite).
+  static Future<void> limparDadosDoPasseio() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    for (final chave in chavesDoPasseio) {
+      await prefs.remove(chave);
+    }
+  }
+
+  Future<void> limparTodosDados() async {
+    await limparDadosDoPasseio();
     passageirosEmbarque.value = [];
-    print('🧹 [DataService] Todos os dados foram limpos');
+    print('🧹 [DataService] Dados do passeio limpos');
   }
 }
 
