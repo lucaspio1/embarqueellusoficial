@@ -64,22 +64,13 @@
 
 	<!-- ✅ Permissões necessárias -->
 	<key>NSCameraUsageDescription</key>
-	<string>Este aplicativo precisa acessar a câmera para realizar o reconhecimento facial dos alunos durante o processo de embarque.</string>
+	<string>A câmera é usada para ler o QR Code das viagens e para o reconhecimento facial dos alunos. As fotos não são salvas nem enviadas.</string>
 
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Este aplicativo precisa acessar a biblioteca de fotos para selecionar imagens para o reconhecimento facial.</string>
-
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Este aplicativo precisa salvar fotos na biblioteca para manter registros dos embarques.</string>
+	<string>Usada somente se uma imagem da galeria for escolhida. O app não salva fotos.</string>
 
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Este aplicativo precisa acessar o microfone para funcionalidades de câmera.</string>
-
-	<key>NSFaceIDUsageDescription</key>
-	<string>Este aplicativo usa reconhecimento facial para identificar alunos durante o embarque.</string>
-
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Este aplicativo precisa acessar a localização para registrar onde os embarques estão ocorrendo.</string>
+	<string>O app não grava áudio. A câmera é usada sem som.</string>
 
 	<!-- ✅ Configuração de segurança de rede para permitir Sentry -->
 	<key>NSAppTransportSecurity</key>
