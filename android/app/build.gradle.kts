@@ -7,6 +7,16 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+// Assinatura de release: android/key.properties + android/app/key.jks.
+// No GitHub Actions os dois são criados a partir dos secrets do repositório.
+// Sem eles (ex.: build local de teste) o release sai assinado com a chave debug.
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+val temChaveRelease = keystoreProperties.getProperty("storeFile")?.let { file(it).exists() } == true
+
 android {
     namespace = "br.com.embarqueellus"
 
@@ -19,15 +29,28 @@ android {
         // ✅ mobile_scanner exige no mínimo API 23 (Android 6.0)
         minSdk = flutter.minSdkVersion
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // Vêm do pubspec.yaml (version: X.Y.Z+N) ou de --build-name/--build-number
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
 
         // Mantém compatibilidade com Flutter
         multiDexEnabled = true
     }
 
+    signingConfigs {
+        if (temChaveRelease) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         getByName("release") {
+            signingConfig = signingConfigs.getByName(if (temChaveRelease) "release" else "debug")
             isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles(
