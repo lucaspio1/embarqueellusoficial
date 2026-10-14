@@ -1,0 +1,82 @@
+EMBARQUE ELLUS - VERSÃO 5.0.0
+=============================
+
+------------------------------------------------------------------
+TEXTO PARA A APP STORE ("Novidades desta versão")
+------------------------------------------------------------------
+
+Versão 5.0 - mais confiável sem internet
+
+- Embarques e retornos marcados sem internet ficam guardados no aparelho e são enviados automaticamente quando o sinal volta.
+- O login continua válido mesmo com o celular dias sem internet; não é mais preciso entrar de novo a cada 12 horas.
+- Corrigidos alunos e faciais que apareciam repetidos.
+- Entradas e saídas dos quartos são registradas na ordem e no horário em que realmente aconteceram, mesmo quando enviadas depois.
+- O celular agora guarda apenas os alunos das viagens em andamento ou próximas: menos dados e reconhecimento facial mais rápido.
+- Marcações de embarque e retorno feitas no painel web aparecem no controle de embarque do aplicativo.
+- Trocar de passeio não desconecta mais o usuário.
+- A área administrativa foi removida do aplicativo; a administração é feita pelo painel web.
+- Correções gerais de sincronização e estabilidade.
+
+
+------------------------------------------------------------------
+DETALHAMENTO DAS ALTERAÇÕES (uso interno)
+------------------------------------------------------------------
+
+1. Fila offline de embarque
+   - Antes: a marcação de embarque/retorno ia direto para o servidor; sem
+     internet ela se perdia.
+   - Agora: a marcação é gravada no aparelho junto com um item na fila de
+     envio (na mesma transação) e enviada na próxima sincronização.
+     Marcações ainda não enviadas prevalecem sobre o que vem do servidor.
+
+2. Envio por operação
+   - O servidor responde item a item (ok / ignorado / erro). Um registro com
+     problema não trava mais o envio de todos os outros.
+   - Envio em rodadas de até 50 operações.
+
+3. Login e token do aparelho
+   - Cada aparelho recebe um token de renovação válido por 30 dias
+     (renovado a cada uso). O app renova o acesso sozinho, sem pedir login.
+   - Login feito sem internet é confirmado automaticamente quando o sinal volta.
+   - Um erro 401 não desloga mais o usuário; o ícone de sincronização avisa
+     quando é realmente preciso entrar de novo.
+
+4. Faciais e alunos duplicados
+   - Banco local na versão 12: um único registro por CPF em alunos e quartos
+     (duplicados antigos são limpos na atualização).
+   - A lista de reconhecimento facial passou a trazer cada aluno uma vez só.
+
+5. Horário real dos eventos
+   - Logs, movimentações e embarques são enviados com o horário em que
+     aconteceram. O servidor descarta um evento mais antigo que chegue depois
+     de um mais novo (ex.: celular que ficou dias offline).
+   - Movimentação pendente no aparelho não é desfeita pela sincronização.
+   - Logs com identificador fixo: reenvios não duplicam passagens.
+
+6. Só viagens relevantes no aparelho
+   - O servidor envia apenas alunos, quartos e embarques de viagens que
+     começam em até 3 dias, estão em andamento ou terminaram há 1 dia.
+   - O app apaga do aparelho o que saiu dessa janela.
+   - Datas das viagens no formato AAAA-MM-DD (as antigas DD/MM continuam
+     sendo aceitas).
+
+7. Marcação do painel no controle de embarque
+   - Quando a sincronização traz embarque ou retorno (feito no painel ou por
+     outro monitor), as listas de Embarque e Retorno abertas são atualizadas
+     em até ~1 minuto.
+
+8. Trocar de passeio
+   - Antes apagava todas as preferências do app, inclusive o login.
+     Agora limpa só os dados do passeio.
+
+9. Área administrativa removida do app
+   - O botão e a tela do painel administrativo foram retirados; a gestão é
+     feita pelo painel web.
+
+10. Android
+   - Build automático do APK/AAB pelo GitHub Actions (equivalente ao Xcode
+     Cloud). Versão e número de build saem do pubspec/execução.
+
+Requisitos: servidor (PainelEllus) com os PRs #16, #17 e #19 publicados no
+Cloud Run (projeto embarquellus-build). O app antigo continua funcionando
+com o servidor novo.
