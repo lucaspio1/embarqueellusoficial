@@ -126,7 +126,7 @@ jobs:
           # SHA-1 da "chave de upload" em Play Console → Assinatura de apps
           ESPERADO: ${{ vars.ANDROID_UPLOAD_SHA1 || '' }}
         run: |
-          sha1=$(keytool -list -v -keystore android/app/key.jks -storepass "$KS_PASS" -alias "$ALIAS" | awk '/SHA1:/ {print $2; exit}')
+          sha1=$(keytool -exportcert -rfc -keystore android/app/key.jks -storepass "$KS_PASS" -alias "$ALIAS" | openssl x509 -noout -fingerprint -sha1 | cut -d= -f2)
           echo "SHA-1 da chave usada: $sha1"
           if [ -z "$ESPERADO" ]; then
             echo "::warning::Variável ANDROID_UPLOAD_SHA1 não definida; cadastre o SHA-1 acima para conferir a chave nos próximos builds."
