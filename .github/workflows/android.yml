@@ -15,7 +15,9 @@
 #   GOOGLE_SERVICES_JSON      conteúdo do android/app/google-services.json
 # Opcional:
 #   PLAY_SERVICE_ACCOUNT_JSON conta de serviço com acesso ao Play Console
-# Variável opcional (aba Variables):
+# Variáveis opcionais (aba Variables):
+#   ANDROID_PLAY_TRACK  faixa do Play: internal (padrão), alpha, beta ou production
+#   ANDROID_UPLOAD_SHA1 SHA-1 da chave de upload (já vem com a do App Ellus)
 #   ANDROID_VERSION_CODE_OFFSET somado ao número da execução para formar o
 #   versionCode (use se o Play já tiver um versionCode maior). Padrão: 100.
 
@@ -117,6 +119,20 @@ jobs:
           } > android/key.properties
           printf '%s' "$GSJ" > android/app/google-services.json
 
+      - name: Conferir chave de upload do Google Play
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          # SHA-1 da "chave de upload" em Play Console → Assinatura de apps
+          ESPERADO: ${{ vars.ANDROID_UPLOAD_SHA1 || 'A2:06:F2:D5:98:30:52:F5:25:62:FB:6F:F0:45:EA:E1:35:12:B8:4B' }}
+        run: |
+          sha1=$(keytool -list -v -keystore android/app/key.jks -storepass "$KS_PASS" -alias "$ALIAS" | awk '/SHA1:/ {print $2; exit}')
+          echo "SHA-1 da chave usada: $sha1"
+          if [ "$sha1" != "$ESPERADO" ]; then
+            echo "::error::A chave (key.jks) não é a chave de upload cadastrada no Google Play ($ESPERADO). O Play recusaria o envio."
+            exit 1
+          fi
+
       - name: Versão
         id: versao
         env:
@@ -155,7 +171,7 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: br.com.embarqueellus
           releaseFiles: saida/*.aab
-          track: internal
+          track: ${{ vars.ANDROID_PLAY_TRACK || 'internal' }}
           status: completed
 
       - name: Limpar chave
