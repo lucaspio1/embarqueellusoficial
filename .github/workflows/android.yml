@@ -149,10 +149,29 @@ jobs:
       - run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }}
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter build apk --release --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} 2>&1 | tee build-apk.log
 
       - name: Build AAB (Google Play)
-        run: flutter build appbundle --release --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }}
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter build appbundle --release --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} 2>&1 | tee build-aab.log
+
+      # Mostra o motivo da falha no resumo da execução (sem precisar abrir o log)
+      - name: Resumo do erro
+        if: failure()
+        shell: bash
+        run: |
+          for f in build-apk.log build-aab.log; do
+            [ -f "$f" ] || continue
+            trecho=$(grep -n -E -A12 "What went wrong|FAILURE:|Error:|error:|Exception|e: file" "$f" | head -80)
+            [ -n "$trecho" ] || trecho=$(tail -40 "$f")
+            trecho="${trecho//'%'/'%25'}"; trecho="${trecho//$'\r'/}"; trecho="${trecho//$'\n'/'%0A'}"
+            echo "::error title=Falha em $f::$trecho"
+          done
 
       - name: Renomear arquivos
         run: |
