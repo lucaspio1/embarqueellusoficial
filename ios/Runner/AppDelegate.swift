@@ -5,37 +5,31 @@ import MLKitVision
 import MLKitFaceDetection
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let CHANNEL_NAME = "embarqueellus/native_face_detection"
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-
-    // Configurar Platform Channel para detecção facial nativa
-    setupFaceDetectionChannel()
-
+    // Com UIScene (obrigatório no iOS 27), a janela ainda não existe aqui.
+    // Plugins e canais são registrados em didInitializeImplicitFlutterEngine.
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
-  // ✅ Capturar erros não tratados nativamente
-  override func applicationDidBecomeActive(_ application: UIApplication) {
-    super.applicationDidBecomeActive(application)
-    // SentrySDK.capture removido: a inicialização agora é feita via Dart pelo sentry_flutter
+  /// Chamado pelo Flutter quando o engine está pronto (ciclo de vida UIScene).
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    // Configurar Platform Channel para detecção facial nativa
+    setupFaceDetectionChannel(messenger: engineBridge.applicationRegistrar.messenger())
   }
 
   /// Configura o Platform Channel para detecção facial nativa
-  private func setupFaceDetectionChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      print("❌ [iOS Native] Não foi possível obter FlutterViewController")
-      return
-    }
-
+  private func setupFaceDetectionChannel(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: CHANNEL_NAME,
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: messenger
     )
 
     channel.setMethodCallHandler { [weak self] (call, result) in
@@ -367,20 +361,10 @@ import MLKitFaceDetection
     }
   }
 
-  /// Redimensiona imagem para tamanho específico
+  /// Redimensiona imagem para tamanho específico.
+  /// Estica para o tamanho exato (sem manter proporção), como sempre foi feito:
+  /// mudar isso alteraria os embeddings e invalidaria as faciais já cadastradas.
   private func resizeImage(image: UIImage, targetSize: CGSize) -> UIImage {
-    let size = image.size
-
-    let widthRatio  = targetSize.width  / size.width
-    let heightRatio = targetSize.height / size.height
-
-    let newSize: CGSize
-    if widthRatio > heightRatio {
-      newSize = CGSize(width: size.width * heightRatio, height: size.height * heightRatio)
-    } else {
-      newSize = CGSize(width: size.width * widthRatio, height: size.height * widthRatio)
-    }
-
     let rect = CGRect(x: 0, y: 0, width: targetSize.width, height: targetSize.height)
 
     UIGraphicsBeginImageContextWithOptions(targetSize, false, 1.0)
