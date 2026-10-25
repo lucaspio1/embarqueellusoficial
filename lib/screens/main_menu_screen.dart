@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:embarqueellus/screens/controle_embarque_screen.dart';
 import 'package:embarqueellus/screens/reconhecimento_facial_completo.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
+import 'package:embarqueellus/screens/perfil_screen.dart';
 import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/widgets/sync_status_icon.dart';
 
@@ -96,11 +97,23 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   ),
                   child: Column(
                     children: [
-                      // Botões de sync e logout no canto superior direito
+                      // Botões de sync, perfil e logout no canto superior direito
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           const SyncStatusIcon(iconSize: 28.0),
+                          IconButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const PerfilScreen(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.account_circle, color: Colors.white),
+                            tooltip: 'Meu Perfil',
+                          ),
                           IconButton(
                             onPressed: _realizarLogout,
                             icon: const Icon(Icons.logout, color: Colors.white),
@@ -143,49 +156,62 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                       ),
                       if (_usuario != null) ...[
                         const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.person, color: Colors.white70, size: 16),
-                              const SizedBox(width: 8),
-                              Text(
-                                _usuario!['nome'] ?? 'Usuário',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                ),
+                        InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const PerfilScreen(),
                               ),
-                              if (_usuario!['perfil']?.toString().toUpperCase() == 'ADMIN') ...[
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.person, color: Colors.white70, size: 16),
                                 const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 2,
+                                Text(
+                                  _usuario!['nome'] ?? 'Usuário',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber.withOpacity(0.3),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Text(
-                                    'ADMIN',
-                                    style: TextStyle(
-                                      color: Colors.amber,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
+                                ),
+                                if (_usuario!['perfil']?.toString().toUpperCase() == 'ADMIN') ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withOpacity(0.3),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Text(
+                                      'ADMIN',
+                                      style: TextStyle(
+                                        color: Colors.amber,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
+                                const SizedBox(width: 6),
+                                const Icon(Icons.chevron_right, color: Colors.white54, size: 16),
                               ],
-                            ],
+                            ),
                           ),
                         ),
                       ],
@@ -242,6 +268,26 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                             context,
                             MaterialPageRoute(
                               builder: (context) => const ReconhecimentoFacialScreen(),
+                            ),
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Botão Meu Perfil / Alterar Senha
+                      _buildMenuButton(
+                        context: context,
+                        label: 'MEU PERFIL',
+                        subtitle: 'Alterar Senha',
+                        icon: Icons.manage_accounts,
+                        color: Colors.blueGrey.shade700,
+                        onPressed: () {
+                          print('📍 [MainMenu] Navegando para Meu Perfil');
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PerfilScreen(),
                             ),
                           );
                         },

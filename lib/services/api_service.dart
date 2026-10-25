@@ -334,4 +334,33 @@ class ApiService {
     };
     return await uploadBatch([operation]);
   }
+
+  Future<Map<String, dynamic>> alterarSenha({
+    required String senhaAtual,
+    required String novaSenha,
+  }) async {
+    final response = await _request('PUT', '/api/mobile/perfil/senha', body: {
+      'senhaAtual': senhaAtual,
+      'novaSenha': novaSenha,
+    });
+
+    Map<String, dynamic> data = {};
+    try {
+      data = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {}
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (_senhaPendente != null) {
+        _senhaPendente = novaSenha;
+      }
+      return data;
+    } else {
+      final msg = data['message']?.toString() ??
+          'Erro ao alterar senha (${response.statusCode})';
+      return {
+        'success': false,
+        'message': msg,
+      };
+    }
+  }
 }

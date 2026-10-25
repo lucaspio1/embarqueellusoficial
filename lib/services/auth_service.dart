@@ -169,4 +169,66 @@ class AuthService {
     final user = await getUsuarioLogado();
     return user != null;
   }
+
+  /// Altera a senha do usuário logado na API e atualiza o hash local (offline)
+  Future<Map<String, dynamic>> alterarSenha({
+    required String senhaAtual,
+    required String novaSenha,
+  }) async {
+    try {
+      final user = await getUsuarioLogado();
+      if (user == null) {
+        return {
+          'success': false,
+          'message': 'Sessão não encontrada. Faça login novamente.',
+        };
+      }
+
+      final cpf = (user['cpf'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+      final novaSenhaHash = sha256.convert(utf8.encode(novaSenha)).toString();
+
+      // 1. Tentar atualizar na API REST (requer conexão)
+      final response = await _api.alterarSenha(
+        senhaAtual: senhaAtual,
+        novaSenha: novaSenha,
+      );
+
+      if (response['success'] == true) {
+        // Atualizar também no banco local SQLite para manter login offline sincronizado
+        try {
+          await _db.ensureFacialSchema();
+          final localUser = await _db.getUsuarioByCpf(cpf);
+          if (localUser != null) {
+            await _db.atualizarSenhaUsuario(cpf, novaSenhaHash);
+          } else {
+            await _db.upsertUsuario({
+              'cpf': cpf,
+              'nome': user['nome'] ?? 'Usuário',
+              'senha_hash': novaSenhaHash,
+              'perfil': user['perfil'] ?? 'USER',
+              'ativo': 1,
+            });
+          }
+        } catch (e) {
+          print('⚠️ [Auth] Erro ao atualizar senha no cache local: $e');
+        }
+
+        return {
+          'success': true,
+          'message': response['message']?.toString() ?? 'Senha alterada com sucesso!',
+        };
+      }
+
+      return {
+        'success': false,
+        'message': response['message']?.toString() ?? 'Não foi possível alterar a senha.',
+      };
+    } catch (e) {
+      print('❌ [Auth] Erro ao alterar senha: $e');
+      return {
+        'success': false,
+        'message': 'Sem conexão com o servidor. Conecte-se à internet para alterar sua senha.',
+      };
+    }
+  }
 }

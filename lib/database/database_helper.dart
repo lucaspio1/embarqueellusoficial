@@ -1462,6 +1462,19 @@ class DatabaseHelper {
     print('✅ Todos os usuários foram deletados');
   }
 
+  Future<void> atualizarSenhaUsuario(String cpf, String novaSenhaHash) async {
+    final db = await database;
+    await db.update(
+      'usuarios',
+      {
+        'senha_hash': novaSenhaHash,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'cpf = ?',
+      whereArgs: [cpf],
+    );
+  }
+
   // ========================================================================
   // MÉTODOS PARA PESSOAS_FACIAL (Reconhecimento Facial)
   // REFATORADOS v10: Agora usam tabela alunos unificada
