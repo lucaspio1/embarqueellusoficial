@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
+import 'package:embarqueellus/screens/main_menu_screen.dart';
 
 class PerfilScreen extends StatefulWidget {
-  const PerfilScreen({super.key});
+  final bool obrigatorio;
+
+  const PerfilScreen({super.key, this.obrigatorio = false});
 
   @override
   State<PerfilScreen> createState() => _PerfilScreenState();
@@ -82,6 +85,13 @@ class _PerfilScreenState extends State<PerfilScreen> {
             backgroundColor: Colors.green,
           ),
         );
+
+        if (widget.obrigatorio && mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const MainMenuScreen()),
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -150,18 +160,21 @@ class _PerfilScreenState extends State<PerfilScreen> {
     final perfil = (_usuario?['perfil']?.toString() ?? 'USER').toUpperCase();
     final isAdmin = perfil == 'ADMIN';
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFD1D2D1),
-      appBar: AppBar(
-        title: const Text(
-          'Meu Perfil',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+    return PopScope(
+      canPop: !widget.obrigatorio,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFD1D2D1),
+        appBar: AppBar(
+          automaticallyImplyLeading: !widget.obrigatorio,
+          title: Text(
+            widget.obrigatorio ? 'Primeiro Acesso' : 'Meu Perfil',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: const Color(0xFF4C643C),
+          iconTheme: const IconThemeData(color: Colors.white),
+          elevation: 0,
         ),
-        backgroundColor: const Color(0xFF4C643C),
-        iconTheme: const IconThemeData(color: Colors.white),
-        elevation: 0,
-      ),
-      body: SafeArea(
+        body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
@@ -261,6 +274,33 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (widget.obrigatorio) ...[
+                          Container(
+                            padding: const EdgeInsets.all(14.0),
+                            margin: const EdgeInsets.only(bottom: 20.0),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.amber.shade400),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Por segurança, no seu primeiro acesso é obrigatório definir uma nova senha pessoal antes de continuar.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.amber.shade900,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const Row(
                           children: [
                             Icon(Icons.lock_reset, color: Color(0xFF4C643C), size: 28),
@@ -462,6 +502,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }

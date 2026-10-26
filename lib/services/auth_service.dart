@@ -35,6 +35,7 @@ class AuthService {
             'nome': response['user']['nome'],
             'cpf': response['user']['cpf']?.toString() ?? cpf,
             'perfil': response['user']['perfil'] ?? 'USER',
+            'precisa_trocar_senha': response['user']['precisa_trocar_senha'] == true,
           };
 
           print('✅ [Auth] Login online bem-sucedido: ${user['nome']} (${user['perfil']})');
@@ -157,6 +158,10 @@ class AuthService {
     return _usuarioLogado?['perfil']?.toString().toUpperCase() == 'ADMIN';
   }
 
+  bool precisaTrocarSenha() {
+    return _usuarioLogado?['precisa_trocar_senha'] == true;
+  }
+
   Future<void> logout() async {
     _usuarioLogado = null;
     await _api.logout(); // Limpa JWT
@@ -194,6 +199,13 @@ class AuthService {
       );
 
       if (response['success'] == true) {
+        // Marcar que o usuário já trocou a senha inicial na sessão local
+        if (_usuarioLogado != null) {
+          _usuarioLogado!['precisa_trocar_senha'] = false;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('usuario_logado', jsonEncode(_usuarioLogado));
+        }
+
         // Atualizar também no banco local SQLite para manter login offline sincronizado
         try {
           await _db.ensureFacialSchema();

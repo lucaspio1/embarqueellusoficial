@@ -11,6 +11,7 @@ import 'firebase_options.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:embarqueellus/screens/main_menu_screen.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
+import 'package:embarqueellus/screens/perfil_screen.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/firebase_service.dart';
@@ -188,9 +189,14 @@ class _AuthCheckState extends State<AuthCheck> {
 
     if (mounted) {
       if (isLoggedIn) {
+        final precisaTrocar = AuthService.instance.precisaTrocarSenha();
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const MainMenuScreen()),
+          MaterialPageRoute(
+            builder: (_) => precisaTrocar
+                ? const PerfilScreen(obrigatorio: true)
+                : const MainMenuScreen(),
+          ),
         );
       } else {
         Navigator.pushReplacement(

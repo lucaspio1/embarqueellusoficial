@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/screens/main_menu_screen.dart';
+import 'package:embarqueellus/screens/perfil_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -141,10 +142,15 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
 
-        // Navegar para o menu principal
+        // Se for primeiro acesso, obriga a trocar a senha antes de ir ao menu
+        final precisaTrocar = user['precisa_trocar_senha'] == true;
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const MainMenuScreen()),
+          MaterialPageRoute(
+            builder: (_) => precisaTrocar
+                ? const PerfilScreen(obrigatorio: true)
+                : const MainMenuScreen(),
+          ),
         );
       } else {
         // Login falhou
