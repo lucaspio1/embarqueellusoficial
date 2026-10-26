@@ -3,6 +3,8 @@ package br.com.embarqueellus
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.os.Bundle
+import androidx.core.view.WindowCompat
 import androidx.exifinterface.media.ExifInterface
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
@@ -16,6 +18,12 @@ import java.io.File
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL_NAME = "embarqueellus/native_face_detection"
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Habilita compatibilidade Edge-to-Edge exigida pelo Android 15+ (SDK 35+)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

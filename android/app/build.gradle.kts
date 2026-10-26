@@ -20,9 +20,9 @@ val temChaveRelease = keystoreProperties.getProperty("storeFile")?.let { file(it
 android {
     namespace = "br.com.embarqueellus"
 
-    // ✅ Atualizado para suportar o mobile_scanner
+    // ✅ Atualizado para suportar o mobile_scanner e alinhamento de 16 KB (NDK r28)
     compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "28.0.13004108"
 
     defaultConfig {
         applicationId = "br.com.embarqueellus"
@@ -35,6 +35,18 @@ android {
 
         // Mantém compatibilidade com Flutter
         multiDexEnabled = true
+
+        ndk {
+            // Dispositivos Android modernos 64-bit e suporte a páginas de 16 KB
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Alinha bibliotecas nativas (.so) não comprimidas em limites de 16 KB (AGP 8.5+)
+            useLegacyPackaging = false
+        }
     }
 
     signingConfigs {
@@ -51,8 +63,8 @@ android {
     buildTypes {
         getByName("release") {
             signingConfig = signingConfigs.getByName(if (temChaveRelease) "release" else "debug")
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
