@@ -47,6 +47,41 @@ class _RetornoScreenState extends State<RetornoScreen> {
     _nomeController.clear();
   }
 
+  Future<void> _desfazerRetorno(Passageiro passageiro) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Desfazer Retorno'),
+        content: Text('Deseja desmarcar o retorno de ${passageiro.nome}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Desmarcar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
+    retornoService.updateLocalData(passageiro, novoRetorno: 'NÃO');
+    setState(() {});
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('↩️ Retorno de ${passageiro.nome} desmarcado.'),
+          backgroundColor: Colors.orange.shade800,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -216,11 +251,16 @@ class _RetornoScreenState extends State<RetornoScreen> {
                               ),
                               const SizedBox(height: 10),
                               ElevatedButton.icon(
-                                onPressed: jaRetornou ? null : () => _confirmarRetorno(passageiro),
-                                icon: Icon(jaRetornou ? Icons.check_circle : Icons.check),
-                                label: Text(jaRetornou ? 'JÁ RETORNOU' : 'CONFIRMAR RETORNO'),
+                                onPressed: jaRetornou
+                                    ? () => _desfazerRetorno(passageiro)
+                                    : () => _confirmarRetorno(passageiro),
+                                icon: Icon(jaRetornou ? Icons.undo : Icons.check),
+                                label: Text(jaRetornou
+                                    ? 'RETORNOU (TOQUE P/ DESFAZER)'
+                                    : 'CONFIRMAR RETORNO'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: jaRetornou ? Colors.grey : Colors.orange.shade700,
+                                  backgroundColor: jaRetornou ? Colors.blueGrey : Colors.orange.shade700,
+                                  foregroundColor: Colors.white,
                                   minimumSize: const Size.fromHeight(40),
                                 ),
                               ),

@@ -268,13 +268,28 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
     }
   }
 
+  Future<void> _deleteTempFile(String path) async {
+    try {
+      final f = File(path);
+      if (await f.exists()) {
+        await f.delete();
+      }
+    } catch (_) {}
+  }
+
   Future<void> _processCapture(String imagePath) async {
     try {
       setState(() => _statusMessage = 'Detectando rosto...');
 
       // 1. Detectar e processar face nativamente (iOS/Android)
       // MIGRAÇÃO: Agora usa NativeFaceService que corrige EXIF e detecta nativamente
-      final nativeResult = await NativeFaceService.instance.detectAndCropFace(imagePath);
+      final NativeFaceResult nativeResult;
+      try {
+        nativeResult = await NativeFaceService.instance.detectAndCropFace(imagePath);
+      } finally {
+        // Remove o arquivo temporário bruto do disco assim que o recorte 112x112 em memória é obtido
+        await _deleteTempFile(imagePath);
+      }
 
       await Sentry.captureMessage(
         '✅ Face detectada e processada nativamente',

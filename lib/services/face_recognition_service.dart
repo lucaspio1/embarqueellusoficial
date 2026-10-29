@@ -23,7 +23,9 @@ class EmbeddingCacheEntry {
 /// Serviço de Reconhecimento Facial com ArcFace
 class FaceRecognitionService {
   static final FaceRecognitionService instance = FaceRecognitionService._internal();
-  FaceRecognitionService._internal();
+  FaceRecognitionService._internal() {
+    DatabaseHelper.instance.onEmbeddingsChanged = invalidateCache;
+  }
 
   Interpreter? _interpreter;
   bool _modelLoaded = false;
@@ -115,6 +117,9 @@ class FaceRecognitionService {
       ),
     );
   }
+
+  /// Normaliza um vetor (L2) garantindo norma unitária (||v|| = 1.0)
+  List<double> normalizeL2(List<double> v) => _normalizeL2(v);
 
   List<double> _normalizeL2(List<double> v) {
     double sum = 0.0;

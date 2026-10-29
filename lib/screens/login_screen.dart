@@ -17,15 +17,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _carregando = false;
   bool _senhaVisivel = false;
-  bool _sincronizando = false;
   bool _temUsuariosLocais = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _verificarUsuariosLocais(exibirAviso: false);
-      await _sincronizarUsuarios(automatico: true);
+      await _verificarUsuariosLocais();
     });
   }
 
@@ -36,89 +34,12 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _verificarUsuariosLocais({bool exibirAviso = true}) async {
+  Future<void> _verificarUsuariosLocais() async {
     final temUsuarios = await _authService.temUsuariosLocais();
-
     if (!mounted) return;
-
     setState(() {
       _temUsuariosLocais = temUsuarios;
     });
-
-    if (!temUsuarios && exibirAviso) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('⚠️ Nenhum usuário encontrado. Clique em "Sincronizar Usuários" para baixar os dados da planilha.'),
-          duration: Duration(seconds: 5),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
-  }
-
-  Future<void> _sincronizarUsuarios({bool automatico = false}) async {
-    if (_sincronizando) return;
-
-    setState(() => _sincronizando = true);
-
-    try {
-      final tinhaUsuariosLocais = _temUsuariosLocais;
-      final sucesso = await _authService.syncUsuarios();
-      final temUsuariosAtualizados = await _authService.temUsuariosLocais();
-
-      if (!mounted) return;
-
-      setState(() => _temUsuariosLocais = temUsuariosAtualizados);
-
-      final deveExibirFeedback = !automatico || !tinhaUsuariosLocais;
-
-      if (deveExibirFeedback) {
-        // Nova lógica separando o sucesso da operação do preenchimento do banco local
-        if (sucesso) {
-          if (temUsuariosAtualizados) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('✅ Usuários sincronizados com sucesso!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          } else {
-            // Em vez de acusar erro, informa que os dados estão sendo baixados em segundo plano
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('⏳ Sincronizando usuários em segundo plano. Aguarde...'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-          }
-        } else {
-          // Apenas exibe o erro se o método syncUsuarios retornar falso de fato
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('❌ Erro ao sincronizar usuários. Verifique sua conexão com a internet.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-
-    } catch (e) {
-      if (mounted) {
-        final mensagem = SnackBar(
-          content: Text('❌ Erro: $e'),
-          backgroundColor: Colors.red,
-        );
-
-        final deveExibirFeedback = !automatico || !_temUsuariosLocais;
-        if (deveExibirFeedback) {
-          ScaffoldMessenger.of(context).showSnackBar(mensagem);
-        }
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _sincronizando = false);
-      }
-    }
   }
   Future<void> _realizarLogin() async {
     if (!_formKey.currentState!.validate()) return;
@@ -354,44 +275,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ),
                           ),
-
-                          const SizedBox(height: 16),
-
-                          // Botão de sincronização
-                          OutlinedButton.icon(
-                            onPressed: _sincronizando ? null : _sincronizarUsuarios,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF4C643C),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              side: BorderSide(
-                                color: _temUsuariosLocais ? Colors.grey : const Color(0xFF4C643C),
-                                width: 2,
-                              ),
-                            ),
-                            icon: _sincronizando
-                                ? const SizedBox(
-                                    height: 16,
-                                    width: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.sync),
-                            label: Text(
-                              _sincronizando
-                                  ? 'Sincronizando...'
-                                  : _temUsuariosLocais
-                                      ? 'Atualizar Usuários'
-                                      : 'Sincronizar Usuários',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -419,8 +302,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         Expanded(
                           child: Text(
                             _temUsuariosLocais
-                                ? 'Login offline ativo. Suas credenciais estão armazenadas com segurança.'
-                                : 'Sincronize os usuários para fazer login offline',
+                                ? 'Login offline ativo neste aparelho para usuários já autenticados.'
+                                : 'No primeiro acesso neste aparelho, conecte-se à internet para entrar.',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade700,

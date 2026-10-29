@@ -3,6 +3,7 @@ import 'package:embarqueellus/screens/controle_embarque_screen.dart';
 import 'package:embarqueellus/screens/reconhecimento_facial_completo.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
 import 'package:embarqueellus/screens/perfil_screen.dart';
+import 'package:embarqueellus/services/api_service.dart';
 import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/widgets/sync_status_icon.dart';
 
@@ -225,6 +226,70 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      ValueListenableBuilder<bool>(
+                        valueListenable: ApiService.instance.precisaNovoLogin,
+                        builder: (context, precisaLogin, _) {
+                          if (!precisaLogin) return const SizedBox.shrink();
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 24),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.orange.shade400),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded,
+                                        color: Colors.orange.shade800),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Sessão de sincronização expirada',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.orange.shade900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Os registros continuam salvos no aparelho. Faça login novamente com internet para enviá-los ao servidor.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange.shade900,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                ElevatedButton.icon(
+                                  onPressed: () async {
+                                    await _authService.logout();
+                                    if (mounted) {
+                                      Navigator.pushReplacement(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const LoginScreen(),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.orange.shade800,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  icon: const Icon(Icons.login, size: 18),
+                                  label: const Text('REAUTENTICAR AGORA'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                       const Text(
                         'Sistema de Controle',
                         style: TextStyle(

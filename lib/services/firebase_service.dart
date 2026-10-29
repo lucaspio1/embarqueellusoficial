@@ -189,6 +189,9 @@ class FirebaseService {
   Future<void> _applyDelta(Map<String, dynamic> delta) async {
     final db = await _db.database;
 
+    // Cadastros faciais feitos offline e ainda não confirmados pelo servidor
+    final faciaisPendentes = await _faciaisPendentes(db);
+
     // Aplicar alunos
     if (delta.containsKey('alunos')) {
       final alunos = delta['alunos'] as List;
@@ -196,12 +199,15 @@ class FirebaseService {
       final batch = db.batch();
       for (var aluno in alunos) {
         final data = aluno as Map<String, dynamic>;
-        final cpf = _getField(data, 'cpf', '');
+        final cpf = (_getField(data, 'cpf', '') ?? '').toString().trim();
         if (cpf.isEmpty) continue;
 
+        final embeddingPendente = faciaisPendentes[cpf];
         final embeddingData = _getField(data, 'embedding');
         String embeddingJson = '';
-        if (embeddingData != null) {
+        if (embeddingPendente != null && embeddingPendente.isNotEmpty) {
+          embeddingJson = embeddingPendente;
+        } else if (embeddingData != null) {
           if (embeddingData is List) {
             embeddingJson = '[${embeddingData.map((e) => (e as num).toDouble()).join(',')}]';
           } else if (embeddingData is String && embeddingData.isNotEmpty) {
@@ -209,7 +215,10 @@ class FirebaseService {
           }
         }
 
-        final facialCadastrada = _getField(data, 'facial_cadastrada', false) == true ? 1 : 0;
+        final facialCadastrada = (embeddingPendente != null && embeddingPendente.isNotEmpty) ||
+                _getField(data, 'facial_cadastrada', false) == true
+            ? 1
+            : 0;
 
         batch.insert(
           'alunos',
@@ -236,6 +245,9 @@ class FirebaseService {
         );
       }
       await batch.commit(noResult: true);
+      if (alunos.isNotEmpty) {
+        FaceRecognitionService.instance.invalidateCache();
+      }
     }
 
     // Aplicar quartos
@@ -272,9 +284,10 @@ class FirebaseService {
       final batch = db.batch();
       for (var embarque in embarques) {
         final data = embarque as Map<String, dynamic>;
-        final cpf = _getField(data, 'cpf', '');
+        final cpf = (_getField(data, 'cpf', '') ?? '').toString().trim();
         if (cpf.isEmpty) continue;
         final pendente = pendentes[cpf] ?? const <String, String>{};
+        final temFacialPendente = faciaisPendentes.containsKey(cpf);
 
         batch.insert(
           'embarques',
@@ -289,7 +302,10 @@ class FirebaseService {
             'fim_viagem': _convertTimestampToDate(_getField(data, 'fimViagem')),
             'embarque': pendente['embarque'] ?? _getField(data, 'embarque', ''),
             'retorno': pendente['retorno'] ?? _getField(data, 'retorno', ''),
-            'facial_cadastrada': _getField(data, 'facial_cadastrada', false) == true ? 1 : 0,
+            'facial_cadastrada': temFacialPendente ||
+                    _getField(data, 'facial_cadastrada', false) == true
+                ? 1
+                : 0,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
@@ -488,9 +504,11 @@ class FirebaseService {
     String? inicioViagem,
     String? fimViagem,
   }) async {
-    // Salvar localmente primeiro (offline-first)
+    // Salva localmente com `sincronizado = 0` e atualiza `alunos.movimentacao`.
+    // O envio (com `event_at` e confirmação `sincronizado = 1`) ocorre em
+    // `_uploadPendingRodada()`, evitando envio duplicado.
     await _db.insertLog(
-      cpf: cpf,
+      cpf: cpf.trim(),
       personName: personName,
       timestamp: timestamp,
       confidence: confidence,
@@ -502,62 +520,7 @@ class FirebaseService {
       fimViagem: fimViagem,
     );
 
-    // Atualizar movimentação local
-    final tipoNormalizado = tipo.trim().toUpperCase();
-    if (tipoNormalizado.isNotEmpty &&
-        tipoNormalizado != 'RECONHECIMENTO' &&
-        tipoNormalizado != 'FACIAL') {
-      try {
-        final db = await _db.database;
-        await db.update(
-          'alunos',
-          {'movimentacao': tipoNormalizado},
-          where: 'cpf = ?',
-          whereArgs: [cpf],
-        );
-      } catch (_) {}
-    }
-
-    // Tentar enviar via API REST imediatamente
-    try {
-      if (_api.isAuthenticated && await _hasInternet()) {
-        await _api.uploadBatch([
-          {
-            'id': 'log_immediate_${DateTime.now().millisecondsSinceEpoch}',
-            'type': 'log',
-            'data': {
-              'cpf': cpf,
-              'person_name': personName,
-              'timestamp': timestamp.toIso8601String(),
-              'confidence': confidence,
-              'tipo': tipo,
-              'operador_nome': operadorNome ?? '',
-              'colegio': colegio ?? '',
-              'turma': turma ?? '',
-              'inicio_viagem': inicioViagem ?? '',
-              'fim_viagem': fimViagem ?? '',
-            }
-          },
-          if (tipoNormalizado.isNotEmpty &&
-              tipoNormalizado != 'RECONHECIMENTO' &&
-              tipoNormalizado != 'FACIAL')
-            {
-              'id': 'mov_immediate_${DateTime.now().millisecondsSinceEpoch}',
-              'type': 'movimentacao',
-              'data': {
-                'cpf': cpf,
-                'nome': personName,
-                'movimentacao': tipoNormalizado,
-                'operador': operadorNome ?? '',
-              }
-            },
-        ]);
-        print('✅ [FirebaseService] Log enviado via API: $personName - $tipo');
-      }
-    } catch (e) {
-      print('⚠️ [FirebaseService] Erro ao enviar log via API, ficará pendente: $e');
-      // O log ficará marcado como não sincronizado e será enviado no próximo ciclo
-    }
+    unawaited(trySyncInBackground());
   }
 
   Future<void> queueCadastroFacial({
@@ -573,75 +536,36 @@ class FirebaseService {
     String? fimViagem,
   }) async {
     final cpfLimpo = cpf.trim();
+    if (cpfLimpo.isEmpty) return;
 
-    // Buscar movimentação atual do aluno
-    final db = await _db.database;
-    final alunoExistente = await db.query(
-      'alunos',
-      columns: ['movimentacao'],
-      where: 'cpf = ?',
-      whereArgs: [cpfLimpo],
-      limit: 1,
-    );
+    // Atualiza `alunos` preservando colunas existentes e invalidando o cache em memória
+    await _db.upsertPessoaFacial({
+      'cpf': cpfLimpo,
+      'nome': nome,
+      if (colegio != null && colegio.isNotEmpty) 'colegio': colegio,
+      if (turma != null && turma.isNotEmpty) 'turma': turma,
+      if (email.isNotEmpty) 'email': email,
+      if (telefone.isNotEmpty) 'telefone': telefone,
+      'embedding': embedding,
+      if (inicioViagem != null && inicioViagem.isNotEmpty) 'inicio_viagem': inicioViagem,
+      if (fimViagem != null && fimViagem.isNotEmpty) 'fim_viagem': fimViagem,
+    });
 
-    final movimentacaoAtual = alunoExistente.isNotEmpty
-        ? (alunoExistente.first['movimentacao']?.toString() ?? 'QUARTO')
-        : 'QUARTO';
+    // Enfileira em `sync_queue` (offline-first) e dispara o upload em background
+    await _db.enqueueOutbox('face_register', {
+      'cpf': cpfLimpo,
+      'nome': nome,
+      'colegio': colegio ?? '',
+      'turma': turma ?? '',
+      'email': email,
+      'telefone': telefone,
+      'embedding': embedding,
+      'personId': personId,
+      'inicio_viagem': inicioViagem ?? '',
+      'fim_viagem': fimViagem ?? '',
+    });
 
-    // Atualizar localmente primeiro
-    await db.insert(
-      'alunos',
-      {
-        'cpf': cpfLimpo,
-        'nome': nome,
-        'colegio': colegio ?? '',
-        'turma': turma ?? '',
-        'email': email,
-        'telefone': telefone,
-        'embedding': '[${embedding.join(',')}]',
-        'facial_cadastrada': 1,
-        'data_cadastro_facial': DateTime.now().toIso8601String(),
-        'movimentacao': movimentacaoAtual,
-        'inicio_viagem': inicioViagem ?? '',
-        'fim_viagem': fimViagem ?? '',
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-
-    // Tentar enviar via API REST
-    try {
-      if (_api.isAuthenticated && await _hasInternet()) {
-        await _api.uploadBatch([
-          {
-            'id': 'face_${cpfLimpo}_${DateTime.now().millisecondsSinceEpoch}',
-            'type': 'embedding',
-            'data': {
-              'cpf': cpfLimpo,
-              'embedding': embedding,
-            }
-          }
-        ]);
-        print('✅ [FirebaseService] Cadastro facial enviado via API: $nome');
-      } else {
-        throw Exception('API não disponível');
-      }
-    } catch (e) {
-      print('⚠️ [FirebaseService] Erro ao enviar cadastro facial via API: $e');
-      // Enfileirar para retry
-      await _db.enqueueOutbox('face_register', {
-        'cpf': cpfLimpo,
-        'nome': nome,
-        'colegio': colegio ?? '',
-        'turma': turma ?? '',
-        'email': email,
-        'telefone': telefone,
-        'embedding': embedding,
-        'personId': personId,
-        'movimentacao': movimentacaoAtual,
-        'inicio_viagem': inicioViagem ?? '',
-        'fim_viagem': fimViagem ?? '',
-      });
-    }
+    unawaited(trySyncInBackground());
   }
 
   // =============================
@@ -821,6 +745,37 @@ class FirebaseService {
     if (dt == null) return null;
     return DateTime.fromMillisecondsSinceEpoch(dt.millisecondsSinceEpoch, isUtc: true)
         .toIso8601String();
+  }
+
+  /// Cadastros faciais feitos offline e ainda não confirmados pelo servidor,
+  /// mapeados de CPF para o embedding JSON salvo localmente.
+  Future<Map<String, String>> _faciaisPendentes(Database db) async {
+    try {
+      final rows = await db.query(
+        'sync_queue',
+        where: 'tipo = ?',
+        whereArgs: ['face_register'],
+        orderBy: 'id ASC',
+      );
+      final pendentes = <String, String>{};
+      for (final row in rows) {
+        try {
+          final p = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
+          final cpf = (p['cpf'] ?? '').toString().trim();
+          final emb = p['embedding'];
+          if (cpf.isEmpty || emb == null) continue;
+          if (emb is List) {
+            pendentes[cpf] = '[${emb.map((e) => (e as num).toDouble()).join(',')}]';
+          } else if (emb is String && emb.isNotEmpty) {
+            pendentes[cpf] = emb;
+          }
+        } catch (_) {}
+      }
+      return pendentes;
+    } catch (e) {
+      print('⚠️ [FirebaseService] Não foi possível ler faciais pendentes: $e');
+      return {};
+    }
   }
 
   /// Movimentação local dos alunos que têm leituras ainda não enviadas.

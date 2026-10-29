@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -15,8 +16,9 @@ class BarcodeCameraView extends StatefulWidget {
 }
 
 class _BarcodeCameraViewState extends State<BarcodeCameraView> {
-  late CameraController _cameraController;
-  late BarcodeScanner _barcodeScanner;
+  CameraController? _cameraController;
+  BarcodeScanner? _barcodeScanner;
+  Timer? _cooldownTimer;
   bool _isBusy = false;
   bool _isInitialized = false;
   bool _hasDetected = false;
@@ -30,19 +32,28 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
   Future<void> _initialize() async {
     try {
       final cameras = await availableCameras();
+      if (cameras.isEmpty || !mounted) return;
+
       final backCamera = cameras.firstWhere(
-            (c) => c.lensDirection == CameraLensDirection.back,
+        (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
 
-      _cameraController = CameraController(
+      final controller = CameraController(
         backCamera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.bgra8888,
+        imageFormatGroup: Platform.isAndroid
+            ? ImageFormatGroup.nv21
+            : ImageFormatGroup.bgra8888,
       );
+      _cameraController = controller;
 
-      await _cameraController.initialize();
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
 
       // Inclui todos os formatos usados por QR e pulseiras
       _barcodeScanner = BarcodeScanner(
@@ -60,7 +71,7 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
         ],
       );
 
-      await _cameraController.startImageStream(_processCameraImage);
+      await controller.startImageStream(_processCameraImage);
 
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
@@ -69,7 +80,9 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
   }
 
   Future<void> _processCameraImage(CameraImage image) async {
-    if (_isBusy || _hasDetected) return;
+    final controller = _cameraController;
+    final scanner = _barcodeScanner;
+    if (_isBusy || _hasDetected || controller == null || scanner == null) return;
     _isBusy = true;
 
     try {
@@ -84,9 +97,9 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
 
       final bytes = allBytes.done().buffer.asUint8List();
       final Size imageSize =
-      Size(image.width.toDouble(), image.height.toDouble());
+          Size(image.width.toDouble(), image.height.toDouble());
 
-      final camera = _cameraController.description;
+      final camera = controller.description;
       final imageRotation =
           InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
               InputImageRotation.rotation0deg;
@@ -110,13 +123,20 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
         ),
       );
 
-      final barcodes = await _barcodeScanner.processImage(inputImage);
+      final barcodes = await scanner.processImage(inputImage);
 
       if (barcodes.isNotEmpty) {
         final value = barcodes.first.rawValue;
         if (value != null && value.isNotEmpty) {
           _hasDetected = true;
           widget.onScanned(value);
+          // Caso o QR Code seja inválido e a tela continue aberta, libera nova leitura após 2s
+          _cooldownTimer?.cancel();
+          _cooldownTimer = Timer(const Duration(seconds: 2), () {
+            if (mounted) {
+              _hasDetected = false;
+            }
+          });
         }
       }
     } catch (e) {
@@ -143,14 +163,16 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
 
   @override
   void dispose() {
-    _cameraController.dispose();
-    _barcodeScanner.close();
+    _cooldownTimer?.cancel();
+    _cameraController?.dispose();
+    _barcodeScanner?.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_isInitialized) {
+    final controller = _cameraController;
+    if (!_isInitialized || controller == null || !controller.value.isInitialized) {
       return const Center(
         child: CircularProgressIndicator(color: Color(0xFF4C643C)),
       );
@@ -159,7 +181,7 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
     return Stack(
       alignment: Alignment.center,
       children: [
-        CameraPreview(_cameraController),
+        CameraPreview(controller),
         Container(
           width: 250,
           height: 250,

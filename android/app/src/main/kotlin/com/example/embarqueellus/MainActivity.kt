@@ -99,72 +99,81 @@ class MainActivity : FlutterActivity() {
             // PASSO 5: Detectar faces
             detector.process(image)
                 .addOnSuccessListener { faces ->
-                    if (faces.isEmpty()) {
+                    try {
+                        if (faces.isEmpty()) {
+                            result.error(
+                                "NO_FACE_DETECTED",
+                                "Nenhum rosto detectado. Verifique: iluminação, ângulo da câmera e distância.",
+                                null
+                            )
+                            return@addOnSuccessListener
+                        }
+
+                        println("✅ [Android Native] Detectadas ${faces.size} face(s)")
+
+                        // PASSO 6: Selecionar face principal (maior área)
+                        val primaryFace = faces.maxByOrNull { face ->
+                            face.boundingBox.width() * face.boundingBox.height()
+                        }!!
+
+                        println("📐 [Android Native] Face principal: ${primaryFace.boundingBox}")
+
+                        // PASSO 7: Recortar face (com bounds seguros >= 1px)
+                        val bbox = primaryFace.boundingBox
+                        val left = bbox.left.coerceIn(0, (rotatedBitmap.width - 1).coerceAtLeast(0))
+                        val top = bbox.top.coerceIn(0, (rotatedBitmap.height - 1).coerceAtLeast(0))
+                        val width = bbox.width().coerceIn(1, (rotatedBitmap.width - left).coerceAtLeast(1))
+                        val height = bbox.height().coerceIn(1, (rotatedBitmap.height - top).coerceAtLeast(1))
+
+                        val croppedBitmap = Bitmap.createBitmap(
+                            rotatedBitmap,
+                            left,
+                            top,
+                            width,
+                            height
+                        )
+
+                        // PASSO 8: Redimensionar para 112x112
+                        val finalBitmap = Bitmap.createScaledBitmap(
+                            croppedBitmap,
+                            112,
+                            112,
+                            true
+                        )
+
+                        // PASSO 9: Converter para JPEG
+                        val stream = ByteArrayOutputStream()
+                        finalBitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)
+                        val jpegBytes = stream.toByteArray()
+
+                        println("✅ [Android Native] Face processada: ${jpegBytes.size} bytes")
+
+                        // PASSO 10: Retornar resultado
+                        val responseMap = hashMapOf<String, Any>(
+                            "croppedFaceBytes" to jpegBytes,
+                            "boundingBox" to hashMapOf(
+                                "left" to bbox.left.toDouble(),
+                                "top" to bbox.top.toDouble(),
+                                "width" to bbox.width().toDouble(),
+                                "height" to bbox.height().toDouble()
+                            )
+                        )
+
+                        if (finalBitmap !== croppedBitmap && !finalBitmap.isRecycled) {
+                            finalBitmap.recycle()
+                        }
+                        if (croppedBitmap !== rotatedBitmap && !croppedBitmap.isRecycled) {
+                            croppedBitmap.recycle()
+                        }
+
+                        result.success(responseMap)
+                    } catch (cropError: Exception) {
                         result.error(
-                            "NO_FACE_DETECTED",
-                            "Nenhum rosto detectado. Verifique: iluminação, ângulo da câmera e distância.",
+                            "CROP_ERROR",
+                            "Erro ao recortar face: ${cropError.message}",
                             null
                         )
-                        return@addOnSuccessListener
                     }
-
-                    println("✅ [Android Native] Detectadas ${faces.size} face(s)")
-
-                    // PASSO 6: Selecionar face principal (maior área)
-                    val primaryFace = faces.maxByOrNull { face ->
-                        face.boundingBox.width() * face.boundingBox.height()
-                    }!!
-
-                    println("📐 [Android Native] Face principal: ${primaryFace.boundingBox}")
-
-                    // PASSO 7: Recortar face (com bounds seguros)
-                    val bbox = primaryFace.boundingBox
-                    val left = bbox.left.coerceAtLeast(0)
-                    val top = bbox.top.coerceAtLeast(0)
-                    val width = bbox.width().coerceAtMost(rotatedBitmap.width - left)
-                    val height = bbox.height().coerceAtMost(rotatedBitmap.height - top)
-
-                    val croppedBitmap = Bitmap.createBitmap(
-                        rotatedBitmap,
-                        left,
-                        top,
-                        width,
-                        height
-                    )
-
-                    // PASSO 8: Redimensionar para 112x112
-                    val finalBitmap = Bitmap.createScaledBitmap(
-                        croppedBitmap,
-                        112,
-                        112,
-                        true
-                    )
-
-                    // PASSO 9: Converter para JPEG
-                    val stream = ByteArrayOutputStream()
-                    finalBitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)
-                    val jpegBytes = stream.toByteArray()
-
-                    println("✅ [Android Native] Face processada: ${jpegBytes.size} bytes")
-
-                    // PASSO 10: Retornar resultado
-                    val responseMap = hashMapOf<String, Any>(
-                        "croppedFaceBytes" to jpegBytes,
-                        "boundingBox" to hashMapOf(
-                            "left" to bbox.left.toDouble(),
-                            "top" to bbox.top.toDouble(),
-                            "width" to bbox.width().toDouble(),
-                            "height" to bbox.height().toDouble()
-                        )
-                    )
-
-                    result.success(responseMap)
-
-                    // Liberar recursos
-                    bitmap.recycle()
-                    rotatedBitmap.recycle()
-                    croppedBitmap.recycle()
-                    finalBitmap.recycle()
                 }
                 .addOnFailureListener { e ->
                     result.error(
@@ -172,6 +181,17 @@ class MainActivity : FlutterActivity() {
                         "Erro ao detectar faces: ${e.message}",
                         null
                     )
+                }
+                .addOnCompleteListener {
+                    try {
+                        detector.close()
+                    } catch (_: Exception) {}
+                    if (rotatedBitmap !== bitmap && !rotatedBitmap.isRecycled) {
+                        rotatedBitmap.recycle()
+                    }
+                    if (!bitmap.isRecycled) {
+                        bitmap.recycle()
+                    }
                 }
         } catch (e: Exception) {
             result.error(

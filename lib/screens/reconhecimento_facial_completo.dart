@@ -5,8 +5,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
-import 'package:embarqueellus/services/offline_sync_service.dart';
-import 'package:embarqueellus/services/alunos_sync_service.dart';
+import 'package:embarqueellus/services/firebase_service.dart';
 import 'package:embarqueellus/services/auth_service.dart';
 import 'package:embarqueellus/models/camera_mode.dart';
 import 'package:embarqueellus/models/face_camera_options.dart';
@@ -53,7 +52,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
 
       // Apenas sincronizar na primeira vez (quando não há dados locais) ou se forçado
       if (alunosLocais.isEmpty || forcarSync) {
-        await AlunosSyncService.instance.syncPessoasFromSheets();
+        await FirebaseService.instance.trySyncInBackground();
       }
 
       // ✅ FILTRO DE DATA: Buscar apenas alunos com viagem ativa (dentro do período)
@@ -197,8 +196,8 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       // ❌ REMOVIDO: insertLog() duplicado - queueLogAcesso já faz isso
       // await _db.insertLog(...)
 
-      // ✅ ÚNICA ORIGEM DE ESCRITA: queueLogAcesso insere no DB + enfileira para sync
-      await OfflineSyncService.instance.queueLogAcesso(
+      // ✅ ÚNICA ORIGEM DE ESCRITA: queueLogAcesso insere no DB, atualiza movimentação e enfileira para sync via API
+      await FirebaseService.instance.queueLogAcesso(
         cpf: aluno['cpf'],
         personName: aluno['nome'],
         timestamp: timestamp,
@@ -211,14 +210,6 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
         inicioViagem: inicioViagem,
         fimViagem: fimViagem,
       );
-
-      await _db.updatePessoaMovimentacao(
-        (aluno['cpf'] as String? ?? '').trim(),
-        tipo.toString().toUpperCase(),
-      );
-
-      // 🔄 Sincronizar embeddings em segundo plano após envio da movimentação
-      AlunosSyncService.instance.syncPessoasFromSheets();
 
       if (Navigator.canPop(context)) Navigator.pop(context);
 

@@ -62,6 +62,42 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
     _nomeController.clear();
   }
 
+  Future<void> _desfazerEmbarque(Passageiro passageiro) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Desfazer Embarque'),
+        content: Text('Deseja desmarcar o embarque de ${passageiro.nome}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Desmarcar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
+    final passageiroAtualizado = passageiro.copyWith(embarque: 'NÃO');
+    dataService.updateLocalData(passageiroAtualizado, novoEmbarque: 'NÃO');
+    setState(() {});
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('↩️ Embarque de ${passageiro.nome} desmarcado.'),
+          backgroundColor: Colors.orange.shade800,
+        ),
+      );
+    }
+  }
+
   /// ============================================================
   /// CONSTRUÇÃO DA TELA
   /// ============================================================
@@ -148,17 +184,18 @@ class _EmbarqueScreenState extends State<EmbarqueScreen> {
                               const SizedBox(height: 10),
                               ElevatedButton.icon(
                                 onPressed: jaEmbarcou
-                                    ? null
+                                    ? () => _desfazerEmbarque(passageiro)
                                     : () => _confirmarEmbarque(passageiro),
                                 icon: Icon(jaEmbarcou
-                                    ? Icons.check_circle
+                                    ? Icons.undo
                                     : Icons.check),
                                 label: Text(jaEmbarcou
-                                    ? 'JÁ EMBARCADO'
+                                    ? 'EMBARCADO (TOQUE P/ DESFAZER)'
                                     : 'CONFIRMAR EMBARQUE'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor:
-                                  jaEmbarcou ? Colors.grey : Colors.green,
+                                      jaEmbarcou ? Colors.blueGrey : Colors.green,
+                                  foregroundColor: Colors.white,
                                   minimumSize: const Size.fromHeight(40),
                                 ),
                               ),

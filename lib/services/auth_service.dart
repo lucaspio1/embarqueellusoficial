@@ -21,19 +21,24 @@ class AuthService {
   /// Login — tenta via API REST primeiro, depois fallback SQLite (offline)
   Future<Map<String, dynamic>?> login(String cpf, String senha) async {
     try {
-      print('🔐 [Auth] Tentando login: CPF=$cpf');
+      final cpfLimpo = cpf.replaceAll(RegExp(r'\D'), '');
+      if (cpfLimpo.isEmpty || senha.isEmpty) return null;
+
+      print('🔐 [Auth] Tentando login: CPF=$cpfLimpo');
 
       // Garantir que a tabela de usuários existe
       await _db.ensureFacialSchema();
 
       // PASSO 1: Tentar login online via API REST
       try {
-        final response = await _api.login(cpf, senha);
+        final response = await _api.login(cpfLimpo, senha);
         if (response['success'] == true && response['user'] != null) {
+          final userCpf = (response['user']['cpf']?.toString() ?? cpfLimpo)
+              .replaceAll(RegExp(r'\D'), '');
           final user = {
-            'id': response['user']['cpf']?.toString() ?? cpf,
+            'id': userCpf,
             'nome': response['user']['nome'],
-            'cpf': response['user']['cpf']?.toString() ?? cpf,
+            'cpf': userCpf,
             'perfil': response['user']['perfil'] ?? 'USER',
             'precisa_trocar_senha': response['user']['precisa_trocar_senha'] == true,
           };
@@ -48,7 +53,7 @@ class AuthService {
           // Salvar usuário no SQLite para fallback offline
           try {
             await _db.upsertUsuario({
-              'cpf': user['cpf'],
+              'cpf': userCpf,
               'nome': user['nome'],
               // Só o hash SHA-256 (aceito por UserSyncService.verificarSenha)
               'senha_hash': sha256.convert(utf8.encode(senha)).toString(),
@@ -59,12 +64,17 @@ class AuthService {
 
           return user;
         }
+      } on AuthException catch (authErr) {
+        // Servidor respondeu explicitamente recusando (401/403): senha incorreta
+        // ou usuário desativado/inexistente. NÃO fazer fallback offline!
+        print('❌ [Auth] Login recusado pelo servidor (${authErr.statusCode}): ${authErr.message}');
+        return null;
       } catch (e) {
-        print('⚠️ [Auth] Login online falhou ($e), tentando offline...');
+        print('⚠️ [Auth] Sem conexão com o servidor ($e), tentando login offline...');
       }
 
-      // PASSO 2: Fallback offline — buscar no banco local
-      final usuario = await _db.getUsuarioByCpf(cpf);
+      // PASSO 2: Fallback offline — buscar no banco local (somente se houve falha de rede)
+      final usuario = await _db.getUsuarioByCpf(cpfLimpo);
 
       if (usuario == null) {
         print('❌ [Auth] Usuário não encontrado (online e offline)');
@@ -91,7 +101,7 @@ class AuthService {
 
       // Sem internet agora: guarda as credenciais em memória para obter o
       // token assim que houver conexão (a fila local sobe sozinha).
-      _api.definirCredenciaisPendentes(cpf, senha);
+      _api.definirCredenciaisPendentes(cpfLimpo, senha);
 
       _usuarioLogado = user;
       final prefs = await SharedPreferences.getInstance();

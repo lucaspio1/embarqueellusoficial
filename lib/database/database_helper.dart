@@ -8,6 +8,9 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
   static Database? _database;
 
+  /// Callback disparado sempre que embeddings faciais são alterados no SQLite
+  void Function()? onEmbeddingsChanged;
+
   DatabaseHelper._internal();
 
   Future<Database> get database async {
@@ -810,17 +813,80 @@ class DatabaseHelper {
     );
   }
 
+  static const Set<String> _colunasAlunos = {
+    'cpf',
+    'nome',
+    'colegio',
+    'email',
+    'telefone',
+    'turma',
+    'embedding',
+    'facial_cadastrada',
+    'data_cadastro_facial',
+    'embarcado',
+    'data_embarque',
+    'retornado',
+    'data_retorno',
+    'onibus',
+    'codigo_pulseira',
+    'id_passeio',
+    'movimentacao',
+    'tem_qr',
+    'inicio_viagem',
+    'fim_viagem',
+    'created_at',
+    'updated_at',
+  };
+
   // Métodos para alunos
   Future<void> upsertAluno(Map<String, dynamic> aluno) async {
     final db = await database;
-    await db.insert(
+    final cpf = (aluno['cpf'] ?? '').toString().trim();
+    if (cpf.isEmpty) return;
+
+    final data = <String, dynamic>{};
+    for (final entry in aluno.entries) {
+      if (_colunasAlunos.contains(entry.key)) {
+        data[entry.key] = entry.value;
+      }
+    }
+    data['cpf'] = cpf;
+    data['updated_at'] = DateTime.now().toIso8601String();
+
+    final existente = await db.query(
       'alunos',
-      {
-        ...aluno,
-        'created_at': DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      where: 'cpf = ?',
+      whereArgs: [cpf],
+      limit: 1,
     );
+
+    if (existente.isNotEmpty) {
+      final atual = existente.first;
+      // Preserva campos já preenchidos localmente (facial, embarque, movimentação, viagem)
+      // caso o mapa de entrada não os traga ou venha vazio.
+      for (final col in _colunasAlunos) {
+        if (!data.containsKey(col) ||
+            data[col] == null ||
+            (data[col] is String && (data[col] as String).isEmpty)) {
+          if (atual[col] != null) {
+            data[col] = atual[col];
+          }
+        }
+      }
+      await db.update(
+        'alunos',
+        data,
+        where: 'cpf = ?',
+        whereArgs: [cpf],
+      );
+    } else {
+      data['created_at'] = data['created_at'] ?? DateTime.now().toIso8601String();
+      await db.insert(
+        'alunos',
+        data,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
   }
 
   Future<List<Map<String, dynamic>>> getAllAlunos() async {
@@ -828,44 +894,45 @@ class DatabaseHelper {
     return await db.query('alunos');
   }
 
-  // ========================================================================
-  // AQUI ESTÁ A CORREÇÃO
-  // ========================================================================
-
-  /// Busca alunos que precisam de cadastro facial (facial = 'NAO' ou NULL)
+  /// Busca alunos que precisam de cadastro facial (facial_cadastrada = 0 ou NULL)
   Future<List<Map<String, dynamic>>> getAlunosParaCadastroFacial() async {
     final db = await database;
-    // Retorna alunos que AINDA NÃO têm facial (baseado no campo 'facial')
     return await db.query(
-        'alunos',
-        where: 'facial = ? OR facial IS NULL',
-        whereArgs: ['NAO']
+      'alunos',
+      where: 'facial_cadastrada = ? OR facial_cadastrada IS NULL',
+      whereArgs: [0],
     );
   }
-
-  // ========================================================================
-  // FIM DA CORREÇÃO
-  // ========================================================================
-
 
   Future<Map<String, dynamic>?> getAlunoByCpf(String cpf) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'alunos',
       where: 'cpf = ?',
-      whereArgs: [cpf],
+      whereArgs: [cpf.trim()],
     );
     return maps.isNotEmpty ? maps.first : null;
   }
 
   Future<void> updateAlunoFacial(String cpf, String status) async {
     final db = await database;
+    final upper = status.trim().toUpperCase();
+    final cadastrada = (upper == 'CADASTRADA' ||
+            upper == 'CADASTRADO' ||
+            upper == 'SIM' ||
+            upper == '1')
+        ? 1
+        : 0;
     await db.update(
       'alunos',
-      {'facial': status},
+      {
+        'facial_cadastrada': cadastrada,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
       where: 'cpf = ?',
-      whereArgs: [cpf],
+      whereArgs: [cpf.trim()],
     );
+    onEmbeddingsChanged?.call();
   }
 
   // ========================================================================
@@ -877,7 +944,7 @@ class DatabaseHelper {
   /// @deprecated Use upsertPessoaFacial() para cadastrar facial completo
   Future<void> insertEmbedding(Map<String, dynamic> embedding) async {
     final db = await database;
-    final cpf = embedding['cpf'];
+    final cpf = embedding['cpf']?.toString().trim();
     if (cpf == null || cpf.isEmpty) {
       print('⚠️ [DB] Tentativa de inserir embedding sem CPF');
       return;
@@ -894,6 +961,7 @@ class DatabaseHelper {
       where: 'cpf = ?',
       whereArgs: [cpf],
     );
+    onEmbeddingsChanged?.call();
   }
 
   /// Busca todos os embeddings (alunos com facial cadastrada)
@@ -999,42 +1067,21 @@ class DatabaseHelper {
       }
 
       try {
-        // Tentar parsear data em formato ISO (YYYY-MM-DD) ou DD/MM/YYYY
-        DateTime? inicio;
-        DateTime? fim;
-
-        // Formato ISO: YYYY-MM-DD
-        if (inicioStr.contains('-')) {
-          inicio = DateTime.parse(inicioStr);
-          fim = DateTime.parse(fimStr);
-        }
-        // Formato brasileiro: DD/MM/YYYY
-        else if (inicioStr.contains('/')) {
-          final partesInicio = inicioStr.split('/');
-          final partesFim = fimStr.split('/');
-
-          if (partesInicio.length == 3 && partesFim.length == 3) {
-            inicio = DateTime(
-              int.parse(partesInicio[2]), // ano
-              int.parse(partesInicio[1]), // mês
-              int.parse(partesInicio[0]), // dia
-            );
-            fim = DateTime(
-              int.parse(partesFim[2]), // ano
-              int.parse(partesFim[1]), // mês
-              int.parse(partesFim[0]), // dia
-            );
-          }
-        }
+        final inicio = _parseViagemDate(inicioStr, hoje.year);
+        final fim = _parseViagemDate(fimStr, hoje.year);
 
         // Se conseguiu parsear, verificar se está no período
         if (inicio != null && fim != null) {
           final hojeSemHora = DateTime(hoje.year, hoje.month, hoje.day);
           final inicioSemHora = DateTime(inicio.year, inicio.month, inicio.day);
-          final fimSemHora = DateTime(fim.year, fim.month, fim.day);
+          var fimSemHora = DateTime(fim.year, fim.month, fim.day);
+          // Caso formato DD/MM cruze a virada do ano (ex.: 28/12 a 03/01)
+          if (fimSemHora.isBefore(inicioSemHora)) {
+            fimSemHora = DateTime(fim.year + 1, fim.month, fim.day);
+          }
 
-          final estaAtivo = hojeSemHora.isAfter(inicioSemHora.subtract(Duration(days: 1))) &&
-                            hojeSemHora.isBefore(fimSemHora.add(Duration(days: 1)));
+          final estaAtivo = !hojeSemHora.isBefore(inicioSemHora) &&
+              !hojeSemHora.isAfter(fimSemHora);
 
           if (estaAtivo) {
             pessoasAtivas++;
@@ -1095,6 +1142,39 @@ class DatabaseHelper {
     }
 
     return resultado;
+  }
+
+  /// Faz parse flexível de data de viagem (ISO YYYY-MM-DD[THH:mm...], DD/MM/YYYY, DD/MM/YY ou DD/MM)
+  DateTime? _parseViagemDate(String raw, int defaultYear) {
+    final s = raw.trim();
+    if (s.isEmpty) return null;
+
+    if (s.contains('-')) {
+      return DateTime.tryParse(s);
+    }
+
+    if (s.contains('/')) {
+      // Remove eventual sufixo de hora (ex.: "28/10/2026 08:00")
+      final dataPart = s.split(' ').first;
+      final partes = dataPart.split('/');
+      if (partes.length == 3) {
+        final dia = int.tryParse(partes[0]);
+        final mes = int.tryParse(partes[1]);
+        var ano = int.tryParse(partes[2]);
+        if (dia != null && mes != null && ano != null) {
+          if (ano < 100) ano += 2000;
+          return DateTime(ano, mes, dia);
+        }
+      } else if (partes.length == 2) {
+        final dia = int.tryParse(partes[0]);
+        final mes = int.tryParse(partes[1]);
+        if (dia != null && mes != null) {
+          return DateTime(defaultYear, mes, dia);
+        }
+      }
+    }
+
+    return DateTime.tryParse(s);
   }
 
   /// Conta quantos passageiros de uma lista específica têm facial cadastrada
@@ -1351,6 +1431,7 @@ class DatabaseHelper {
     await db.delete('logs');
     await db.delete('sync_queue');
     await db.delete('quartos');
+    onEmbeddingsChanged?.call();
     // NÃO deletar usuarios para manter login offline
     print('✅ Todos os dados foram limpos do banco de dados');
   }
@@ -1367,6 +1448,7 @@ class DatabaseHelper {
     await db.delete('logs');
     await db.delete('sync_queue');
     await db.delete('quartos');
+    onEmbeddingsChanged?.call();
 
     // NÃO deletar usuarios para manter login offline
     print('✅ [DB] Todos os dados de viagens foram limpos');
@@ -1415,6 +1497,7 @@ class DatabaseHelper {
     totalRemovidos += outboxRemovidos;
     print('   - Outbox removidos: $outboxRemovidos');
 
+    onEmbeddingsChanged?.call();
     print('✅ [DB] Total de registros removidos: $totalRemovidos');
   }
 
@@ -1484,42 +1567,83 @@ class DatabaseHelper {
   /// REFATORADO v10: Usa tabela alunos ao invés de pessoas_facial
   Future<void> upsertPessoaFacial(Map<String, dynamic> pessoa) async {
     final db = await database;
-    final data = Map<String, dynamic>.from(pessoa);
-    data['updated_at'] = DateTime.now().toIso8601String();
-    data['created_at'] = pessoa['created_at'] ?? DateTime.now().toIso8601String();
-    data['facial_cadastrada'] = 1; // Marca como tendo facial
-    data['data_cadastro_facial'] = DateTime.now().toIso8601String();
-
-    // Preservar movimentação existente se não for fornecida
-    if (!data.containsKey('movimentacao') || data['movimentacao'] == null) {
-      final existente = await db.query(
-        'alunos',
-        columns: ['movimentacao'],
-        where: 'cpf = ?',
-        whereArgs: [data['cpf']],
-        limit: 1,
-      );
-      if (existente.isNotEmpty && existente.first['movimentacao'] != null) {
-        data['movimentacao'] = existente.first['movimentacao'];
-        print('🔍 [DB] ${data['nome']}: Preservando movimentação existente: "${data['movimentacao']}"');
-      } else {
-        data['movimentacao'] = 'QUARTO'; // Default
-        print('🔍 [DB] ${data['nome']}: Aluno novo, movimentação = QUARTO');
-      }
-    } else {
-      print('🔍 [DB] ${data['nome']}: Salvando com movimentacao: "${data['movimentacao']}"');
+    final cpf = (pessoa['cpf'] ?? '').toString().trim();
+    if (cpf.isEmpty) {
+      print('⚠️ [DB] upsertPessoaFacial chamado sem CPF');
+      return;
     }
+
+    // Filtra apenas colunas válidas da tabela `alunos` (ignora `facial_status` legado)
+    final data = <String, dynamic>{};
+    for (final entry in pessoa.entries) {
+      if (_colunasAlunos.contains(entry.key)) {
+        data[entry.key] = entry.value;
+      }
+    }
+
+    final agora = DateTime.now().toIso8601String();
+    data['cpf'] = cpf;
+    data['updated_at'] = agora;
+    data['facial_cadastrada'] = 1; // Marca como tendo facial
+    data['data_cadastro_facial'] = agora;
 
     // Converter embedding para JSON string se necessário
     if (data.containsKey('embedding') && data['embedding'] is List) {
       data['embedding'] = jsonEncode(data['embedding']);
     }
 
-    await db.insert(
+    final existente = await db.query(
       'alunos',
-      data,
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      where: 'cpf = ?',
+      whereArgs: [cpf],
+      limit: 1,
     );
+
+    if (existente.isNotEmpty) {
+      final atual = existente.first;
+      // Preservar colunas existentes (colegio, turma, onibus, id_passeio, embarcado,
+      // retornado, inicio_viagem, fim_viagem, movimentacao) quando não informadas ou vazias
+      for (final col in _colunasAlunos) {
+        if (!data.containsKey(col) ||
+            data[col] == null ||
+            (data[col] is String && (data[col] as String).isEmpty)) {
+          if (atual[col] != null) {
+            data[col] = atual[col];
+          }
+        }
+      }
+      data['movimentacao'] = data['movimentacao'] ?? 'QUARTO';
+      print('🔍 [DB] ${data['nome']}: Atualizando facial e preservando colunas existentes (movimentação="${data['movimentacao']}")');
+
+      await db.update(
+        'alunos',
+        data,
+        where: 'cpf = ?',
+        whereArgs: [cpf],
+      );
+    } else {
+      data['created_at'] = pessoa['created_at'] ?? agora;
+      data['movimentacao'] = data['movimentacao'] ?? 'QUARTO';
+      print('🔍 [DB] ${data['nome']}: Aluno novo, movimentação = ${data['movimentacao']}');
+
+      await db.insert(
+        'alunos',
+        data,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
+    // Mantém `embarques.facial_cadastrada` sincronizado localmente
+    try {
+      await db.update(
+        'embarques',
+        {'facial_cadastrada': 1},
+        where: 'cpf = ?',
+        whereArgs: [cpf],
+      );
+    } catch (_) {}
+
+    onEmbeddingsChanged?.call();
   }
 
   /// Busca todas as pessoas com facial cadastrada
@@ -1596,6 +1720,7 @@ class DatabaseHelper {
       where: 'cpf = ?',
       whereArgs: [cpf],
     );
+    onEmbeddingsChanged?.call();
   }
 
   /// Conta total de pessoas com facial

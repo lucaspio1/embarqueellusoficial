@@ -45,9 +45,11 @@ class RetornoService {
   void updateLocalData(Passageiro passageiro, {String? novoRetorno}) {
     if (novoRetorno == null) return;
 
-    // Atualizar na lista de retorno
+    // Atualizar na lista de retorno buscando pelo CPF (ou nome caso CPF esteja vazio)
     final currentList = List<Passageiro>.from(passageirosRetorno.value);
-    final index = currentList.indexWhere((p) => p.nome == passageiro.nome);
+    final cpfAlvo = (passageiro.cpf ?? '').trim();
+    final index = currentList.indexWhere((p) =>
+        cpfAlvo.isNotEmpty ? (p.cpf ?? '').trim() == cpfAlvo : p.nome == passageiro.nome);
 
     if (index != -1) {
       Passageiro updatedPassageiro = currentList[index].copyWith(
@@ -57,10 +59,10 @@ class RetornoService {
       currentList[index] = updatedPassageiro;
       passageirosRetorno.value = currentList;
 
-      // âœ… IMPORTANTE: Atualizar tambÃ©m no DataService principal
+      // ✅ IMPORTANTE: Atualizar também no DataService principal
       DataService().updateRetorno(passageiro, novoRetorno);
 
-      print('ðŸ“Œ [RetornoService] Retorno atualizado: ${updatedPassageiro.nome} -> $novoRetorno');
+      print('📌 [RetornoService] Retorno atualizado: ${updatedPassageiro.nome} -> $novoRetorno');
     }
   }
 }

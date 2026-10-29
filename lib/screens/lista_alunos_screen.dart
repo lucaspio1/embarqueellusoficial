@@ -1,9 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/alunos_sync_service.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
-import 'package:embarqueellus/services/offline_sync_service.dart';
+import 'package:embarqueellus/services/firebase_service.dart';
 import 'package:embarqueellus/models/camera_mode.dart';
 import 'package:embarqueellus/models/face_camera_options.dart';
 import 'package:embarqueellus/models/face_camera_result.dart';
@@ -279,21 +278,7 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
-      // ✅ Salvar SEM setar movimentação (preserva a existente do Google Sheets)
-      await _db.upsertPessoaFacial({
-        'cpf': aluno['cpf'],
-        'nome': aluno['nome'],
-        'email': aluno['email'] ?? '',
-        'telefone': aluno['telefone'] ?? '',
-        'turma': aluno['turma'] ?? '',
-        'embedding': jsonEncode(embedding),
-        'facial_status': 'CADASTRADA',
-        // NÃO setar 'movimentacao' - deixa preservar a que já existe
-      });
-
-      print('✅ [CadastroFacial] Salvo na tabela alunos (preservando movimentação existente)');
-
-      await OfflineSyncService.instance.queueCadastroFacial(
+      await FirebaseService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
         nome: aluno['nome'],
         colegio: aluno['colegio'] ?? '',
@@ -306,12 +291,7 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
         fimViagem: aluno['fim_viagem'] ?? '',
       );
 
-      print('✅ [CadastroFacial] Embedding enfileirado para sincronização com aba Pessoas');
-
-      OfflineSyncService.instance.trySyncInBackground();
-      print('🔄 [CadastroFacial] Sincronização em background iniciada');
-
-      await _db.updateAlunoFacial(aluno['cpf'], 'CADASTRADA');
+      print('✅ [CadastroFacial] Salvo localmente e enfileirado para sincronização via API');
 
       setState(() => _processando = false);
 
@@ -355,7 +335,8 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
     final facial = aluno['facial'] ?? 'NAO';
     final temQr = aluno['tem_qr'] ?? 'NAO';
 
-    final hasFacial = facial.toString().toUpperCase() == 'CADASTRADA';
+    final hasFacial = aluno['facial_cadastrada'] == 1 ||
+        facial.toString().toUpperCase() == 'CADASTRADA';
     final hasQr = temQr.toString().toUpperCase() == 'SIM';
 
     return Card(

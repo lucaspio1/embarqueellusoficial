@@ -1,13 +1,11 @@
 // lib/screens/controle_alunos_screen.dart
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
-import 'package:embarqueellus/services/alunos_sync_service.dart';
-import 'package:embarqueellus/services/offline_sync_service.dart';
+import 'package:embarqueellus/services/firebase_service.dart';
 import 'package:embarqueellus/services/data_service.dart';
 import 'package:embarqueellus/models/camera_mode.dart';
 import 'package:embarqueellus/models/face_camera_options.dart';
@@ -24,7 +22,6 @@ class ControleAlunosScreen extends StatefulWidget {
 class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
   final _db = DatabaseHelper.instance;
   final _faceService = FaceRecognitionService.instance;
-  final _syncService = AlunosSyncService.instance;
   final TextEditingController _nomeController = TextEditingController();
 
   List<Map<String, dynamic>> _todosAlunos = [];
@@ -237,20 +234,20 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
 
       print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
 
-      await _db.upsertPessoaFacial({
-        'cpf': aluno['cpf'],
-        'nome': aluno['nome'],
-        'email': aluno['email'] ?? '',
-        'telefone': aluno['telefone'] ?? '',
-        'turma': aluno['turma'] ?? '',
-        'embedding': jsonEncode(embedding),
-        // ✅ CORREÇÃO: Remover facial_status (não existe no SQLite - facial_cadastrada é setado automaticamente)
-        // NÃO setar 'movimentacao' - preserva a existente do Google Sheets
-        'inicio_viagem': aluno['inicio_viagem'] ?? '',
-        'fim_viagem': aluno['fim_viagem'] ?? '',
-      });
+      await FirebaseService.instance.queueCadastroFacial(
+        cpf: aluno['cpf'],
+        nome: aluno['nome'],
+        colegio: aluno['colegio'] ?? '',
+        turma: aluno['turma'] ?? '',
+        email: aluno['email'] ?? '',
+        telefone: aluno['telefone'] ?? '',
+        embedding: embedding,
+        personId: aluno['cpf'],
+        inicioViagem: aluno['inicio_viagem'] ?? '',
+        fimViagem: aluno['fim_viagem'] ?? '',
+      );
 
-      print('✅ [CadastroFacial] Salvo na tabela alunos (preservando movimentação existente)');
+      print('✅ [CadastroFacial] Salvo localmente e enfileirado para sincronização via API');
 
       await Sentry.captureMessage(
         'Facial cadastrada com sucesso',
@@ -265,24 +262,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           });
         },
       );
-
-      await OfflineSyncService.instance.queueCadastroFacial(
-        cpf: aluno['cpf'],
-        nome: aluno['nome'],
-        colegio: aluno['colegio'] ?? '',
-        turma: aluno['turma'] ?? '',
-        email: aluno['email'] ?? '',
-        telefone: aluno['telefone'] ?? '',
-        embedding: embedding,
-        personId: aluno['cpf'],
-        inicioViagem: aluno['inicio_viagem'] ?? '',
-        fimViagem: aluno['fim_viagem'] ?? '',
-      );
-
-      print('✅ [CadastroFacial] Embedding enfileirado para sincronização com aba Pessoas');
-
-      OfflineSyncService.instance.trySyncInBackground();
-      print('🔄 [CadastroFacial] Sincronização em background iniciada');
 
       if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);
@@ -356,30 +335,31 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
         embeddings.add(emb);
       }
 
-      // Fazer média dos embeddings
-      final embedding = List<double>.filled(embeddings[0].length, 0.0);
+      // Fazer média dos embeddings e normalizar (L2) para manter norma unitária
+      final rawAvg = List<double>.filled(embeddings[0].length, 0.0);
       for (final emb in embeddings) {
         for (int i = 0; i < emb.length; i++) {
-          embedding[i] += emb[i] / embeddings.length;
+          rawAvg[i] += emb[i] / embeddings.length;
         }
       }
+      final embedding = _faceService.normalizeL2(rawAvg);
 
-      print('📤 [CadastroFacialAvançado] Embedding extraído de ${result.processedImages!.length} fotos: ${embedding.length} dimensões');
+      print('📤 [CadastroFacialAvançado] Embedding normalizado extraído de ${result.processedImages!.length} fotos: ${embedding.length} dimensões');
 
-      await _db.upsertPessoaFacial({
-        'cpf': aluno['cpf'],
-        'nome': aluno['nome'],
-        'email': aluno['email'] ?? '',
-        'telefone': aluno['telefone'] ?? '',
-        'turma': aluno['turma'] ?? '',
-        'embedding': jsonEncode(embedding),
-        // ✅ CORREÇÃO: Remover facial_status (não existe no SQLite - facial_cadastrada é setado automaticamente)
-        // NÃO setar 'movimentacao' - preserva a existente do Google Sheets
-        'inicio_viagem': aluno['inicio_viagem'] ?? '',
-        'fim_viagem': aluno['fim_viagem'] ?? '',
-      });
+      await FirebaseService.instance.queueCadastroFacial(
+        cpf: aluno['cpf'],
+        nome: aluno['nome'],
+        colegio: aluno['colegio'] ?? '',
+        turma: aluno['turma'] ?? '',
+        email: aluno['email'] ?? '',
+        telefone: aluno['telefone'] ?? '',
+        embedding: embedding,
+        personId: aluno['cpf'],
+        inicioViagem: aluno['inicio_viagem'] ?? '',
+        fimViagem: aluno['fim_viagem'] ?? '',
+      );
 
-      print('✅ [CadastroFacialAvançado] Salvo na tabela alunos (preservando movimentação existente)');
+      print('✅ [CadastroFacialAvançado] Salvo localmente e enfileirado para sincronização via API');
 
       await Sentry.captureMessage(
         'Facial avançada cadastrada com sucesso',
@@ -395,24 +375,6 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
           });
         },
       );
-
-      await OfflineSyncService.instance.queueCadastroFacial(
-        cpf: aluno['cpf'],
-        nome: aluno['nome'],
-        colegio: aluno['colegio'] ?? '',
-        turma: aluno['turma'] ?? '',
-        email: aluno['email'] ?? '',
-        telefone: aluno['telefone'] ?? '',
-        embedding: embedding,
-        personId: aluno['cpf'],
-        inicioViagem: aluno['inicio_viagem'] ?? '',
-        fimViagem: aluno['fim_viagem'] ?? '',
-      );
-
-      print('✅ [CadastroFacialAvançado] Embedding enfileirado para sincronização com aba Pessoas');
-
-      OfflineSyncService.instance.trySyncInBackground();
-      print('🔄 [CadastroFacialAvançado] Sincronização em background iniciada');
 
       if (Navigator.canPop(context)) Navigator.pop(context);
       setState(() => _processando = false);

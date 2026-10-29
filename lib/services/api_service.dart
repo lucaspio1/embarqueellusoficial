@@ -4,6 +4,18 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Exceção lançada quando o servidor responde explicitamente recusando a
+/// autenticação (401/403), diferenciando de falhas de rede/timeout.
+class AuthException implements Exception {
+  final int statusCode;
+  final String message;
+
+  AuthException(this.statusCode, this.message);
+
+  @override
+  String toString() => 'AuthException($statusCode): $message';
+}
+
 class ApiService {
   // Singleton pattern
   ApiService._privateConstructor();
@@ -188,13 +200,14 @@ class ApiService {
   /// Login OFFLINE bem-sucedido: guarda as credenciais só em memória para
   /// obter o token quando a internet voltar.
   void definirCredenciaisPendentes(String cpf, String senha) {
-    _cpfPendente = cpf;
+    _cpfPendente = cpf.replaceAll(RegExp(r'\D'), '');
     _senhaPendente = senha;
   }
 
   Future<Map<String, dynamic>> login(String cpf, String senha) async {
+    final cpfLimpo = cpf.replaceAll(RegExp(r'\D'), '');
     final response = await _request('POST', '/api/mobile/auth', body: {
-      'cpf': cpf,
+      'cpf': cpfLimpo,
       'senha': senha,
     });
 
@@ -211,10 +224,18 @@ class ApiService {
       }
       return data;
     } else {
-      if (response.statusCode == 401) {
+      if (response.statusCode == 401 || response.statusCode == 403) {
         // Senha mudou ou usuário removido: não insistir com essas credenciais
         _cpfPendente = null;
         _senhaPendente = null;
+        String serverMsg = 'Credenciais inválidas';
+        try {
+          final parsed = jsonDecode(response.body);
+          if (parsed is Map && parsed['error'] != null) {
+            serverMsg = parsed['error'].toString();
+          }
+        } catch (_) {}
+        throw AuthException(response.statusCode, serverMsg);
       }
       throw Exception(
           'Erro ao fazer login: ${response.statusCode} - ${response.body}');
