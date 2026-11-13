@@ -37,15 +37,15 @@ extension CameraModeExtension on CameraMode {
 
   /// Se deve fazer múltiplas capturas
   bool get isMultiCapture {
-    return this == CameraMode.enrollmentAdvanced;
+    return this == CameraMode.enrollment || this == CameraMode.enrollmentAdvanced;
   }
 
   /// Número de fotos a capturar
   int get captureCount {
     switch (this) {
-      case CameraMode.enrollment:
       case CameraMode.recognition:
         return 1;
+      case CameraMode.enrollment:
       case CameraMode.enrollmentAdvanced:
         return 3;
     }

@@ -37,14 +37,21 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
 
   bool _isInitializing = true;
   bool _isProcessing = false;
+  bool _isCapturingBurst = false;
   bool _isSwitchingCamera = false;
   String? _errorMessage;
   String _statusMessage = '';
 
-  // Para modo avançado
+  // Para modo de cadastro em rajada (1 toque -> N fotos)
   int _currentCaptureIndex = 0;
   final List<String> _capturedImagePaths = [];
   final List<img.Image> _processedImages = [];
+
+  int get _totalCaptures =>
+      widget.options.captureCount ?? widget.mode.captureCount;
+
+  bool get _isBurstEnrollment =>
+      widget.mode != CameraMode.recognition && _totalCaptures > 1;
 
   @override
   void initState() {
@@ -223,6 +230,12 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
 
     if (_isProcessing) return;
 
+    // Modo de cadastro em rajada: 1 único toque dispara as 3 fotos sequencialmente
+    if (_isBurstEnrollment) {
+      await _captureBurstEnrollment();
+      return;
+    }
+
     setState(() {
       _isProcessing = true;
       _statusMessage = 'Capturando foto...';
@@ -239,7 +252,7 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
             'path': image.path,
             'mode': widget.mode.name,
             'capture_index': _currentCaptureIndex + 1,
-            'total_captures': widget.mode.captureCount,
+            'total_captures': _totalCaptures,
           });
         },
       );
@@ -265,6 +278,156 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
       }
 
       setState(() => _isProcessing = false);
+    }
+  }
+
+  /// Dispara automaticamente `N` fotos em sequência com 1 único toque no botão,
+  /// atualizando o contador na tela (`1/3 fotos`, `2/3 fotos`, `3/3 fotos`) e
+  /// processando os recortes faciais em seguida.
+  Future<void> _captureBurstEnrollment() async {
+    final total = _totalCaptures;
+
+    setState(() {
+      _isProcessing = true;
+      _isCapturingBurst = true;
+      _currentCaptureIndex = 0;
+      _capturedImagePaths.clear();
+      _processedImages.clear();
+      _statusMessage = 'Mantenha firme... Capturando 1/$total fotos';
+    });
+
+    try {
+      // 1. Disparar as N fotos sequencialmente mantendo o preview visível
+      for (int i = 0; i < total; i++) {
+        if (!mounted ||
+            _cameraController == null ||
+            !_cameraController!.value.isInitialized) {
+          break;
+        }
+
+        if (i > 0) {
+          setState(() {
+            _statusMessage = 'Mantenha firme... Capturando ${i + 1}/$total fotos';
+          });
+        }
+
+        final XFile shot = await _cameraController!.takePicture();
+        _capturedImagePaths.add(shot.path);
+
+        if (mounted) {
+          setState(() {
+            _currentCaptureIndex = i + 1;
+            _statusMessage = '${i + 1}/$total fotos capturadas';
+          });
+        }
+
+        if (i < total - 1) {
+          await Future.delayed(widget.options.burstDelay);
+        }
+      }
+
+      // Breve pausa para o monitor visualizar "3/3 fotos" antes da tela de processamento
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      if (!mounted) return;
+      setState(() {
+        _isCapturingBurst = false;
+        _statusMessage = 'Processando $_currentCaptureIndex/$total fotos...';
+      });
+
+      // 2. Detectar e recortar cada foto nativamente (garantindo limpeza dos temporários)
+      try {
+        for (int i = 0; i < _capturedImagePaths.length; i++) {
+          final path = _capturedImagePaths[i];
+          if (mounted) {
+            setState(() {
+              _statusMessage = 'Validando rosto (${i + 1}/$total fotos)...';
+            });
+          }
+
+          try {
+            final nativeResult =
+                await NativeFaceService.instance.detectAndCropFace(path);
+            final decoded = img.decodeImage(nativeResult.croppedFaceBytes);
+            if (decoded != null) {
+              _processedImages.add(decoded);
+            }
+          } catch (shotError) {
+            print(
+              '⚠️ [Rajada] Foto ${i + 1}/$total sem rosto válido detectado: $shotError',
+            );
+          } finally {
+            await _deleteTempFile(path);
+          }
+        }
+      } finally {
+        for (final path in _capturedImagePaths) {
+          await _deleteTempFile(path);
+        }
+      }
+
+      if (_processedImages.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '❌ Nenhum rosto detectado nas $total fotos. Posicione o rosto no guia e tente novamente.',
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          setState(() {
+            _isProcessing = false;
+            _isCapturingBurst = false;
+            _currentCaptureIndex = 0;
+            _statusMessage = '';
+          });
+        }
+        return;
+      }
+
+      await Sentry.captureMessage(
+        '✅ Rajada de cadastro concluída: ${_processedImages.length}/$total fotos válidas',
+        level: SentryLevel.info,
+      );
+
+      final result = FaceCameraResult.enrollment(
+        imagePaths: List<String>.from(_capturedImagePaths),
+        processedImages: List<img.Image>.from(_processedImages),
+      );
+
+      if (mounted) {
+        Navigator.pop(context, result);
+      }
+    } catch (e, stackTrace) {
+      for (final path in _capturedImagePaths) {
+        await _deleteTempFile(path);
+      }
+
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+        hint: Hint.withMap({
+          'context': 'Erro ao capturar rajada de fotos faciais',
+          'mode': widget.mode.name,
+        }),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erro na captura em rajada: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isProcessing = false;
+          _isCapturingBurst = false;
+          _currentCaptureIndex = 0;
+          _statusMessage = '';
+        });
+      }
     }
   }
 
@@ -523,19 +686,26 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
         // Controles inferiores
         _buildBottomControls(),
 
-        // Loading overlay
-        if (_isProcessing) _buildLoadingOverlay(),
+        // Loading overlay (apenas após concluir os disparos da rajada)
+        if (_isProcessing && !_isCapturingBurst) _buildLoadingOverlay(),
       ],
     );
   }
 
   Widget _buildFaceGuide() {
+    final borderColor = _isCapturingBurst
+        ? const Color(0xFF4CAF50)
+        : Colors.white.withOpacity(0.5);
     return Center(
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         width: 250,
         height: 300,
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+          border: Border.all(
+            color: borderColor,
+            width: _isCapturingBurst ? 3.5 : 2,
+          ),
           borderRadius: BorderRadius.circular(150),
         ),
       ),
@@ -543,6 +713,10 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
   }
 
   Widget _buildTopOverlay() {
+    final total = _totalCaptures;
+    final showBurstCounter =
+        widget.mode.isMultiCapture && widget.options.showCaptureCounter && total > 1;
+
     return Positioned(
       top: 0,
       left: 0,
@@ -554,7 +728,7 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.black.withOpacity(0.7),
+              Colors.black.withOpacity(0.75),
               Colors.transparent,
             ],
           ),
@@ -567,11 +741,26 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
                 style: const TextStyle(color: Colors.white, fontSize: 16),
                 textAlign: TextAlign.center,
               ),
-            if (widget.mode.isMultiCapture && widget.options.showCaptureCounter)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
+            if (showBurstCounter) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _currentCaptureIndex > 0
+                      ? const Color(0xFF4C643C)
+                      : Colors.black54,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: _isCapturingBurst
+                        ? const Color(0xFF81C784)
+                        : Colors.white38,
+                    width: 1.5,
+                  ),
+                ),
                 child: Text(
-                  'Captura ${_currentCaptureIndex + 1}/${widget.mode.captureCount}',
+                  _currentCaptureIndex == 0 && !_isCapturingBurst
+                      ? '📸 0/$total fotos (1 toque = $total disparos)'
+                      : '📸 $_currentCaptureIndex/$total fotos',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -579,12 +768,74 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(total, (index) {
+                  final stepNumber = index + 1;
+                  final isTaken = _currentCaptureIndex >= stepNumber;
+                  final isCurrent = _isCapturingBurst &&
+                      _currentCaptureIndex + 1 == stepNumber;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isTaken
+                            ? const Color(0xFF4CAF50)
+                            : (isCurrent
+                                ? Colors.amber.shade700
+                                : Colors.white.withOpacity(0.18)),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isTaken || isCurrent
+                              ? Colors.white
+                              : Colors.white38,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isTaken
+                                ? Icons.check_circle
+                                : (isCurrent
+                                    ? Icons.camera_alt
+                                    : Icons.radio_button_unchecked),
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$stepNumber/$total',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ],
             if (_statusMessage.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.only(top: 10),
                 child: Text(
                   _statusMessage,
-                  style: const TextStyle(color: Colors.yellow, fontSize: 14),
+                  style: const TextStyle(
+                    color: Colors.yellowAccent,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
           ],
@@ -594,6 +845,7 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
   }
 
   Widget _buildBottomControls() {
+    final total = _totalCaptures;
     return Positioned(
       bottom: 0,
       left: 0,
@@ -617,18 +869,30 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
             GestureDetector(
               onTap: _isProcessing ? null : _capturePhoto,
               child: Container(
-                width: 70,
-                height: 70,
+                width: 74,
+                height: 74,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: _isProcessing ? Colors.grey : Colors.white,
+                  color: _isCapturingBurst
+                      ? const Color(0xFF4C643C)
+                      : (_isProcessing ? Colors.grey : Colors.white),
                   border: Border.all(color: Colors.white, width: 3),
                 ),
-                child: Icon(
-                  Icons.camera_alt,
-                  color: _isProcessing ? Colors.white : Colors.black,
-                  size: 32,
-                ),
+                alignment: Alignment.center,
+                child: _isCapturingBurst
+                    ? Text(
+                        '$_currentCaptureIndex/$total',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : Icon(
+                        Icons.camera_alt,
+                        color: _isProcessing ? Colors.white : Colors.black,
+                        size: 32,
+                      ),
               ),
             ),
           ],

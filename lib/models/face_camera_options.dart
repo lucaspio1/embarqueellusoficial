@@ -26,6 +26,12 @@ class FaceCameraOptions {
   /// Mostrar overlay de guia facial
   final bool showFaceGuide;
 
+  /// Número de fotos no modo de cadastro em rajada (padrão: definido pelo CameraMode, 3 fotos)
+  final int? captureCount;
+
+  /// Intervalo entre disparos automáticos na rajada (1 toque → N fotos)
+  final Duration burstDelay;
+
   const FaceCameraOptions({
     this.useFrontCamera = true,
     this.title,
@@ -35,6 +41,8 @@ class FaceCameraOptions {
     this.showCaptureCounter = true,
     this.autoCapturDelay,
     this.showFaceGuide = true,
+    this.captureCount,
+    this.burstDelay = const Duration(milliseconds: 350),
   });
 
   FaceCameraOptions copyWith({
@@ -46,6 +54,8 @@ class FaceCameraOptions {
     bool? showCaptureCounter,
     Duration? autoCapturDelay,
     bool? showFaceGuide,
+    int? captureCount,
+    Duration? burstDelay,
   }) {
     return FaceCameraOptions(
       useFrontCamera: useFrontCamera ?? this.useFrontCamera,
@@ -56,6 +66,8 @@ class FaceCameraOptions {
       showCaptureCounter: showCaptureCounter ?? this.showCaptureCounter,
       autoCapturDelay: autoCapturDelay ?? this.autoCapturDelay,
       showFaceGuide: showFaceGuide ?? this.showFaceGuide,
+      captureCount: captureCount ?? this.captureCount,
+      burstDelay: burstDelay ?? this.burstDelay,
     );
   }
 }

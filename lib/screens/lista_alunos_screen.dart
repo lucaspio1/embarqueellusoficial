@@ -273,10 +273,25 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
         return;
       }
 
-      // ✅ CORREÇÃO: Extrair embedding da imagem processada (não vem pronto)
-      final embedding = await _faceService.extractEmbedding(result.firstProcessedImage!);
+      setState(() => _processando = true);
+      final faces = (result.processedImages != null &&
+              result.processedImages!.isNotEmpty)
+          ? result.processedImages!
+          : [result.firstProcessedImage!];
 
-      print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
+      final embeddings = <List<double>>[];
+      for (final face in faces) {
+        embeddings.add(await _faceService.extractEmbedding(face));
+      }
+      final rawAvg = List<double>.filled(embeddings[0].length, 0.0);
+      for (final emb in embeddings) {
+        for (int i = 0; i < emb.length; i++) {
+          rawAvg[i] += emb[i] / embeddings.length;
+        }
+      }
+      final embedding = _faceService.normalizeL2(rawAvg);
+
+      print('📤 [CadastroFacial] Embedding extraído (${faces.length} foto(s)): ${embedding.length} dimensões');
 
       await FirebaseService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
@@ -532,66 +547,27 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
             if (telefone.isNotEmpty)
               _buildInfoRow(Icons.phone, 'Telefone', telefone),
 
-            // Botão de cadastro facial (com opção Simples ou Avançado 3 fotos)
+            // Botão de cadastro facial em rajada (1 toque → 3 fotos automáticas)
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: PopupMenuButton<String>(
-                enabled: !_processando,
-                onSelected: (value) {
-                  if (value == 'simples') {
-                    _cadastrarFacial(aluno);
-                  } else if (value == 'avancado') {
-                    _cadastrarFacialAvancado(aluno);
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'simples',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.face, color: Colors.grey),
-                        const SizedBox(width: 8),
-                        Text(hasFacial ? 'Refazer Simples' : 'Cadastro Simples'),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'avancado',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.verified_user, color: Colors.green),
-                        const SizedBox(width: 8),
-                        Text(
-                          hasFacial
-                              ? 'Refazer Avançado (3 fotos)'
-                              : 'Cadastro Avançado (3 fotos)',
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: hasFacial ? Colors.orange : const Color(0xFF4C643C),
+              child: ElevatedButton.icon(
+                onPressed: _processando
+                    ? null
+                    : () => _cadastrarFacialAvancado(aluno),
+                icon: const Icon(Icons.face_retouching_natural, size: 20),
+                label: Text(
+                  hasFacial
+                      ? 'Refazer Facial (3 fotos)'
+                      : 'Cadastrar Facial (3 fotos)',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      hasFacial ? Colors.orange : const Color(0xFF4C643C),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.face_retouching_natural, size: 20, color: Colors.white),
-                      const SizedBox(width: 8),
-                      Text(
-                        hasFacial ? 'Refazer Facial' : 'Cadastrar Facial',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.arrow_drop_down, color: Colors.white),
-                    ],
                   ),
                 ),
               ),

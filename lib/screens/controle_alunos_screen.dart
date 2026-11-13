@@ -227,12 +227,27 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
       if (result == null || !result.success) return;
 
       setState(() => _processando = true);
-      _mostrarProgresso('Extraindo características faciais...');
+      final faces = (result.processedImages != null &&
+              result.processedImages!.isNotEmpty)
+          ? result.processedImages!
+          : [result.firstProcessedImage!];
+      _mostrarProgresso(
+        'Extraindo características (${faces.length} foto(s))...',
+      );
 
-      // Extrair embedding da imagem processada
-      final embedding = await _faceService.extractEmbedding(result.firstProcessedImage!);
+      final embeddings = <List<double>>[];
+      for (final face in faces) {
+        embeddings.add(await _faceService.extractEmbedding(face));
+      }
+      final rawAvg = List<double>.filled(embeddings[0].length, 0.0);
+      for (final emb in embeddings) {
+        for (int i = 0; i < emb.length; i++) {
+          rawAvg[i] += emb[i] / embeddings.length;
+        }
+      }
+      final embedding = _faceService.normalizeL2(rawAvg);
 
-      print('📤 [CadastroFacial] Embedding extraído: ${embedding.length} dimensões');
+      print('📤 [CadastroFacial] Embedding extraído (${faces.length} foto(s)): ${embedding.length} dimensões');
 
       await FirebaseService.instance.queueCadastroFacial(
         cpf: aluno['cpf'],
@@ -578,72 +593,18 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
                             ),
                         ],
                       ),
-                      trailing: PopupMenuButton<String>(
-                        enabled: !_processando,
-                        onSelected: (value) {
-                          if (value == 'simples') {
-                            _cadastrarFacial(aluno);
-                          } else if (value == 'avancado') {
-                            _cadastrarFacialAvancado(aluno);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'simples',
-                            child: Row(
-                              children: [
-                                Icon(Icons.face, color: Colors.grey),
-                                SizedBox(width: 8),
-                                Text(temFacial
-                                    ? 'Refazer Simples'
-                                    : 'Cadastro Simples'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'avancado',
-                            child: Row(
-                              children: [
-                                Icon(Icons.verified_user,
-                                    color: Colors.green),
-                                SizedBox(width: 8),
-                                Text(temFacial
-                                    ? 'Refazer Avançado'
-                                    : 'Cadastro Avançado (3 fotos)'),
-                              ],
-                            ),
-                          ),
-                        ],
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: temFacial
-                                ? Colors.orange
-                                : const Color(0xFF4C643C),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                temFacial ? 'Refazer' : 'Cadastrar',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              const Icon(
-                                Icons.arrow_drop_down,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ],
-                          ),
+                      trailing: ElevatedButton.icon(
+                        onPressed: _processando
+                            ? null
+                            : () => _cadastrarFacialAvancado(aluno),
+                        icon: const Icon(Icons.camera_alt, size: 18),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: temFacial
+                              ? Colors.orange
+                              : const Color(0xFF4C643C),
+                          foregroundColor: Colors.white,
                         ),
+                        label: Text(temFacial ? 'Refazer' : 'Cadastrar'),
                       ),
                     ),
                   );
