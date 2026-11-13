@@ -62,7 +62,7 @@ embarqueellusoficial/
 │   ├── services/             # Serviços de autenticação, API, sincronização e reconhecimento facial
 │   ├── widgets/              # Componentes reutilizáveis (leitor QR, ícone de status de sync)
 │   └── main.dart             # Ponto de entrada e inicialização de serviços
-└── pubspec.yaml              # Dependências e metadados da versão (5.2.1)
+└── pubspec.yaml              # Dependências e metadados da versão (5.3.0)
 ```
 
 ---
@@ -103,6 +103,7 @@ embarqueellusoficial/
 
 ## Histórico Recente de Versões
 
+- **v5.3.0:** Cadastro facial em rajada com 1 toque (3 fotos automáticas com contador `1/3, 2/3, 3/3`), configurações remotas offline-first controladas pelo painel web, lembrete de atualização não bloqueante, blindagem do cache de embeddings e proteção da fila `sync_queue`.
 - **v5.2.1:** 14 correções de produção (sincronização automática ao retomar o app, proteção de pendências locais no SQLite v13, validação de embeddings faciais, melhorias no ciclo de vida da câmera/QR Code e refinamento do fallback de login offline).
 - **v5.2.0:** Adição da tela **Meu Perfil**, alteração de senha pelo aplicativo e exigência de troca de senha no primeiro login.
 - **v5.1.0:** Adoção do ciclo de vida `UIScene` para compatibilidade com o SDK do iOS 27, configuração exclusiva para iPhone e revisão das descrições de privacidade no `Info.plist`.

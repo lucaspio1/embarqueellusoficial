@@ -17,7 +17,7 @@ class AppConfig {
   /// Versão atual instalada do aplicativo (sincronizada com pubspec.yaml)
   static const String currentAppVersion = String.fromEnvironment(
     'FLUTTER_BUILD_NAME',
-    defaultValue: '5.2.1',
+    defaultValue: '5.3.0',
   );
 
   /// Notificador disparado sempre que a configuração remota é atualizada
