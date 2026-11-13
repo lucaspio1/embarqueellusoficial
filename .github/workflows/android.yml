@@ -48,6 +48,14 @@ concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Versão do Flutter fixada. O Flutter 3.50 (stable desde 12/11/2026) exige
+  # AGP 9.1.1+, Gradle 9.3.1+ e Kotlin 2.4.10+; o projeto está em AGP 8.11.1 /
+  # Gradle 8.14.3 / Kotlin 2.2.20 e quebra com
+  # "NoSuchMethodError ... ApplicationExtension.getDefaultConfig()".
+  # Só suba esta versão depois de migrar a pasta android/ para o AGP 9.
+  FLUTTER_VERSION: '3.47.9'
+
 jobs:
   analisar:
     if: github.event_name == 'pull_request'
@@ -58,6 +66,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       - run: flutter pub get
       - name: flutter analyze
@@ -81,6 +90,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Conferir secrets
@@ -155,13 +165,13 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          flutter build apk --release --android-skip-build-dependency-validation --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} 2>&1 | tee build-apk.log
+          flutter build apk --release --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} 2>&1 | tee build-apk.log
 
       - name: Build AAB (Google Play)
         shell: bash
         run: |
           set -o pipefail
-          flutter build appbundle --release --android-skip-build-dependency-validation --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} 2>&1 | tee build-aab.log
+          flutter build appbundle --release --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} 2>&1 | tee build-aab.log
 
       # Mostra o motivo da falha no resumo da execução (sem precisar abrir o log)
       - name: Resumo do erro
