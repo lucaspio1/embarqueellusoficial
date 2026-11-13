@@ -9,6 +9,7 @@ import 'package:embarqueellus/models/face_camera_options.dart';
 import 'package:embarqueellus/models/face_camera_result.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
 import 'package:embarqueellus/services/native_face_service.dart';
+import 'package:embarqueellus/config/app_config.dart';
 
 /// Tela unificada de câmera facial
 ///
@@ -63,14 +64,16 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
   Future<void> _initializeServices() async {
     try {
       await FaceRecognitionService.instance.init();
-      await Sentry.captureMessage(
-        '✅ Serviços de reconhecimento facial inicializados',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setTag('screen', 'unified_face_camera');
-          scope.setTag('mode', widget.mode.name);
-        },
-      );
+      if (AppConfig.instance.sentryFacialVerboseLogs) {
+        await Sentry.captureMessage(
+          '✅ Serviços de reconhecimento facial inicializados',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('screen', 'unified_face_camera');
+            scope.setTag('mode', widget.mode.name);
+          },
+        );
+      }
     } catch (e, stackTrace) {
       await Sentry.captureException(
         e,
@@ -112,18 +115,20 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
 
       await _setupCamera(_cameras[_currentCameraIndex]);
 
-      await Sentry.captureMessage(
-        '📱 Câmera inicializada com sucesso',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setTag('platform', Platform.isIOS ? 'iOS' : 'Android');
-          scope.setContexts('camera_info', {
-            'total_cameras': _cameras.length,
-            'selected_camera': _cameras[_currentCameraIndex].name,
-            'lens_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
-          });
-        },
-      );
+      if (AppConfig.instance.sentryFacialVerboseLogs) {
+        await Sentry.captureMessage(
+          '📱 Câmera inicializada com sucesso',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('platform', Platform.isIOS ? 'iOS' : 'Android');
+            scope.setContexts('camera_info', {
+              'total_cameras': _cameras.length,
+              'selected_camera': _cameras[_currentCameraIndex].name,
+              'lens_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
+            });
+          },
+        );
+      }
     } catch (e, stackTrace) {
       await Sentry.captureException(
         e,
@@ -174,17 +179,19 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
 
       await _setupCamera(_cameras[_currentCameraIndex]);
 
-      await Sentry.captureMessage(
-        '🔄 Câmera trocada',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setContexts('camera_switch', {
-            'previous_camera': _cameras[previousIndex].name,
-            'new_camera': _cameras[_currentCameraIndex].name,
-            'lens_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
-          });
-        },
-      );
+      if (AppConfig.instance.sentryFacialVerboseLogs) {
+        await Sentry.captureMessage(
+          '🔄 Câmera trocada',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setContexts('camera_switch', {
+              'previous_camera': _cameras[previousIndex].name,
+              'new_camera': _cameras[_currentCameraIndex].name,
+              'lens_direction': _cameras[_currentCameraIndex].lensDirection.toString(),
+            });
+          },
+        );
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -244,18 +251,20 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
     try {
       final XFile image = await _cameraController!.takePicture();
 
-      await Sentry.captureMessage(
-        '📸 Foto capturada',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setContexts('capture', {
-            'path': image.path,
-            'mode': widget.mode.name,
-            'capture_index': _currentCaptureIndex + 1,
-            'total_captures': _totalCaptures,
-          });
-        },
-      );
+      if (AppConfig.instance.sentryFacialVerboseLogs) {
+        await Sentry.captureMessage(
+          '📸 Foto capturada',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setContexts('capture', {
+              'path': image.path,
+              'mode': widget.mode.name,
+              'capture_index': _currentCaptureIndex + 1,
+              'total_captures': _totalCaptures,
+            });
+          },
+        );
+      }
 
       await _processCapture(image.path);
     } catch (e, stackTrace) {
@@ -454,19 +463,21 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
         await _deleteTempFile(imagePath);
       }
 
-      await Sentry.captureMessage(
-        '✅ Face detectada e processada nativamente',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setTag('mode', widget.mode.name);
-          scope.setTag('capture_index', '${_currentCaptureIndex + 1}');
-          scope.setContexts('native_result', {
-            'bytes_size': nativeResult.croppedFaceBytes.length,
-            'bbox_width': nativeResult.boundingBox.width.toInt(),
-            'bbox_height': nativeResult.boundingBox.height.toInt(),
-          });
-        },
-      );
+      if (AppConfig.instance.sentryFacialVerboseLogs) {
+        await Sentry.captureMessage(
+          '✅ Face detectada e processada nativamente',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setTag('mode', widget.mode.name);
+            scope.setTag('capture_index', '${_currentCaptureIndex + 1}');
+            scope.setContexts('native_result', {
+              'bytes_size': nativeResult.croppedFaceBytes.length,
+              'bbox_width': nativeResult.boundingBox.width.toInt(),
+              'bbox_height': nativeResult.boundingBox.height.toInt(),
+            });
+          },
+        );
+      }
 
       // 2. Converter bytes para img.Image (necessário para FaceRecognitionService)
       setState(() => _statusMessage = 'Processando imagem...');
@@ -483,18 +494,20 @@ class _UnifiedFaceCameraScreenState extends State<UnifiedFaceCameraScreen> {
         final recognitionResult = await FaceRecognitionService.instance.recognize(decodedImage);
 
         if (recognitionResult != null) {
-          await Sentry.captureMessage(
-            '✅ Reconhecimento bem-sucedido',
-            level: SentryLevel.info,
-            withScope: (scope) {
-              scope.setContexts('recognition', {
-                'person_name': recognitionResult['nome'],
-                'person_cpf': recognitionResult['cpf'],
-                'confidence': recognitionResult['similarity_score'],
-                'distance': recognitionResult['distance_l2'],
-              });
-            },
-          );
+          if (AppConfig.instance.sentryFacialVerboseLogs) {
+            await Sentry.captureMessage(
+              '✅ Reconhecimento bem-sucedido',
+              level: SentryLevel.info,
+              withScope: (scope) {
+                scope.setContexts('recognition', {
+                  'person_name': recognitionResult['nome'],
+                  'person_cpf': recognitionResult['cpf'],
+                  'confidence': recognitionResult['similarity_score'],
+                  'distance': recognitionResult['distance_l2'],
+                });
+              },
+            );
+          }
 
           final result = FaceCameraResult.recognition(
             recognizedPerson: recognitionResult,

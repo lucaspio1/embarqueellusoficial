@@ -12,7 +12,7 @@ Desenvolvido em **Flutter** (Android e iOS) com arquitetura **offline-first**, o
   - Carregamento de viagens e listas de passageiros por leitura de QR Code.
   - Marcação de embarque e retorno por ônibus, com atualização entre monitores e o painel web administrativo.
 - **Controle de Quartos e Movimentação com Reconhecimento Facial**
-  - Cadastro e identificação facial on-device usando **Google ML Kit** (detecção facial) + **MobileFaceNet / ArcFace (`tflite_flutter`)** para extração de embeddings de 192 dimensões.
+  - Cadastro e identificação facial on-device usando **Google ML Kit** (detecção facial) + **MobileFaceNet / ArcFace (`tflite_flutter`)** para extração de embeddings de 512 dimensões.
   - Registro ágil de entrada e saída de quartos e consulta de alunos por local/quarto.
 - **Operação Offline-First e Sincronização Inteligente**
   - Persistência local em **SQLite** (schema v13) com fila transacional de operações pendentes (`sync_queue`).
@@ -26,7 +26,7 @@ Desenvolvido em **Flutter** (Android e iOS) com arquitetura **offline-first**, o
 
 ## Privacidade e Segurança
 
-- **Nenhuma foto é salva ou enviada:** durante o cadastro ou reconhecimento facial, a imagem capturada pela câmera é processada exclusivamente em memória para gerar um vetor numérico (*embedding* facial de 192 dimensões), a partir do qual não é possível reconstruir a imagem original, sendo descartada imediatamente após o cálculo.
+- **Nenhuma foto é salva ou enviada:** durante o cadastro ou reconhecimento facial, a imagem capturada pela câmera é processada exclusivamente em memória para gerar um vetor numérico (*embedding* facial de 512 dimensões), a partir do qual não é possível reconstruir a imagem original, sendo descartada imediatamente após o cálculo.
 - **Acesso restrito:** uso exclusivo por colaboradores/monitores da Ellus com contas gerenciadas pelo painel administrativo web. No iOS, o app é distribuído como **App Não Listado (Unlisted App Distribution)** exclusivamente para iPhone.
 
 ---

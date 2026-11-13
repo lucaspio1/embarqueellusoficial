@@ -39,30 +39,30 @@ Future<void> main() async {
     return true;
   };
 
+  WidgetsFlutterBinding.ensureInitialized();
+  await AppConfig.instance.init();
+
   await SentryFlutter.init(
     (options) {
       options.dsn = 'https://16c773f79c6fc2a3a4951733ce3570ed@o4504103203045376.ingest.us.sentry.io/4510326779740160';
-      options.tracesSampleRate = 1.0;
+      options.tracesSampleRate = AppConfig.instance.sentryTracesSampleRate;
 
-      // ✅ CRÍTICO: SEMPRE habilitar debug para diagnóstico (remover depois que funcionar)
-      options.debug = true;
+      // ✅ Em produção desativa o debug verboso do SDK do Sentry
+      options.debug = !kReleaseMode;
 
       // ✅ Environment correto: production em release, development em debug
       options.environment = kReleaseMode ? 'production' : 'development';
 
       // ✅ Configurações extras para iOS
       options.enableAutoSessionTracking = true;
-      // options.attachScreenshot = true;  // Disponível em versões mais recentes
-      // options.screenshotQuality = SentryScreenshotQuality.low;
-      // options.attachViewHierarchy = true;  // Disponível em versões mais recentes
     },
     appRunner: () async {
-      // ✅ TESTE IMEDIATO: Enviar evento de teste
-      await Sentry.captureMessage(
-        '✅ App Flutter iniciado com sucesso! Platform: ${Platform.isIOS ? "iOS" : "Android"}',
-        level: SentryLevel.info,
-      );
-      WidgetsFlutterBinding.ensureInitialized();
+      if (AppConfig.instance.sentryFacialVerboseLogs) {
+        await Sentry.captureMessage(
+          '✅ App Flutter iniciado com sucesso! Platform: ${Platform.isIOS ? "iOS" : "Android"}',
+          level: SentryLevel.info,
+        );
+      }
 
       // Carregar arquivo .env
       try {

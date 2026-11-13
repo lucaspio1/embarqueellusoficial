@@ -68,16 +68,19 @@ class NativeFaceService {
   /// - Erro no processamento nativo
   Future<NativeFaceResult> detectAndCropFace(String imagePath) async {
     try {
-      await Sentry.captureMessage(
-        '🔧 NATIVE_FACE: Iniciando detecção nativa',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setContexts('native_detection_start', {
-            'image_path': imagePath,
-            'channel': _channelName,
-          });
-        },
-      );
+      final verboseSentry = AppConfig.instance.sentryFacialVerboseLogs;
+      if (verboseSentry) {
+        await Sentry.captureMessage(
+          '🔧 NATIVE_FACE: Iniciando detecção nativa',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setContexts('native_detection_start', {
+              'image_path': imagePath,
+              'channel': _channelName,
+            });
+          },
+        );
+      }
 
       // Chamar o método nativo passando parâmetros configuráveis do AppConfig
       final Map<dynamic, dynamic> result = await _channel.invokeMethod(
@@ -101,17 +104,19 @@ class NativeFaceService {
         (bbox['height'] as num).toDouble(),
       );
 
-      await Sentry.captureMessage(
-        '✅ NATIVE_FACE: Detecção nativa concluída',
-        level: SentryLevel.info,
-        withScope: (scope) {
-          scope.setContexts('native_detection_complete', {
-            'cropped_bytes_size': croppedFaceBytes.length,
-            'bbox_width': boundingBox.width.toInt(),
-            'bbox_height': boundingBox.height.toInt(),
-          });
-        },
-      );
+      if (verboseSentry) {
+        await Sentry.captureMessage(
+          '✅ NATIVE_FACE: Detecção nativa concluída',
+          level: SentryLevel.info,
+          withScope: (scope) {
+            scope.setContexts('native_detection_complete', {
+              'cropped_bytes_size': croppedFaceBytes.length,
+              'bbox_width': boundingBox.width.toInt(),
+              'bbox_height': boundingBox.height.toInt(),
+            });
+          },
+        );
+      }
 
       return NativeFaceResult(
         croppedFaceBytes: croppedFaceBytes,

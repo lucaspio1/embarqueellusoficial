@@ -290,22 +290,24 @@ class FaceRecognitionService {
       final double normalizedConfidence = confidence.clamp(0.0, 1.0);
 
       if (bestDistance <= threshold && best != null) {
-        await Sentry.captureMessage(
-          'Reconhecimento facial bem-sucedido',
-          level: SentryLevel.info,
-          withScope: (scope) {
-            scope.setTag('facial_result', 'success');
-            scope.setContexts('recognition', {
-              'student_name': best!['nome'],
-              'student_cpf': best['cpf'],
-              'distance_l2': bestDistance,
-              'confidence': normalizedConfidence,
-              'threshold': threshold,
-              'total_students_checked': _embeddingsCache.length,
-              'cache_enabled': true,
-            });
-          },
-        );
+        if (AppConfig.instance.sentryFacialVerboseLogs) {
+          await Sentry.captureMessage(
+            'Reconhecimento facial bem-sucedido',
+            level: SentryLevel.info,
+            withScope: (scope) {
+              scope.setTag('facial_result', 'success');
+              scope.setContexts('recognition', {
+                'student_name': best!['nome'],
+                'student_cpf': best['cpf'],
+                'distance_l2': bestDistance,
+                'confidence': normalizedConfidence,
+                'threshold': threshold,
+                'total_students_checked': _embeddingsCache.length,
+                'cache_enabled': true,
+              });
+            },
+          );
+        }
         return {
           ...best,
           'similarity_score': normalizedConfidence,

@@ -78,10 +78,13 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
 
   Future<void> _iniciarReconhecimento() async {
     try {
-      await Sentry.captureMessage(
-        '🎯 Iniciando reconhecimento facial - Abrindo câmera unificada',
-        level: SentryLevel.info,
-      );
+      final verboseSentry = AppConfig.instance.sentryFacialVerboseLogs;
+      if (verboseSentry) {
+        await Sentry.captureMessage(
+          '🎯 Iniciando reconhecimento facial - Abrindo câmera unificada',
+          level: SentryLevel.info,
+        );
+      }
 
       // Usa tela unificada que já faz detecção + reconhecimento
       final result = await _abrirCameraTela(
@@ -89,10 +92,12 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       );
 
       if (result == null || !result.success) {
-        await Sentry.captureMessage(
-          '⚠️ Usuário CANCELOU ou erro no reconhecimento',
-          level: SentryLevel.warning,
-        );
+        if (verboseSentry) {
+          await Sentry.captureMessage(
+            '⚠️ Usuário CANCELOU ou erro no reconhecimento',
+            level: SentryLevel.warning,
+          );
+        }
         return;
       }
 
@@ -100,20 +105,22 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       if (result.recognizedPerson != null) {
         final resultado = result.recognizedPerson!;
 
-        await Sentry.captureMessage(
-          'Reconhecimento facial bem-sucedido (tela completa)',
-          level: SentryLevel.info,
-          withScope: (scope) {
-            scope.setTag('screen', 'reconhecimento_facial_completo');
-            scope.setTag('resultado', 'sucesso');
-            scope.setContexts('aluno', {
-              'nome': resultado['nome'],
-              'cpf': resultado['cpf'],
-              'confidence': result.confidenceScore,
-              'distance': result.distance,
-            });
-          },
-        );
+        if (verboseSentry) {
+          await Sentry.captureMessage(
+            'Reconhecimento facial bem-sucedido (tela completa)',
+            level: SentryLevel.info,
+            withScope: (scope) {
+              scope.setTag('screen', 'reconhecimento_facial_completo');
+              scope.setTag('resultado', 'sucesso');
+              scope.setContexts('aluno', {
+                'nome': resultado['nome'],
+                'cpf': resultado['cpf'],
+                'confidence': result.confidenceScore,
+                'distance': result.distance,
+              });
+            },
+          );
+        }
         await _selecionarTipoAcesso(resultado);
       } else {
         // Não reconheceu
