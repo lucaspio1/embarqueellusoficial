@@ -148,17 +148,20 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Analisar código Dart
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
       - name: Build APK
         shell: bash
         run: |
           set -o pipefail
-          flutter build apk --release --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} 2>&1 | tee build-apk.log
+          flutter build apk --release --android-skip-build-dependency-validation --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} --dart-define=FLUTTER_BUILD_NAME=${{ steps.versao.outputs.nome }} 2>&1 | tee build-apk.log
 
       - name: Build AAB (Google Play)
         shell: bash
         run: |
           set -o pipefail
-          flutter build appbundle --release --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} 2>&1 | tee build-aab.log
+          flutter build appbundle --release --android-skip-build-dependency-validation --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} --dart-define=FLUTTER_BUILD_NAME=${{ steps.versao.outputs.nome }} 2>&1 | tee build-aab.log
 
       # Mostra o motivo da falha no resumo da execução (sem precisar abrir o log)
       - name: Resumo do erro

@@ -237,8 +237,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                             return const SizedBox.shrink();
                           }
                           final storeUrl = Platform.isIOS
-                              ? cfg.updateStoreUrlIos
-                              : cfg.updateStoreUrlAndroid;
+                              ? cfg.storeUrlIos
+                              : cfg.storeUrlAndroid;
                           return Container(
                             margin: const EdgeInsets.only(bottom: 24),
                             padding: const EdgeInsets.all(14),
@@ -286,7 +286,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Versão instalada: v${AppConfig.appVersion} • Você pode continuar usando o app normalmente.',
+                                  'Versão instalada: v${AppConfig.currentAppVersion} • Você pode continuar usando o app normalmente.',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.blue.shade700,

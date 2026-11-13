@@ -265,8 +265,8 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
               useFrontCamera: cfg.useFrontCameraEnrollment,
               resolution: cfg.cameraResolutionPreset,
               showFaceGuide: cfg.showFaceGuide,
-              burstCount: cfg.enrollmentBurstCount,
-              burstInterval: Duration(milliseconds: cfg.enrollmentBurstIntervalMs),
+              captureCount: cfg.enrollmentBurstCount,
+              burstDelay: Duration(milliseconds: cfg.enrollmentBurstIntervalMs),
               title: 'Cadastrar ${aluno['nome']}',
               subtitle: 'Posicione o rosto do aluno',
             ),
@@ -349,13 +349,18 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
 
   Future<void> _cadastrarFacialAvancado(Map<String, dynamic> aluno) async {
     try {
+      final cfg = AppConfig.instance;
       final result = await Navigator.push<FaceCameraResult>(
         context,
         MaterialPageRoute(
           builder: (_) => UnifiedFaceCameraScreen(
             mode: CameraMode.enrollmentAdvanced,
             options: FaceCameraOptions(
-              useFrontCamera: false,
+              useFrontCamera: cfg.useFrontCameraEnrollment,
+              resolution: cfg.cameraResolutionPreset,
+              showFaceGuide: cfg.showFaceGuide,
+              captureCount: cfg.enrollmentBurstCount,
+              burstDelay: Duration(milliseconds: cfg.enrollmentBurstIntervalMs),
               title: 'Cadastro Avançado - ${aluno['nome']}',
               subtitle: 'Vamos tirar 3 fotos para maior precisão',
               showCaptureCounter: true,
