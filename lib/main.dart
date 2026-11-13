@@ -79,6 +79,7 @@ Future<void> main() async {
         );
         print('✅ Firebase Core inicializado');
 
+        await AppConfig.instance.init();
         AppConfig.instance.printConfig();
 
         final db = DatabaseHelper.instance;

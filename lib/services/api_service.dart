@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:embarqueellus/config/app_config.dart';
 
 /// Exceção lançada quando o servidor responde explicitamente recusando a
 /// autenticação (401/403), diferenciando de falhas de rede/timeout.
@@ -87,24 +88,25 @@ class ApiService {
       if (_token != null) 'Authorization': 'Bearer $_token',
     };
 
+    final reqTimeout = Duration(seconds: AppConfig.instance.apiTimeoutSeconds);
     http.Response response;
     try {
       if (method == 'GET') {
         response = await http
             .get(url, headers: headers)
-            .timeout(const Duration(seconds: 30));
+            .timeout(reqTimeout);
       } else if (method == 'POST') {
         response = await http
             .post(url, headers: headers, body: jsonEncode(body))
-            .timeout(const Duration(seconds: 30));
+            .timeout(reqTimeout);
       } else if (method == 'PUT') {
         response = await http
             .put(url, headers: headers, body: jsonEncode(body))
-            .timeout(const Duration(seconds: 30));
+            .timeout(reqTimeout);
       } else if (method == 'DELETE') {
         response = await http
             .delete(url, headers: headers)
-            .timeout(const Duration(seconds: 30));
+            .timeout(reqTimeout);
       } else {
         throw Exception('Método HTTP não suportado: $method');
       }
@@ -145,7 +147,7 @@ class ApiService {
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({'refresh_token': _refreshToken}),
             )
-            .timeout(const Duration(seconds: 30));
+            .timeout(Duration(seconds: AppConfig.instance.apiTimeoutSeconds));
 
         if (response.statusCode >= 200 && response.statusCode < 300) {
           final data = jsonDecode(response.body);

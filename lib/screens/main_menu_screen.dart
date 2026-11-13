@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:embarqueellus/config/app_config.dart';
 import 'package:embarqueellus/screens/controle_embarque_screen.dart';
 import 'package:embarqueellus/screens/reconhecimento_facial_completo.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
@@ -226,6 +229,127 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      ValueListenableBuilder<int>(
+                        valueListenable: AppConfig.instance.configVersion,
+                        builder: (context, _, __) {
+                          final cfg = AppConfig.instance;
+                          if (!cfg.shouldShowUpdateReminder) {
+                            return const SizedBox.shrink();
+                          }
+                          final storeUrl = Platform.isIOS
+                              ? cfg.updateStoreUrlIos
+                              : cfg.updateStoreUrlAndroid;
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 24),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.shade300),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.system_update,
+                                        color: Colors.blue.shade800),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Nova versão disponível (v${cfg.recommendedVersion})',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade900,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.close,
+                                          size: 18, color: Colors.blue.shade700),
+                                      tooltip: 'Lembrar depois',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () {
+                                        cfg.dismissUpdateReminderForSession();
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  cfg.updateMessage,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.blue.shade900,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Versão instalada: v${AppConfig.appVersion} • Você pode continuar usando o app normalmente.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () {
+                                        cfg.dismissUpdateReminderForSession();
+                                      },
+                                      child: Text(
+                                        'LEMBRAR DEPOIS',
+                                        style: TextStyle(
+                                          color: Colors.blue.shade800,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                    if (storeUrl.isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      ElevatedButton.icon(
+                                        onPressed: () async {
+                                          await Clipboard.setData(
+                                            ClipboardData(text: storeUrl),
+                                          );
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  '🔗 Link da atualização copiado! Cole no navegador ou loja para atualizar quando puder.',
+                                                ),
+                                                duration: Duration(seconds: 4),
+                                              ),
+                                            );
+                                          }
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.blue.shade700,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                        ),
+                                        icon: const Icon(Icons.copy, size: 16),
+                                        label: const Text(
+                                          'COPIAR LINK DA LOJA',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                       ValueListenableBuilder<bool>(
                         valueListenable: ApiService.instance.precisaNovoLogin,
                         builder: (context, precisaLogin, _) {

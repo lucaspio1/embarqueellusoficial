@@ -61,6 +61,11 @@ import MLKitFaceDetection
       return
     }
 
+    let rawMinFaceSize = (args["minFaceSize"] as? NSNumber)?.doubleValue ?? 0.05
+    let preferredMinFaceSize = CGFloat(min(max(rawMinFaceSize, 0.01), 0.50))
+    let rawJpegQuality = (args["jpegQuality"] as? NSNumber)?.intValue ?? 95
+    let jpegQuality = CGFloat(min(max(rawJpegQuality, 60), 100)) / 100.0
+
     print("📸 [iOS Native] Iniciando detecção facial: \(imagePath)")
     SentrySDK.capture(message: "📸 [iOS Native] Iniciando detecção facial nativa") { scope in
       scope.setLevel(.info)
@@ -140,6 +145,8 @@ import MLKitFaceDetection
       image: bakedImage,  // ✅ USANDO IMAGEM ASSADA
       visionImage: visionImage,
       imagePath: imagePath,
+      preferredMinFaceSize: preferredMinFaceSize,
+      jpegQuality: jpegQuality,
       result: result
     )
   }
@@ -173,6 +180,8 @@ import MLKitFaceDetection
     image: UIImage,
     visionImage: VisionImage,
     imagePath: String,
+    preferredMinFaceSize: CGFloat,
+    jpegQuality: CGFloat,
     result: @escaping FlutterResult,
     attempt: Int = 1
   ) {
@@ -183,14 +192,14 @@ import MLKitFaceDetection
     options.classificationMode = .none
     options.contourMode = .none
 
-    // Ajustar minFaceSize por tentativa
+    // Ajustar minFaceSize por tentativa (usando valor remoto como base quando aplicável)
     switch attempt {
     case 1:
-      options.minFaceSize = 0.01  // Muito sensível
+      options.minFaceSize = min(0.01, preferredMinFaceSize)  // Muito sensível
     case 2:
-      options.minFaceSize = 0.05  // Padrão
+      options.minFaceSize = preferredMinFaceSize             // Padrão configurado remotamente
     case 3:
-      options.minFaceSize = 0.1   // Menos sensível mas mais robusto
+      options.minFaceSize = max(0.1, preferredMinFaceSize)   // Menos sensível mas mais robusto
     default:
       options.minFaceSize = 0.01
     }
@@ -214,6 +223,8 @@ import MLKitFaceDetection
             image: image,
             visionImage: visionImage,
             imagePath: imagePath,
+            preferredMinFaceSize: preferredMinFaceSize,
+            jpegQuality: jpegQuality,
             result: result,
             attempt: attempt + 1
           )
@@ -248,6 +259,8 @@ import MLKitFaceDetection
             image: image,
             visionImage: visionImage,
             imagePath: imagePath,
+            preferredMinFaceSize: preferredMinFaceSize,
+            jpegQuality: jpegQuality,
             result: result,
             attempt: attempt + 1
           )
@@ -322,7 +335,7 @@ import MLKitFaceDetection
       let finalImage = self.resizeImage(image: croppedImage, targetSize: CGSize(width: 112, height: 112))
 
       // PASSO 8: Converter para JPEG
-      guard let jpegData = finalImage.jpegData(compressionQuality: 0.95) else {
+      guard let jpegData = finalImage.jpegData(compressionQuality: jpegQuality) else {
         SentrySDK.capture(message: "❌ [iOS Native] Erro ao converter para JPEG") { scope in
           scope.setLevel(.error)
           scope.setTag(value: "jpeg_conversion_error", key: "error_type")

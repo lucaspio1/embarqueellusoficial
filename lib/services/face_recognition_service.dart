@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:embarqueellus/config/app_config.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 
 /// Classe para armazenar entrada do cache com metadados
@@ -34,10 +35,11 @@ class FaceRecognitionService {
   Map<String, EmbeddingCacheEntry> _embeddingsCache = {};
   DateTime? _cacheLoadedAt;
   bool _isCacheLoading = false;
-  static const Duration CACHE_VALIDITY_DURATION = Duration(minutes: 5);
+  Duration get _cacheValidityDuration =>
+      Duration(minutes: AppConfig.instance.faceCacheTtlMinutes);
 
-  // Configurações
-  static const double DISTANCE_THRESHOLD = 0.95; // Limite equilibrado sugerido para 1200 alunos
+  // Configurações (lidas dinamicamente do AppConfig, com fallback para 0.95)
+  double get _distanceThreshold => AppConfig.instance.distanceThreshold;
   static const int INPUT_SIZE = 112;              // ArcFace usa 112x112
   static const int EMBEDDING_SIZE = 512;          // ArcFace retorna 512 dims
 
@@ -207,7 +209,7 @@ class FaceRecognitionService {
   bool _needsCacheRefresh() {
     if (_cacheLoadedAt == null) return true;
     final age = DateTime.now().difference(_cacheLoadedAt!);
-    return age > CACHE_VALIDITY_DURATION;
+    return age > _cacheValidityDuration;
   }
 
   /// ✅ Garante que o cache está carregado e atualizado
@@ -283,11 +285,11 @@ class FaceRecognitionService {
       // Converte EmbeddingCacheEntry de volta para o formato Map esperado
       Map<String, dynamic>? best = bestEntry.metadata;
 
-      final double confidence =
-          (DISTANCE_THRESHOLD - bestDistance) / DISTANCE_THRESHOLD;
+      final double threshold = _distanceThreshold;
+      final double confidence = (threshold - bestDistance) / threshold;
       final double normalizedConfidence = confidence.clamp(0.0, 1.0);
 
-      if (bestDistance <= DISTANCE_THRESHOLD && best != null) {
+      if (bestDistance <= threshold && best != null) {
         await Sentry.captureMessage(
           'Reconhecimento facial bem-sucedido',
           level: SentryLevel.info,
@@ -298,7 +300,7 @@ class FaceRecognitionService {
               'student_cpf': best['cpf'],
               'distance_l2': bestDistance,
               'confidence': normalizedConfidence,
-              'threshold': DISTANCE_THRESHOLD,
+              'threshold': threshold,
               'total_students_checked': _embeddingsCache.length,
               'cache_enabled': true,
             });
@@ -318,8 +320,8 @@ class FaceRecognitionService {
           scope.setTag('facial_error_type', 'face_not_recognized');
           scope.setContexts('recognition_attempt', {
             'best_distance': bestDistance,
-            'threshold': DISTANCE_THRESHOLD,
-            'distance_difference': bestDistance - DISTANCE_THRESHOLD,
+            'threshold': threshold,
+            'distance_difference': bestDistance - threshold,
             'total_students_checked': _embeddingsCache.length,
             'best_match_name': best?['nome'] ?? 'N/A',
             'best_match_cpf': best?['cpf'] ?? 'N/A',

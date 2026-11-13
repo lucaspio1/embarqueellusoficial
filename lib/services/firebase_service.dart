@@ -7,6 +7,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:embarqueellus/config/app_config.dart';
 import 'package:embarqueellus/database/database_helper.dart';
 import 'package:embarqueellus/services/api_service.dart';
 import 'package:embarqueellus/services/face_recognition_service.dart';
@@ -30,14 +31,18 @@ class FirebaseService {
     // Inicializar o ApiService (carregar token salvo)
     _api.init();
 
-    // Sincronização automática a cada 60 segundos via REST delta
-    _syncTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
-      print('⏰ [FirebaseService] Timer de sincronização disparado');
+    _agendarTimerSync();
+    trySyncInBackground();
+  }
+
+  void _agendarTimerSync() {
+    _syncTimer?.cancel();
+    final intervalo = AppConfig.instance.syncIntervalSeconds;
+    _syncTimer = Timer.periodic(Duration(seconds: intervalo), (_) async {
+      print('⏰ [FirebaseService] Timer de sincronização disparado (${intervalo}s)');
       await trySyncInBackground();
     });
-
-    print('✅ [FirebaseService] Sincronização via REST API iniciada (intervalo: 60s)');
-    trySyncInBackground();
+    print('✅ [FirebaseService] Sincronização via REST API agendada (intervalo: ${intervalo}s)');
   }
 
   void dispose() {
@@ -126,6 +131,15 @@ class FirebaseService {
     final escopo = response['escopo'];
     if (escopo is Map && escopo['cpfs'] is List) {
       faltaAlguem = await _aplicarEscopo(db, (escopo['cpfs'] as List).map((c) => c.toString()).toSet());
+    }
+
+    // Atualizar configurações remotas do aplicativo vindas do painel
+    final remoteConfig = response['config'];
+    if (remoteConfig is Map<String, dynamic>) {
+      final mudouIntervalo = await AppConfig.instance.applyRemoteConfig(remoteConfig);
+      if (mudouIntervalo) {
+        _agendarTimerSync();
+      }
     }
 
     if (serverTime != null) {
@@ -384,7 +398,7 @@ class FirebaseService {
   }
 
   static const int _maxRodadasUpload = 20;
-  static const int _tamanhoLote = 50;
+  int get _tamanhoLote => AppConfig.instance.syncBatchSize;
 
   /// Envia um lote. Retorna true se ainda pode haver mais itens na fila.
   Future<bool> _uploadPendingRodada() async {

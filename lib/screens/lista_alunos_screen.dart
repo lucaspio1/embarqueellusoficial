@@ -7,6 +7,7 @@ import 'package:embarqueellus/models/camera_mode.dart';
 import 'package:embarqueellus/models/face_camera_options.dart';
 import 'package:embarqueellus/models/face_camera_result.dart';
 import 'package:embarqueellus/screens/unified_face_camera_screen.dart';
+import 'package:embarqueellus/config/app_config.dart';
 
 class ListaAlunosScreen extends StatefulWidget {
   const ListaAlunosScreen({super.key});
@@ -253,6 +254,7 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
   // =========================================================
   Future<void> _cadastrarFacial(Map<String, dynamic> aluno) async {
     try {
+      final cfg = AppConfig.instance;
       // Abre tela unificada de câmera em modo de cadastro
       final result = await Navigator.push<FaceCameraResult>(
         context,
@@ -260,7 +262,11 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
           builder: (_) => UnifiedFaceCameraScreen(
             mode: CameraMode.enrollment,
             options: FaceCameraOptions(
-              useFrontCamera: false, // Câmera traseira para melhor qualidade
+              useFrontCamera: cfg.useFrontCameraEnrollment,
+              resolution: cfg.cameraResolutionPreset,
+              showFaceGuide: cfg.showFaceGuide,
+              burstCount: cfg.enrollmentBurstCount,
+              burstInterval: Duration(milliseconds: cfg.enrollmentBurstIntervalMs),
               title: 'Cadastrar ${aluno['nome']}',
               subtitle: 'Posicione o rosto do aluno',
             ),

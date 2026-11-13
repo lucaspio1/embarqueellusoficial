@@ -5,6 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
+import 'package:embarqueellus/config/app_config.dart';
 
 class BarcodeCameraView extends StatefulWidget {
   final Function(String) onScanned;
@@ -130,9 +131,9 @@ class _BarcodeCameraViewState extends State<BarcodeCameraView> {
         if (value != null && value.isNotEmpty) {
           _hasDetected = true;
           widget.onScanned(value);
-          // Caso o QR Code seja inválido e a tela continue aberta, libera nova leitura após 2s
+          // Caso o QR Code seja inválido e a tela continue aberta, libera nova leitura após o cooldown configurado
           _cooldownTimer?.cancel();
-          _cooldownTimer = Timer(const Duration(seconds: 2), () {
+          _cooldownTimer = Timer(Duration(seconds: AppConfig.instance.qrCooldownSeconds), () {
             if (mounted) {
               _hasDetected = false;
             }

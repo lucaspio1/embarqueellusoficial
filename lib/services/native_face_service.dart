@@ -3,6 +3,7 @@ import 'dart:ui' show Rect;
 
 import 'package:flutter/services.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:embarqueellus/config/app_config.dart';
 
 /// Resultado da detecção e recorte facial nativo.
 class NativeFaceResult {
@@ -78,10 +79,14 @@ class NativeFaceService {
         },
       );
 
-      // Chamar o método nativo
+      // Chamar o método nativo passando parâmetros configuráveis do AppConfig
       final Map<dynamic, dynamic> result = await _channel.invokeMethod(
         'detectAndCropFace',
-        {'path': imagePath},
+        {
+          'path': imagePath,
+          'minFaceSize': AppConfig.instance.mlkitMinFaceSize,
+          'jpegQuality': AppConfig.instance.jpegQuality,
+        },
       );
 
       // Extrair bytes da face recortada

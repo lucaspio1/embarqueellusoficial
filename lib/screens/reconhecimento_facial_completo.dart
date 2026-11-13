@@ -11,6 +11,7 @@ import 'package:embarqueellus/models/camera_mode.dart';
 import 'package:embarqueellus/models/face_camera_options.dart';
 import 'package:embarqueellus/models/face_camera_result.dart';
 import 'package:embarqueellus/screens/unified_face_camera_screen.dart';
+import 'package:embarqueellus/config/app_config.dart';
 
 class ReconhecimentoFacialScreen extends StatefulWidget {
   const ReconhecimentoFacialScreen({super.key});
@@ -83,7 +84,9 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
       );
 
       // Usa tela unificada que já faz detecção + reconhecimento
-      final result = await _abrirCameraTela(frontal: false);
+      final result = await _abrirCameraTela(
+        frontal: AppConfig.instance.useFrontCameraRecognition,
+      );
 
       if (result == null || !result.success) {
         await Sentry.captureMessage(
@@ -254,6 +257,7 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
 
   Future<FaceCameraResult?> _abrirCameraTela({bool frontal = false}) async {
     try {
+      final cfg = AppConfig.instance;
       // Usa tela unificada no modo de reconhecimento
       final result = await Navigator.push<FaceCameraResult>(
         context,
@@ -262,6 +266,8 @@ class _ReconhecimentoFacialScreenState extends State<ReconhecimentoFacialScreen>
             mode: CameraMode.recognition,
             options: FaceCameraOptions(
               useFrontCamera: frontal,
+              resolution: cfg.cameraResolutionPreset,
+              showFaceGuide: cfg.showFaceGuide,
               title: 'Reconhecer Aluno',
               subtitle: 'Posicione o rosto do aluno',
             ),

@@ -33,8 +33,10 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "detectAndCropFace" -> {
                         val path = call.argument<String>("path")
+                        val minFaceSize = (call.argument<Number>("minFaceSize")?.toFloat() ?: 0.05f).coerceIn(0.01f, 0.5f)
+                        val jpegQuality = (call.argument<Number>("jpegQuality")?.toInt() ?: 95).coerceIn(60, 100)
                         if (path != null) {
-                            handleFaceDetection(path, result)
+                            handleFaceDetection(path, minFaceSize, jpegQuality, result)
                         } else {
                             result.error(
                                 "INVALID_ARGS",
@@ -51,7 +53,12 @@ class MainActivity : FlutterActivity() {
     }
 
     /// Processa a detecção e recorte facial nativamente
-    private fun handleFaceDetection(path: String, result: MethodChannel.Result) {
+    private fun handleFaceDetection(
+        path: String,
+        minFaceSize: Float,
+        jpegQuality: Int,
+        result: MethodChannel.Result
+    ) {
         try {
             println("📸 [Android Native] Iniciando detecção facial: $path")
 
@@ -91,7 +98,7 @@ class MainActivity : FlutterActivity() {
                 .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
                 .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
                 .setContourMode(FaceDetectorOptions.CONTOUR_MODE_NONE)
-                .setMinFaceSize(0.05f)
+                .setMinFaceSize(minFaceSize)
                 .build()
 
             val detector = FaceDetection.getClient(options)
@@ -143,7 +150,7 @@ class MainActivity : FlutterActivity() {
 
                         // PASSO 9: Converter para JPEG
                         val stream = ByteArrayOutputStream()
-                        finalBitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)
+                        finalBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, stream)
                         val jpegBytes = stream.toByteArray()
 
                         println("✅ [Android Native] Face processada: ${jpegBytes.size} bytes")
