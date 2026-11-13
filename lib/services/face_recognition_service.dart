@@ -156,20 +156,41 @@ class FaceRecognitionService {
       final alunos = await DatabaseHelper.instance.getTodosAlunosComFacialAtivos();
 
       _embeddingsCache.clear();
+      int ignorados = 0;
       for (final aluno in alunos) {
-        final cpf = aluno['cpf'] as String;
-        final embedding = _toDoubleList(aluno['embedding']);
+        try {
+          final cpf = (aluno['cpf'] ?? '').toString().trim();
+          if (cpf.isEmpty || aluno['embedding'] == null) {
+            ignorados++;
+            continue;
+          }
 
-        _embeddingsCache[cpf] = EmbeddingCacheEntry(
-          cpf: cpf,
-          nome: aluno['nome'] ?? '',
-          embedding: embedding,
-          metadata: aluno,
-        );
+          final embedding = _toDoubleList(aluno['embedding']);
+          if (embedding.length != EMBEDDING_SIZE) {
+            ignorados++;
+            print(
+              '⚠️ [Cache] Ignorando embedding com tamanho inválido (${embedding.length} != $EMBEDDING_SIZE) para CPF: $cpf',
+            );
+            continue;
+          }
+
+          _embeddingsCache[cpf] = EmbeddingCacheEntry(
+            cpf: cpf,
+            nome: aluno['nome'] ?? '',
+            embedding: embedding,
+            metadata: aluno,
+          );
+        } catch (e) {
+          ignorados++;
+          print('⚠️ [Cache] Ignorando embedding inválido para ${aluno['cpf']}: $e');
+        }
       }
 
       _cacheLoadedAt = DateTime.now();
-      print('✅ [Cache] ${_embeddingsCache.length} embeddings carregados em memória');
+      print(
+        '✅ [Cache] ${_embeddingsCache.length} embeddings carregados em memória'
+        '${ignorados > 0 ? " ($ignorados ignorados)" : ""}',
+      );
     } catch (e, stackTrace) {
       await Sentry.captureException(
         e,
@@ -205,13 +226,18 @@ class FaceRecognitionService {
 
   /// ✅ Adiciona ou atualiza um embedding específico no cache
   void updateCacheEntry(String cpf, String nome, List<double> embedding, Map<String, dynamic> metadata) {
-    _embeddingsCache[cpf] = EmbeddingCacheEntry(
-      cpf: cpf,
+    final cpfLimpo = cpf.trim();
+    if (cpfLimpo.isEmpty || embedding.length != EMBEDDING_SIZE) {
+      print('⚠️ [Cache] Ignorando atualização de cache inválida para CPF: $cpfLimpo (len=${embedding.length})');
+      return;
+    }
+    _embeddingsCache[cpfLimpo] = EmbeddingCacheEntry(
+      cpf: cpfLimpo,
       nome: nome,
       embedding: embedding,
       metadata: metadata,
     );
-    print('✅ [Cache] Embedding atualizado para CPF: $cpf');
+    print('✅ [Cache] Embedding atualizado para CPF: $cpfLimpo');
   }
 
   /// Reconhecimento principal – usa cache de embeddings em memória
@@ -242,6 +268,7 @@ class FaceRecognitionService {
 
       // ✅ Itera sobre o cache em memória (70% mais rápido que buscar do banco)
       for (final entry in _embeddingsCache.values) {
+        if (entry.embedding.length != probe.length) continue;
         final distance = _euclideanDistance(probe, entry.embedding);
         if (distance < bestDistance) {
           bestDistance = distance;

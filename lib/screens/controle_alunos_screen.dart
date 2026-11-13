@@ -579,6 +579,7 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
                         ],
                       ),
                       trailing: PopupMenuButton<String>(
+                        enabled: !_processando,
                         onSelected: (value) {
                           if (value == 'simples') {
                             _cadastrarFacial(aluno);
@@ -613,15 +614,35 @@ class _ControleAlunosScreenState extends State<ControleAlunosScreen> {
                             ),
                           ),
                         ],
-                        child: ElevatedButton(
-                          onPressed: () => _cadastrarFacial(aluno),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: temFacial
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: temFacial
                                 ? Colors.orange
                                 : const Color(0xFF4C643C),
-                            foregroundColor: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Text(temFacial ? 'Refazer' : 'Cadastrar'),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                temFacial ? 'Refazer' : 'Cadastrar',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.arrow_drop_down,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

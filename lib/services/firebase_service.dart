@@ -150,11 +150,14 @@ class FirebaseService {
   Future<bool> _aplicarEscopo(Database db, Set<String> ativos) async {
     var removidos = 0;
     final presentes = <String>{};
+    // Protege CPFs que possuem pendências locais ainda não enviadas ao servidor
+    final pendentes = await _cpfsComPendencias(db);
+    final protegidos = {...ativos, ...pendentes};
     for (final tabela in const ['alunos', 'quartos', 'embarques']) {
       final rows = await db.query(tabela, columns: ['cpf']);
-      final locais = rows.map((r) => (r['cpf'] ?? '').toString()).toSet();
+      final locais = rows.map((r) => (r['cpf'] ?? '').toString().trim()).toSet();
       presentes.addAll(locais.where(ativos.contains));
-      final fora = locais.difference(ativos).toList();
+      final fora = locais.difference(protegidos).toList();
       for (var i = 0; i < fora.length; i += 500) {
         final fim = i + 500 < fora.length ? i + 500 : fora.length;
         final parte = fora.sublist(i, fim);
@@ -170,6 +173,42 @@ class FirebaseService {
       FaceRecognitionService.instance.invalidateCache();
     }
     return ativos.difference(presentes).isNotEmpty;
+  }
+
+  /// Retorna todos os CPFs que ainda têm operações pendentes na `sync_queue`
+  /// ou logs locais ainda não sincronizados (`sincronizado = 0`).
+  Future<Set<String>> _cpfsComPendencias(Database db) async {
+    final cpfs = <String>{};
+    try {
+      final queueRows = await db.query('sync_queue', columns: ['payload']);
+      for (final row in queueRows) {
+        try {
+          final payloadStr = row['payload'] as String?;
+          if (payloadStr == null || payloadStr.isEmpty) continue;
+          final p = jsonDecode(payloadStr) as Map<String, dynamic>;
+          final cpf = (p['cpf'] ?? '').toString().trim();
+          if (cpf.isNotEmpty) cpfs.add(cpf);
+        } catch (_) {}
+      }
+    } catch (e) {
+      print('⚠️ [FirebaseService] Erro ao consultar sync_queue em _cpfsComPendencias: $e');
+    }
+
+    try {
+      final logRows = await db.query(
+        'logs',
+        columns: ['cpf'],
+        where: 'sincronizado = ?',
+        whereArgs: [0],
+      );
+      for (final row in logRows) {
+        final cpf = (row['cpf'] ?? '').toString().trim();
+        if (cpf.isEmpty) continue;
+        cpfs.add(cpf);
+      }
+    } catch (_) {}
+
+    return cpfs;
   }
 
   Future<bool> _podeFazerSyncCompleto(Database db) async {

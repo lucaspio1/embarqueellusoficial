@@ -326,6 +326,97 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
     }
   }
 
+  Future<void> _cadastrarFacialAvancado(Map<String, dynamic> aluno) async {
+    try {
+      final result = await Navigator.push<FaceCameraResult>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UnifiedFaceCameraScreen(
+            mode: CameraMode.enrollmentAdvanced,
+            options: FaceCameraOptions(
+              useFrontCamera: false,
+              title: 'Cadastro Avançado - ${aluno['nome']}',
+              subtitle: 'Vamos tirar 3 fotos para maior precisão',
+              showCaptureCounter: true,
+            ),
+          ),
+        ),
+      );
+
+      if (result == null || !result.success || result.processedImages == null || result.processedImages!.isEmpty) {
+        return;
+      }
+
+      setState(() => _processando = true);
+
+      final embeddings = <List<double>>[];
+      for (final face in result.processedImages!) {
+        final emb = await _faceService.extractEmbedding(face);
+        embeddings.add(emb);
+      }
+
+      final rawAvg = List<double>.filled(embeddings[0].length, 0.0);
+      for (final emb in embeddings) {
+        for (int i = 0; i < emb.length; i++) {
+          rawAvg[i] += emb[i] / embeddings.length;
+        }
+      }
+      final embedding = _faceService.normalizeL2(rawAvg);
+
+      print(
+        '📤 [CadastroFacialAvançado] Embedding normalizado extraído de ${result.processedImages!.length} fotos: ${embedding.length} dimensões',
+      );
+
+      await FirebaseService.instance.queueCadastroFacial(
+        cpf: aluno['cpf'],
+        nome: aluno['nome'],
+        colegio: aluno['colegio'] ?? '',
+        turma: aluno['turma'] ?? '',
+        email: aluno['email'] ?? '',
+        telefone: aluno['telefone'] ?? '',
+        embedding: embedding,
+        personId: aluno['cpf'],
+        inicioViagem: aluno['inicio_viagem'] ?? '',
+        fimViagem: aluno['fim_viagem'] ?? '',
+      );
+
+      print('✅ [CadastroFacialAvançado] Salvo localmente e enfileirado para sincronização via API');
+
+      setState(() => _processando = false);
+
+      await _carregarAlunos();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '✅ Facial Avançada cadastrada: ${aluno['nome']}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const Text('🎯 3 fotos processadas para maior precisão'),
+                const Text('☁️ Sincronizando em segundo plano...'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Erro no cadastro avançado: $e');
+      setState(() => _processando = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erro no cadastro avançado: $e')),
+        );
+      }
+    }
+  }
+
   Widget _buildAlunoCard(Map<String, dynamic> aluno) {
     final nome = aluno['nome'] ?? 'Sem nome';
     final cpf = aluno['cpf'] ?? 'Sem CPF';
@@ -441,27 +532,70 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
             if (telefone.isNotEmpty)
               _buildInfoRow(Icons.phone, 'Telefone', telefone),
 
-// Botão de cadastro facial
-            if (!hasFacial) ...[
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _processando ? null : () => _cadastrarFacial(aluno),
-                  icon: const Icon(Icons.face_retouching_natural, size: 20),
-                  // [MODIFICADO] O texto muda se o aluno já tiver facial
-                  label: Text(hasFacial ? 'Refazer Facial' : 'Cadastrar Facial'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4C643C),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+            // Botão de cadastro facial (com opção Simples ou Avançado 3 fotos)
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: PopupMenuButton<String>(
+                enabled: !_processando,
+                onSelected: (value) {
+                  if (value == 'simples') {
+                    _cadastrarFacial(aluno);
+                  } else if (value == 'avancado') {
+                    _cadastrarFacialAvancado(aluno);
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'simples',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.face, color: Colors.grey),
+                        const SizedBox(width: 8),
+                        Text(hasFacial ? 'Refazer Simples' : 'Cadastro Simples'),
+                      ],
                     ),
+                  ),
+                  PopupMenuItem(
+                    value: 'avancado',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.verified_user, color: Colors.green),
+                        const SizedBox(width: 8),
+                        Text(
+                          hasFacial
+                              ? 'Refazer Avançado (3 fotos)'
+                              : 'Cadastro Avançado (3 fotos)',
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: hasFacial ? Colors.orange : const Color(0xFF4C643C),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.face_retouching_natural, size: 20, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Text(
+                        hasFacial ? 'Refazer Facial' : 'Cadastrar Facial',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.arrow_drop_down, color: Colors.white),
+                    ],
                   ),
                 ),
               ),
-            ],
+            ),
           ],
         ),
       ),

@@ -970,7 +970,7 @@ class DatabaseHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'alunos',
-      where: 'facial_cadastrada = 1 AND embedding IS NOT NULL',
+      where: "facial_cadastrada = 1 AND embedding IS NOT NULL AND TRIM(embedding) != ''",
     );
 
     return maps.map((map) {
@@ -1003,7 +1003,7 @@ class DatabaseHelper {
     // Buscar da tabela alunos onde facial_cadastrada = 1
     final List<Map<String, dynamic>> alunosComFacial = await db.query(
       'alunos',
-      where: 'facial_cadastrada = 1 AND embedding IS NOT NULL',
+      where: "facial_cadastrada = 1 AND embedding IS NOT NULL AND TRIM(embedding) != ''",
     );
 
     return alunosComFacial.map((aluno) {
@@ -1044,7 +1044,7 @@ class DatabaseHelper {
         (SELECT q.numero_quarto FROM quartos q
           WHERE q.cpf = a.cpf ORDER BY q.id DESC LIMIT 1) AS numero_quarto
       FROM alunos a
-      WHERE a.facial_cadastrada = 1 AND a.embedding IS NOT NULL
+      WHERE a.facial_cadastrada = 1 AND a.embedding IS NOT NULL AND TRIM(a.embedding) != ''
     ''');
 
     // 🔍 DEBUG: Log inicial
