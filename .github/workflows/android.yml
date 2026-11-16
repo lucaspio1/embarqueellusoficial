@@ -233,15 +233,16 @@ jobs:
           path: saida/
           retention-days: 30
 
-      - name: Enviar para o Google Play (teste interno)
+      - name: Enviar para o Google Play
         if: env.PLAY_JSON != ''
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: br.com.embarqueellus
           releaseFiles: saida/*.aab
-          track: ${{ vars.ANDROID_PLAY_TRACK || 'internal' }}
+          tracks: ${{ vars.ANDROID_PLAY_TRACK || 'internal' }}
           status: completed
+          changesNotSentForReview: true
 
       - name: Limpar chave
         if: always()
