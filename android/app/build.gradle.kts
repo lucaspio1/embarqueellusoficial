@@ -26,8 +26,8 @@ android {
 
     defaultConfig {
         applicationId = "br.com.embarqueellus"
-        // ✅ mobile_scanner exige no mínimo API 23 (Android 6.0)
-        minSdk = flutter.minSdkVersion
+        // ✅ mobile_scanner exige no mínimo API 23; tflite_flutter 0.12.1 (LiteRT) exige API 24
+        minSdk = maxOf(flutter.minSdkVersion, 24)
         targetSdk = 36
         // Vêm do pubspec.yaml (version: X.Y.Z+N) ou de --build-name/--build-number
         versionCode = flutter.versionCode
@@ -102,7 +102,7 @@ dependencies {
     implementation("androidx.camera:camera-view:1.5.0")
 
     // 🔹 ML Kit para detecção facial nativa
-    implementation("com.google.mlkit:face-detection:16.1.6")
+    implementation("com.google.mlkit:face-detection:16.1.7")
 
     // 🔹 ExifInterface para correção de rotação EXIF
     implementation("androidx.exifinterface:exifinterface:1.3.7")

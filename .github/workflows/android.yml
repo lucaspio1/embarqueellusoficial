@@ -173,6 +173,41 @@ jobs:
           set -o pipefail
           flutter build appbundle --release --build-name=${{ steps.versao.outputs.nome }} --build-number=${{ steps.versao.outputs.codigo }} 2>&1 | tee build-aab.log
 
+      - name: Verificar alinhamento 16 KB no AAB
+        shell: bash
+        run: |
+          set -euo pipefail
+          aab="build/app/outputs/bundle/release/app-release.aab"
+          tmp_dir=$(mktemp -d)
+          trap 'rm -rf "$tmp_dir"' EXIT
+          for abi in arm64-v8a x86_64; do
+            unzip -q "$aab" "base/lib/$abi/*.so" -d "$tmp_dir" || true
+          done
+          falhou=0
+          encontrados=0
+          while IFS= read -r -d '' so; do
+            encontrados=$((encontrados + 1))
+            rel="${so#$tmp_dir/}"
+            alinhamentos=$(readelf -Wl "$so" | awk '$1 == "LOAD" { print $NF }')
+            if [ -z "$alinhamentos" ]; then
+              echo "::error::Nenhum segmento LOAD encontrado em $rel"
+              falhou=1
+              continue
+            fi
+            for align in $alinhamentos; do
+              if [ $((align)) -lt $((0x4000)) ]; then
+                echo "::error::$rel não é compatível com 16 KB (LOAD Align=$align)"
+                falhou=1
+              fi
+            done
+            echo "OK ($rel): LOAD Align=$(echo "$alinhamentos" | tr '\n' ' ')"
+          done < <(find "$tmp_dir" -type f -name '*.so' -print0)
+          if [ "$encontrados" -eq 0 ]; then
+            echo "::error::Nenhum .so de 64 bits encontrado em $aab"
+            exit 1
+          fi
+          [ "$falhou" -eq 0 ]
+
       # Mostra o motivo da falha no resumo da execução (sem precisar abrir o log)
       - name: Resumo do erro
         if: failure()

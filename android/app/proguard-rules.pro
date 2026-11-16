@@ -17,9 +17,11 @@
 -dontwarn io.flutter.embedding.engine.deferredcomponents.**
 -dontwarn com.google.android.play.core.**
 
-# TensorFlow Lite (usado pelo tflite_flutter via JNI)
+# TensorFlow Lite / LiteRT (usado pelo tflite_flutter via JNI)
 -keep class org.tensorflow.lite.** { *; }
 -dontwarn org.tensorflow.lite.**
+-keep class com.google.ai.edge.litert.** { *; }
+-dontwarn com.google.ai.edge.litert.**
 
 # Google ML Kit / Play Services (JNI & Keep annotations)
 -keep class com.google.mlkit.common.internal.** { *; }
