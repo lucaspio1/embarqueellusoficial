@@ -16,7 +16,17 @@ echo "📦 Installing Flutter dependencies..."
 flutter pub get
 
 echo "🔨 Generating Flutter files..."
-flutter build ios --config-only --no-codesign
+# Número de build único a cada execução do Xcode Cloud: o App Store Connect
+# recusa ("Preparing build for App Store Connect failed") um build com o mesmo
+# CFBundleVersion de um já enviado. Usa o maior entre o pubspec e o CI_BUILD_NUMBER.
+BUILD_NAME=$(grep '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//; s/+.*//' | tr -d '\r')
+PUBSPEC_BUILD=$(grep '^version:' pubspec.yaml | sed 's/.*+//' | tr -d '\r')
+BUILD_NUMBER=${CI_BUILD_NUMBER:-$PUBSPEC_BUILD}
+if [ "$PUBSPEC_BUILD" -gt "$BUILD_NUMBER" ] 2>/dev/null; then
+  BUILD_NUMBER=$PUBSPEC_BUILD
+fi
+echo "📌 Versão iOS: $BUILD_NAME ($BUILD_NUMBER)"
+flutter build ios --config-only --no-codesign --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER"
 
 echo "🍺 Installing CocoaPods..."
 export HOMEBREW_NO_AUTO_UPDATE=1
