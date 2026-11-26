@@ -300,6 +300,71 @@ class ApiService {
     }
   }
 
+  /// Lista todas as viagens cadastradas no servidor (colégio + data de início),
+  /// com contagens de alunos e faciais.
+  Future<List<Map<String, dynamic>>> getViagensUnicas({String? hoje}) async {
+    final queryParams = <String, String>{};
+    if (hoje != null && hoje.isNotEmpty) {
+      queryParams['hoje'] = hoje;
+    }
+
+    final response =
+        await _request('GET', '/api/viagens-unicas', queryParams: queryParams);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic> && decoded['success'] == true) {
+        final list = decoded['data'];
+        if (list is List) {
+          return list
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+        return [];
+      }
+      throw Exception(
+          decoded is Map ? (decoded['message'] ?? 'Resposta inválida') : 'Resposta inválida');
+    } else {
+      throw Exception(
+          'Erro ao buscar viagens: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  /// Baixa TODOS os alunos de uma viagem específica (unificando alunos, quartos e embarques).
+  Future<List<Map<String, dynamic>>> getAlunosDaViagem({
+    required String colegio,
+    required String inicio,
+  }) async {
+    final response = await _request(
+      'GET',
+      '/api/viagens/alunos',
+      queryParams: {
+        'colegio': colegio,
+        'inicio': inicio,
+      },
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic> && decoded['success'] == true) {
+        final list = decoded['data'];
+        if (list is List) {
+          return list
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+        return [];
+      }
+      throw Exception(
+          decoded is Map ? (decoded['message'] ?? 'Resposta inválida') : 'Resposta inválida');
+    } else {
+      throw Exception(
+          'Erro ao buscar alunos da viagem: ${response.statusCode} - ${response.body}');
+    }
+  }
+
   Future<Map<String, dynamic>> getEmbarquesPorViagem({
     String? colegio,
     String? inicio,

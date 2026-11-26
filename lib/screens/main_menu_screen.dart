@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:embarqueellus/config/app_config.dart';
+import 'package:embarqueellus/screens/cadastro_facial_viagem_screen.dart';
 import 'package:embarqueellus/screens/controle_embarque_screen.dart';
 import 'package:embarqueellus/screens/reconhecimento_facial_completo.dart';
 import 'package:embarqueellus/screens/login_screen.dart';
@@ -463,6 +464,31 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                       ),
 
                       const SizedBox(height: 16),
+
+                      // Botão Cadastro Facial por Viagem (exclusivo ADMIN)
+                      if (_usuario?['perfil']?.toString().toUpperCase() ==
+                          'ADMIN') ...[
+                        _buildMenuButton(
+                          context: context,
+                          label: 'CADASTRO FACIAL',
+                          subtitle: 'Baixar Alunos da Viagem',
+                          icon: Icons.how_to_reg,
+                          color: Colors.teal.shade700,
+                          onPressed: () {
+                            print(
+                              '📍 [MainMenu] Navegando para Cadastro Facial por Viagem (ADMIN)',
+                            );
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const CadastroFacialViagemScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                      ],
 
                       // Botão Meu Perfil / Alterar Senha
                       _buildMenuButton(
