@@ -242,7 +242,6 @@ jobs:
           releaseFiles: saida/*.aab
           tracks: ${{ vars.ANDROID_PLAY_TRACK || 'internal' }}
           status: completed
-          changesNotSentForReview: true
 
       - name: Limpar chave
         if: always()
